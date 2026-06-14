@@ -1,7 +1,15 @@
 const fallbackApiBaseUrl = "http://localhost:3001";
 
 export function getApiBaseUrl() {
-  return process.env.NEXT_PUBLIC_API_BASE_URL ?? fallbackApiBaseUrl;
+  if (process.env.NEXT_PUBLIC_API_BASE_URL) {
+    return process.env.NEXT_PUBLIC_API_BASE_URL;
+  }
+
+  if (typeof window !== "undefined") {
+    return window.location.origin;
+  }
+
+  return fallbackApiBaseUrl;
 }
 
 function buildApiUrl(path: string) {

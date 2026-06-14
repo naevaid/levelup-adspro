@@ -13,6 +13,11 @@ RUN cd apps/web && npm install --no-save lightningcss-linux-x64-gnu@1.32.0 @tail
 FROM node:22-bookworm-slim AS builder
 WORKDIR /app
 
+ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
+ARG NEXT_PUBLIC_APP_ENV=local
+ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+ENV NEXT_PUBLIC_APP_ENV=${NEXT_PUBLIC_APP_ENV}
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps ./apps
 COPY --from=deps /app/packages ./packages
