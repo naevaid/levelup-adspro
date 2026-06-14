@@ -15,7 +15,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-RUN npm run build --workspace apps/api
+RUN npm exec --workspace apps/api nest build
 
 FROM node:22-alpine AS runner
 WORKDIR /app
