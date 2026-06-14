@@ -4,7 +4,7 @@ set -euo pipefail
 PROJECT_NAME="${PROJECT_NAME:-levelup-adspro}"
 PROJECT_DIR="${PROJECT_DIR:-/opt/${PROJECT_NAME}}"
 BRANCH="${BRANCH:-main}"
-COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.vps.yml}"
 FORCE_DEPLOY="${FORCE_DEPLOY:-0}"
 
 cd "${PROJECT_DIR}"
