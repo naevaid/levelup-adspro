@@ -8,7 +8,7 @@ COPY apps/worker/package.json apps/worker/package.json
 COPY packages/shared/package.json packages/shared/package.json
 
 RUN npm ci --workspaces --include-workspace-root
-RUN cd apps/web && npm install --no-save lightningcss-linux-x64-gnu@1.32.0
+RUN cd apps/web && npm install --no-save lightningcss-linux-x64-gnu@1.32.0 @tailwindcss/oxide-linux-x64-gnu@4.3.1
 
 FROM node:22-bookworm-slim AS builder
 WORKDIR /app
