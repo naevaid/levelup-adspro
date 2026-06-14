@@ -48,7 +48,7 @@ docker compose \
   -p "${PROJECT_NAME}" \
   -f "${COMPOSE_FILE}" \
   --env-file .env.production \
-  run --rm api sh -lc "./node_modules/.bin/prisma migrate deploy --schema prisma/schema.prisma && node prisma/seed.js"
+  run --rm api sh -lc "cd apps/api && ./node_modules/.bin/prisma migrate deploy --schema prisma/schema.prisma && node prisma/seed.js"
 
 echo "==> Deploy selesai"
 docker compose \
