@@ -15,7 +15,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-RUN npm exec --workspace apps/web next build
+RUN cd apps/web && ../../node_modules/.bin/next build
 
 FROM node:22-alpine AS runner
 WORKDIR /app
@@ -28,4 +28,4 @@ COPY --from=builder /app ./
 
 EXPOSE 3000
 
-CMD ["npm", "exec", "--workspace", "apps/web", "next", "start", "--", "--hostname", "0.0.0.0", "--port", "3000"]
+CMD ["sh", "-lc", "cd apps/web && ../../node_modules/.bin/next start --hostname 0.0.0.0 --port 3000"]

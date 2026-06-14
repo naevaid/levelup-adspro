@@ -15,7 +15,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-RUN npm exec --workspace apps/api nest build
+RUN cd apps/api && ../../node_modules/.bin/nest build
 
 FROM node:22-alpine AS runner
 WORKDIR /app
@@ -27,4 +27,4 @@ COPY --from=builder /app ./
 
 EXPOSE 3001
 
-CMD ["npm", "run", "start:prod", "--workspace", "apps/api"]
+CMD ["node", "apps/api/dist/main"]
