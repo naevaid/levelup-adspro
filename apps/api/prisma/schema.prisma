@@ -1,0 +1,159 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+}
+
+enum OrganizationStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum MembershipRole {
+  OWNER
+  MANAGER
+  STAFF
+  AGENCY_ADMIN
+}
+
+enum MembershipStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+  REMOVED
+}
+
+enum PlanStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+model User {
+  id                   String          @id @default(uuid()) @db.Uuid
+  email                String          @unique
+  passwordHash         String          @map("password_hash")
+  name                 String
+  status               UserStatus      @default(ACTIVE)
+  lastLoginAt          DateTime?       @map("last_login_at")
+  createdAt            DateTime        @default(now()) @map("created_at")
+  updatedAt            DateTime        @updatedAt @map("updated_at")
+  ownedOrganizations   Organization[]  @relation("OrganizationOwner")
+  memberships          Membership[]
+  userSessions         UserSession[]
+  invitedMemberships   Membership[]    @relation("MembershipInvitedBy")
+
+  @@map("users")
+}
+
+model Organization {
+  id             String             @id @default(uuid()) @db.Uuid
+  name           String
+  slug           String             @unique
+  ownerUserId    String             @map("owner_user_id") @db.Uuid
+  status         OrganizationStatus @default(ACTIVE)
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+  ownerUser      User               @relation("OrganizationOwner", fields: [ownerUserId], references: [id])
+  memberships    Membership[]
+  userSessions   UserSession[]
+  subscription   Subscription?
+
+  @@index([ownerUserId])
+  @@map("organizations")
+}
+
+model Membership {
+  id               String           @id @default(uuid()) @db.Uuid
+  organizationId   String           @map("organization_id") @db.Uuid
+  userId           String           @map("user_id") @db.Uuid
+  role             MembershipRole
+  status           MembershipStatus @default(ACTIVE)
+  invitedByUserId  String?          @map("invited_by_user_id") @db.Uuid
+  joinedAt         DateTime?        @map("joined_at")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+  organization     Organization     @relation(fields: [organizationId], references: [id])
+  user             User             @relation(fields: [userId], references: [id])
+  invitedByUser    User?            @relation("MembershipInvitedBy", fields: [invitedByUserId], references: [id])
+
+  @@unique([organizationId, userId])
+  @@index([organizationId])
+  @@index([userId])
+  @@index([organizationId, role])
+  @@map("memberships")
+}
+
+model UserSession {
+  id                   String        @id @default(uuid()) @db.Uuid
+  userId               String        @map("user_id") @db.Uuid
+  activeOrganizationId String        @map("active_organization_id") @db.Uuid
+  sessionTokenHash     String        @unique @map("session_token_hash")
+  expiresAt            DateTime      @map("expires_at")
+  lastSeenAt           DateTime      @map("last_seen_at")
+  createdAt            DateTime      @default(now()) @map("created_at")
+  updatedAt            DateTime      @updatedAt @map("updated_at")
+  user                 User          @relation(fields: [userId], references: [id])
+  activeOrganization   Organization  @relation(fields: [activeOrganizationId], references: [id])
+
+  @@index([userId])
+  @@index([activeOrganizationId])
+  @@map("user_sessions")
+}
+
+model Plan {
+  id              String             @id @default(uuid()) @db.Uuid
+  code            String             @unique
+  name            String
+  billingInterval BillingInterval    @map("billing_interval")
+  shopLimit       Int                @map("shop_limit")
+  memberLimit     Int                @map("member_limit")
+  historyDays     Int                @map("history_days")
+  featuresJson    Json               @map("features_json")
+  status          PlanStatus         @default(ACTIVE)
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+  subscriptions   Subscription[]
+
+  @@map("plans")
+}
+
+model Subscription {
+  id                String             @id @default(uuid()) @db.Uuid
+  organizationId    String             @unique @map("organization_id") @db.Uuid
+  planId            String             @map("plan_id") @db.Uuid
+  status            SubscriptionStatus @default(TRIALING)
+  startsAt          DateTime           @map("starts_at")
+  endsAt            DateTime?          @map("ends_at")
+  autoRenew         Boolean            @default(false) @map("auto_renew")
+  provider          String
+  providerReference String?            @map("provider_reference")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  organization      Organization       @relation(fields: [organizationId], references: [id])
+  plan              Plan               @relation(fields: [planId], references: [id])
+
+  @@index([planId])
+  @@index([organizationId, status])
+  @@map("subscriptions")
+}
