@@ -17,6 +17,14 @@ npm run infra:down
 npm run infra:logs
 ```
 
+Untuk baseline production:
+
+```bash
+npm run infra:prod:up
+npm run infra:prod:down
+npm run infra:prod:logs
+```
+
 Port default:
 
 - Web: `3000`
@@ -31,3 +39,4 @@ Catatan:
 - Compose sekarang sudah memuat service `web`, `api`, dan `worker` selain infra dasar.
 - Untuk local development, dev server manual tetap paling cepat dipakai saat coding aktif.
 - Untuk containerized bootstrap, jalankan `docker compose up --build`.
+- Baseline production ada di `docker-compose.prod.yml` dengan `Caddy` untuk reverse proxy dan auto-SSL.

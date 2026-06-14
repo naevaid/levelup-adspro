@@ -1,0 +1,19 @@
+{$APP_DOMAIN} {
+  encode gzip zstd
+
+  log {
+    output stdout
+    format console
+  }
+
+  @api path /api/*
+  handle_path @api {
+    reverse_proxy api:3001
+  }
+
+  handle {
+    reverse_proxy web:3000
+  }
+
+  tls {$ACME_EMAIL}
+}

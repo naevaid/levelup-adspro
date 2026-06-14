@@ -16,7 +16,10 @@
     "test": "npm run test --workspaces --if-present",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
-    "infra:logs": "docker compose logs -f"
+    "infra:logs": "docker compose logs -f",
+    "infra:prod:up": "docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build",
+    "infra:prod:down": "docker compose -f docker-compose.prod.yml --env-file .env.production down",
+    "infra:prod:logs": "docker compose -f docker-compose.prod.yml --env-file .env.production logs -f"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

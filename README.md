@@ -101,9 +101,17 @@ Untuk bootstrap container lokal:
 docker compose up --build
 ```
 
+Untuk baseline production di VPS:
+
+```bash
+copy .env.production.example .env.production
+npm run infra:prod:up
+```
+
 ## Environment Template
 
 - Root: `.env.example`
+- Production: `.env.production.example`
 - Web: `apps/web/.env.example`
 - API: `apps/api/.env.example`
 - Worker: `apps/worker/.env.example`
@@ -123,3 +131,4 @@ Template ini masih level bootstrap dan akan disempurnakan saat config module, st
 
 - Catatan awal subdomain dan deployment ada di `infra/docker/deploy-notes.md`
 - Subdomain frontend yang sudah disiapkan saat ini: `adspro.naeva.id`
+- Baseline production sekarang memakai `Caddy` + `docker-compose.prod.yml`
