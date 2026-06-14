@@ -4,6 +4,7 @@ set -euo pipefail
 PROJECT_NAME="${PROJECT_NAME:-levelup-adspro}"
 PROJECT_DIR="${PROJECT_DIR:-/opt/${PROJECT_NAME}}"
 BRANCH="${BRANCH:-main}"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 
 cd "${PROJECT_DIR}"
 
@@ -20,13 +21,13 @@ git pull --ff-only origin "${BRANCH}"
 echo "==> Build dan jalankan stack production"
 docker compose \
   -p "${PROJECT_NAME}" \
-  -f docker-compose.prod.yml \
+  -f "${COMPOSE_FILE}" \
   --env-file .env.production \
   up -d --build
 
 echo "==> Deploy selesai"
 docker compose \
   -p "${PROJECT_NAME}" \
-  -f docker-compose.prod.yml \
+  -f "${COMPOSE_FILE}" \
   --env-file .env.production \
   ps

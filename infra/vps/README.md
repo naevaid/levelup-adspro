@@ -14,7 +14,9 @@ Panduan ini dipakai jika `levelup-adspro` akan dibuat sebagai project baru terpi
 - `infra/vps/deploy.sh`
 - `infra/vps/systemd/levelup-adspro.service`
 - `docker-compose.prod.yml`
+- `docker-compose.vps.yml`
 - `.env.production.example`
+- `infra/nginx/adspro.naeva.id.conf`
 
 ## Langkah Ringkas
 
@@ -32,7 +34,7 @@ chmod +x infra/vps/bootstrap-project.sh
 
 ```bash
 chmod +x infra/vps/deploy.sh
-./infra/vps/deploy.sh
+COMPOSE_FILE=docker-compose.vps.yml ./infra/vps/deploy.sh
 ```
 
 ## Auto Start Setelah Reboot
@@ -50,4 +52,12 @@ sudo systemctl start levelup-adspro
 
 - pastikan `adspro.naeva.id` mengarah ke IP VPS
 - pastikan port `80` dan `443` terbuka
-- `Caddy` akan mencoba mengeluarkan sertifikat otomatis saat domain sudah resolve dengan benar
+
+## Jika VPS Sudah Memakai Nginx Host
+
+Jika port `80/443` sudah dipakai `nginx` host:
+
+1. deploy container dengan `docker-compose.vps.yml`
+2. aktifkan vhost `infra/nginx/adspro.naeva.id.conf`
+3. reload `nginx`
+4. jalankan `certbot --nginx -d adspro.naeva.id`

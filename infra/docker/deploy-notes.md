@@ -26,8 +26,10 @@ Pendekatan ini dipakai di baseline production saat ini agar frontend dan API bis
 ## File Deploy Yang Disiapkan
 
 - `docker-compose.prod.yml`
+- `docker-compose.vps.yml`
 - `infra/docker/Caddyfile`
 - `.env.production.example`
+- `infra/nginx/adspro.naeva.id.conf`
 
 ## Cara Pakai Di VPS
 
@@ -47,6 +49,8 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d --bui
 Jika DNS dan port sudah benar, `Caddy` akan mencoba mengeluarkan sertifikat SSL otomatis.
 
 Referensi script otomatis ada di `infra/vps/`.
+
+Jika VPS Anda sudah memiliki `nginx` aktif di `80/443`, gunakan `docker-compose.vps.yml` dan reverse proxy host-level dari `infra/nginx/adspro.naeva.id.conf`.
 
 ## Langkah Berikutnya Yang Disarankan
 
