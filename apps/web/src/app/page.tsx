@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 type ApiHealth = {
   appEnv?: string;
   port?: number;
@@ -40,15 +42,15 @@ async function getApiHealth(): Promise<{
 
 const checkpoints = [
   "Monorepo apps/web, apps/api, apps/worker sudah hidup",
-  "Workspace root, Docker Compose, dan env template sudah tersedia",
-  "API memakai ConfigModule dan health endpoint bootstrap",
-  "Worker sudah siap untuk wiring Redis queue di tahap berikutnya",
+  "Auth API fase 1 sudah tersedia: signup, login, logout, me, current organization",
+  "Private app shell wave 1 sudah siap untuk dashboard tenant",
+  "Deploy VPS, nginx, dan SSL domain adspro.naeva.id sudah aktif",
 ];
 
 const nextSteps = [
-  "Mulai wiring database dan migration tool",
-  "Hubungkan worker ke Redis queue dasar",
-  "Bangun fondasi auth, tenant, dan ingest pipeline",
+  "Hubungkan dashboard ke kontrak data analytics setelah ingestion siap",
+  "Tambahkan page domain Shops, Team, dan Market Research secara bertahap",
+  "Buka multi-organization switcher setelah flow membership berkembang",
 ];
 
 export default async function Home() {
@@ -63,7 +65,7 @@ export default async function Home() {
           <div className="space-y-8">
             <div className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/6 px-4 py-2 text-sm text-sky-100">
               <span className="status-dot" />
-              Sprint 0 bootstrap sedang aktif
+              Fase 1 identity and tenant foundation sedang aktif
             </div>
 
             <div className="space-y-5">
@@ -71,32 +73,55 @@ export default async function Home() {
                 LevelUP adsPRO
               </p>
               <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-white sm:text-5xl lg:text-6xl">
-                Workspace baru sudah siap untuk masuk ke fondasi produk.
+                Tenant workspace sudah siap untuk signup, login, dan private app
+                shell.
               </h1>
               <p className="max-w-2xl text-base leading-8 muted-text sm:text-lg">
-                Monorepo Next.js dan NestJS sudah ter-bootstrap, local stack
-                sudah terdokumentasi, dan halaman ini dipakai sebagai titik
-                pantau bootstrap selama Sprint 0.
+                Sprint 0 bootstrap sudah selesai, backend auth fase 1 sudah
+                terhubung, dan frontend kini punya jalur masuk ke dashboard
+                tenant-aware sesuai roadmap dokumen.
               </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <Link
+                href="/signup"
+                className="rounded-full bg-sky-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-sky-300"
+              >
+                Buat Workspace Baru
+              </Link>
+              <Link
+                href="/login"
+                className="rounded-full border border-white/12 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100"
+              >
+                Login
+              </Link>
+              <Link
+                href="/app/dashboard"
+                className="rounded-full border border-white/12 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100"
+              >
+                Buka App Shell
+              </Link>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-3xl border border-white/10 bg-white/6 p-5">
-                <p className="text-sm text-sky-200/70">Web App</p>
+                <p className="text-sm text-sky-200/70">Frontend Wave 1</p>
                 <p className="mt-2 text-2xl font-semibold text-white">
-                  Next.js 16
+                  Auth + App Shell
                 </p>
                 <p className="mt-2 text-sm muted-text">
-                  Preview workspace dan landing bootstrap.
+                  Login, signup, sidebar, top bar, dashboard, dan placeholder
+                  route inti.
                 </p>
               </div>
               <div className="rounded-3xl border border-white/10 bg-white/6 p-5">
-                <p className="text-sm text-sky-200/70">Backend Stack</p>
+                <p className="text-sm text-sky-200/70">Backend Fase 1</p>
                 <p className="mt-2 text-2xl font-semibold text-white">
-                  API + Worker
+                  Auth + Tenant API
                 </p>
                 <p className="mt-2 text-sm muted-text">
-                  NestJS API untuk HTTP dan worker process untuk queue pipeline.
+                  Signup, login, session bearer, `me`, dan current organization.
                 </p>
               </div>
             </div>
@@ -145,7 +170,7 @@ export default async function Home() {
               <p className="text-sm text-sky-200/75">Endpoint Penting</p>
               <div className="mt-4 space-y-3 text-sm">
                 <div className="rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3">
-                  <p className="text-white">Web</p>
+                  <p className="text-white">Public Landing</p>
                   <p className="mt-1 font-mono muted-text">
                     http://localhost:3000
                   </p>
@@ -157,9 +182,9 @@ export default async function Home() {
                   </p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3">
-                  <p className="text-white">MinIO Console</p>
+                  <p className="text-white">Auth Login</p>
                   <p className="mt-1 font-mono muted-text">
-                    http://localhost:9001
+                    {apiBaseUrl}/api/v1/auth/login
                   </p>
                 </div>
               </div>
@@ -171,7 +196,7 @@ export default async function Home() {
       <section className="grid gap-6 py-8 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="glass-card rounded-[1.75rem] p-6">
           <p className="text-sm uppercase tracking-[0.24em] text-sky-200/70">
-            Checklist Bootstrap
+            Checklist Fase Aktif
           </p>
           <div className="mt-5 space-y-3">
             {checkpoints.map((item) => (
