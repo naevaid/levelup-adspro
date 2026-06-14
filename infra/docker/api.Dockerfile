@@ -7,7 +7,7 @@ COPY apps/api/package.json apps/api/package.json
 COPY apps/worker/package.json apps/worker/package.json
 COPY packages/shared/package.json packages/shared/package.json
 
-RUN npm ci
+RUN npm ci --workspaces --include-workspace-root
 
 FROM node:22-alpine AS builder
 WORKDIR /app
