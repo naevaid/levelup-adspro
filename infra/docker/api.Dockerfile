@@ -17,6 +17,7 @@ COPY --from=deps /app/apps ./apps
 COPY --from=deps /app/packages ./packages
 COPY . .
 
+RUN cd apps/api && ./node_modules/.bin/prisma generate --schema prisma/schema.prisma
 RUN cd apps/api && ./node_modules/.bin/nest build
 
 FROM node:22-alpine AS runner
