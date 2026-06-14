@@ -43,6 +43,13 @@ docker compose \
   --env-file .env.production \
   up -d --build
 
+echo "==> Jalankan migration dan seed database"
+docker compose \
+  -p "${PROJECT_NAME}" \
+  -f "${COMPOSE_FILE}" \
+  --env-file .env.production \
+  run --rm api sh -lc "./node_modules/.bin/prisma migrate deploy --schema prisma/schema.prisma && node prisma/seed.js"
+
 echo "==> Deploy selesai"
 docker compose \
   -p "${PROJECT_NAME}" \
