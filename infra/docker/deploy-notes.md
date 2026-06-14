@@ -31,18 +31,22 @@ Pendekatan ini dipakai di baseline production saat ini agar frontend dan API bis
 
 ## Cara Pakai Di VPS
 
-1. Copy repo ke server.
-2. Salin `.env.production.example` menjadi `.env.production`.
-3. Isi secret production yang sebenarnya.
-4. Pastikan DNS `adspro.naeva.id` mengarah ke IP VPS.
-5. Pastikan port `80` dan `443` terbuka.
-6. Jalankan:
+1. Buat project baru terpisah di VPS untuk `levelup-adspro`.
+2. Gunakan direktori target `/opt/levelup-adspro`.
+3. Clone repo ke direktori tersebut.
+4. Salin `.env.production.example` menjadi `.env.production`.
+5. Isi secret production yang sebenarnya.
+6. Pastikan DNS `adspro.naeva.id` mengarah ke IP VPS.
+7. Pastikan port `80` dan `443` terbuka.
+8. Jalankan:
 
 ```bash
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 ```
 
 Jika DNS dan port sudah benar, `Caddy` akan mencoba mengeluarkan sertifikat SSL otomatis.
+
+Referensi script otomatis ada di `infra/vps/`.
 
 ## Langkah Berikutnya Yang Disarankan
 

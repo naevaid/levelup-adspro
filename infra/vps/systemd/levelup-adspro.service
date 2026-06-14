@@ -1,0 +1,15 @@
+[Unit]
+Description=LevelUP adsPRO Docker Compose Stack
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/levelup-adspro
+ExecStart=/usr/bin/docker compose -p levelup-adspro -f docker-compose.prod.yml --env-file .env.production up -d
+ExecStop=/usr/bin/docker compose -p levelup-adspro -f docker-compose.prod.yml --env-file .env.production down
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

@@ -132,3 +132,4 @@ Template ini masih level bootstrap dan akan disempurnakan saat config module, st
 - Catatan awal subdomain dan deployment ada di `infra/docker/deploy-notes.md`
 - Subdomain frontend yang sudah disiapkan saat ini: `adspro.naeva.id`
 - Baseline production sekarang memakai `Caddy` + `docker-compose.prod.yml`
+- Untuk VPS, gunakan project baru terpisah dengan panduan di `infra/vps/README.md`
