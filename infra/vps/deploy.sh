@@ -5,6 +5,7 @@ PROJECT_NAME="${PROJECT_NAME:-levelup-adspro}"
 PROJECT_DIR="${PROJECT_DIR:-/opt/${PROJECT_NAME}}"
 BRANCH="${BRANCH:-main}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
+FORCE_DEPLOY="${FORCE_DEPLOY:-0}"
 
 cd "${PROJECT_DIR}"
 
@@ -15,6 +16,20 @@ fi
 
 echo "==> Update source code"
 git fetch origin
+
+LOCAL_COMMIT="$(git rev-parse HEAD)"
+REMOTE_COMMIT="$(git rev-parse "origin/${BRANCH}")"
+
+if [ "${FORCE_DEPLOY}" != "1" ] && [ "${LOCAL_COMMIT}" = "${REMOTE_COMMIT}" ]; then
+  echo "==> Tidak ada perubahan baru di origin/${BRANCH}, skip deploy"
+  exit 0
+fi
+
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "==> Working tree di VPS tidak bersih. Deploy dibatalkan agar tidak menimpa perubahan lokal."
+  exit 1
+fi
+
 git checkout "${BRANCH}"
 git pull --ff-only origin "${BRANCH}"
 

@@ -13,6 +13,8 @@ Panduan ini dipakai jika `levelup-adspro` akan dibuat sebagai project baru terpi
 - `infra/vps/bootstrap-project.sh`
 - `infra/vps/deploy.sh`
 - `infra/vps/systemd/levelup-adspro.service`
+- `infra/vps/systemd/levelup-adspro-deploy.service`
+- `infra/vps/systemd/levelup-adspro-deploy.timer`
 - `docker-compose.prod.yml`
 - `docker-compose.vps.yml`
 - `.env.production.example`
@@ -46,6 +48,32 @@ sudo cp infra/vps/systemd/levelup-adspro.service /etc/systemd/system/levelup-ads
 sudo systemctl daemon-reload
 sudo systemctl enable levelup-adspro
 sudo systemctl start levelup-adspro
+```
+
+Service ini memakai `docker-compose.vps.yml`, sesuai setup host `nginx` yang dipakai sekarang di VPS.
+
+## Auto Deploy Tanpa GitHub Actions
+
+Jika tidak ingin memakai workflow GitHub, gunakan polling ringan dari VPS via `systemd timer`:
+
+```bash
+sudo cp infra/vps/systemd/levelup-adspro-deploy.service /etc/systemd/system/levelup-adspro-deploy.service
+sudo cp infra/vps/systemd/levelup-adspro-deploy.timer /etc/systemd/system/levelup-adspro-deploy.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now levelup-adspro-deploy.timer
+```
+
+Perilaku timer:
+
+- cek repo setiap 5 menit
+- hanya deploy jika ada commit baru di `origin/main`
+- batal deploy jika working tree di VPS tidak bersih, agar perubahan lokal tidak tertimpa
+
+Untuk uji manual:
+
+```bash
+sudo systemctl start levelup-adspro-deploy.service
+sudo journalctl -u levelup-adspro-deploy.service -n 100 --no-pager
 ```
 
 ## Catatan DNS dan SSL
