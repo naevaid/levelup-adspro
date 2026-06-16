@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyStatePanel } from "@/components/shared/empty-state-panel";
 import { PageHeader } from "@/components/layout/page-header";
@@ -43,6 +45,40 @@ type IngestionBatchSummary = {
     retentionUntil: string;
     status: string;
   } | null;
+  preview:
+    | {
+        type: "public_search";
+        keyword: string | null;
+        resultCount: number;
+        pageTitle: string | null;
+        topResults: Array<{
+          position: number | null;
+          productTitle: string | null;
+          productUrl: string | null;
+          imageUrl: string | null;
+          shopName: string | null;
+          priceMin: number | null;
+          priceMax: number | null;
+          salesHint: string | null;
+        }>;
+      }
+    | {
+        type: "public_product";
+        pageTitle: string | null;
+        product: {
+          productTitle: string | null;
+          productUrl: string | null;
+          imageUrl: string | null;
+          shopName: string | null;
+          priceMin: number | null;
+          priceMax: number | null;
+          salesHint: string | null;
+          ratingHint: string | null;
+          reviewCountHint: string | null;
+        } | null;
+        highlights: string[];
+      }
+    | null;
 };
 
 function formatDateTime(value: string | null) {
@@ -67,6 +103,40 @@ function formatSize(sizeBytes: number | null | undefined) {
   }
 
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatCurrency(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "-";
+  }
+
+  return `Rp${value.toLocaleString("id-ID")}`;
+}
+
+function formatPriceRange(
+  priceMin: number | null | undefined,
+  priceMax: number | null | undefined,
+) {
+  if (
+    typeof priceMin === "number" &&
+    typeof priceMax === "number" &&
+    Number.isFinite(priceMin) &&
+    Number.isFinite(priceMax)
+  ) {
+    return priceMin === priceMax
+      ? formatCurrency(priceMin)
+      : `${formatCurrency(priceMin)} - ${formatCurrency(priceMax)}`;
+  }
+
+  if (typeof priceMin === "number" && Number.isFinite(priceMin)) {
+    return formatCurrency(priceMin);
+  }
+
+  if (typeof priceMax === "number" && Number.isFinite(priceMax)) {
+    return formatCurrency(priceMax);
+  }
+
+  return "-";
 }
 
 export default function MarketResearchPage() {
@@ -261,6 +331,132 @@ export default function MarketResearchPage() {
                   </div>
                 </div>
               </div>
+
+              {batch.preview?.type === "public_search" ? (
+                <div className="mt-4 rounded-[1.5rem] border border-sky-300/12 bg-slate-950/40 p-4 sm:p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm text-sky-200/75">
+                        Preview Riset Pencarian
+                      </p>
+                      <h3 className="mt-2 text-lg font-semibold text-white">
+                        {batch.preview.keyword || "Keyword belum terbaca"}
+                      </h3>
+                      <p className="mt-2 text-sm muted-text">
+                        {batch.preview.pageTitle || "Judul halaman tidak tersedia"}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
+                      Top preview: {batch.preview.topResults.length} item
+                      <br />
+                      Result count: {batch.preview.resultCount}
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {batch.preview.topResults.map((result, index) => (
+                      <article
+                        key={`${batch.id}-${result.productUrl ?? index}`}
+                        className="rounded-[1.25rem] border border-white/10 bg-white/5 p-3"
+                      >
+                        {result.imageUrl ? (
+                          <img
+                            src={result.imageUrl}
+                            alt={result.productTitle ?? `Preview ${index + 1}`}
+                            className="h-40 w-full rounded-2xl object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-40 w-full items-center justify-center rounded-2xl border border-dashed border-white/10 bg-slate-900/50 text-xs text-slate-400">
+                            Gambar belum tersedia
+                          </div>
+                        )}
+                        <p className="mt-3 text-xs uppercase tracking-[0.22em] text-sky-200/65">
+                          Urutan {result.position ?? index + 1}
+                        </p>
+                        <h4 className="mt-2 line-clamp-2 text-sm font-medium text-white">
+                          {result.productTitle || "Judul produk belum terbaca"}
+                        </h4>
+                        <p className="mt-2 text-sm text-slate-200">
+                          {formatPriceRange(result.priceMin, result.priceMax)}
+                        </p>
+                        <p className="mt-1 text-sm muted-text">
+                          {result.shopName || "Toko belum terbaca"}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-400">
+                          {result.salesHint || "Belum ada sinyal terjual"}
+                        </p>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {batch.preview?.type === "public_product" ? (
+                <div className="mt-4 rounded-[1.5rem] border border-sky-300/12 bg-slate-950/40 p-4 sm:p-5">
+                  <p className="text-sm text-sky-200/75">
+                    Preview Detail Produk
+                  </p>
+                  <div className="mt-4 grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
+                    <div>
+                      {batch.preview.product?.imageUrl ? (
+                        <img
+                          src={batch.preview.product.imageUrl}
+                          alt={batch.preview.product.productTitle ?? "Produk"}
+                          className="h-56 w-full rounded-[1.25rem] object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-56 w-full items-center justify-center rounded-[1.25rem] border border-dashed border-white/10 bg-slate-900/50 text-xs text-slate-400">
+                          Gambar produk belum tersedia
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-white">
+                        {batch.preview.product?.productTitle ||
+                          batch.preview.pageTitle ||
+                          "Detail produk belum terbaca"}
+                      </h3>
+                      <div className="mt-3 grid gap-2 text-sm text-slate-100">
+                        <p>
+                          Harga:{" "}
+                          {formatPriceRange(
+                            batch.preview.product?.priceMin,
+                            batch.preview.product?.priceMax,
+                          )}
+                        </p>
+                        <p>
+                          Toko:{" "}
+                          {batch.preview.product?.shopName ||
+                            "Toko belum terbaca"}
+                        </p>
+                        <p>
+                          Penjualan:{" "}
+                          {batch.preview.product?.salesHint ||
+                            "Belum ada sinyal penjualan"}
+                        </p>
+                        <p>
+                          Rating: {batch.preview.product?.ratingHint || "-"}
+                        </p>
+                        <p>
+                          Ulasan: {batch.preview.product?.reviewCountHint || "-"}
+                        </p>
+                      </div>
+                      {batch.preview.highlights.length > 0 ? (
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {batch.preview.highlights.map((highlight) => (
+                            <span
+                              key={`${batch.id}-${highlight}`}
+                              className="rounded-full border border-sky-300/12 bg-white/5 px-3 py-1.5 text-xs text-sky-100"
+                            >
+                              {highlight}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
               {batch.errorCode || batch.errorMessage ? (
                 <p className="mt-4 rounded-2xl border border-rose-300/15 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">

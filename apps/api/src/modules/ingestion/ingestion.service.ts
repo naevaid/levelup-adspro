@@ -35,52 +35,58 @@ export class IngestionService {
       take: 20,
     });
 
-    return batches.map((batch) => {
-      const rawPayloadObject = batch.rawPayloadObjects[0] ?? null;
+    return Promise.all(
+      batches.map(async (batch) => {
+        const rawPayloadObject = batch.rawPayloadObjects[0] ?? null;
+        const preview = rawPayloadObject
+          ? await this.extractPreviewFromRawPayload(rawPayloadObject.storageKey)
+          : null;
 
-      return {
-        id: batch.id,
-        status: batch.status,
-        captureMode: batch.captureMode.toLowerCase(),
-        pageType: batch.pageType,
-        marketplace: batch.marketplace,
-        payloadSchemaVersion: batch.payloadSchemaVersion,
-        capturedAt: batch.capturedAt,
-        processedAt: batch.processedAt,
-        errorCode: batch.errorCode,
-        errorMessage: batch.errorMessage,
-        createdAt: batch.createdAt,
-        extensionSession: {
-          id: batch.extensionSession.id,
-          deviceLabel: batch.extensionSession.deviceLabel,
-          extensionVersion: batch.extensionSession.extensionVersion,
-          status: batch.extensionSession.status,
-          expiresAt: batch.extensionSession.expiresAt,
-        },
-        shop: batch.shop
-          ? {
-              id: batch.shop.id,
-              name: batch.shop.name,
-              externalId: batch.shop.externalId,
-              status: batch.shop.status,
-              marketplace: {
-                id: batch.shop.marketplace.id,
-                code: batch.shop.marketplace.code,
-                name: batch.shop.marketplace.name,
-              },
-            }
-          : null,
-        rawPayloadObject: rawPayloadObject
-          ? {
-              id: rawPayloadObject.id,
-              storageKey: rawPayloadObject.storageKey,
-              sizeBytes: rawPayloadObject.sizeBytes,
-              retentionUntil: rawPayloadObject.retentionUntil,
-              status: rawPayloadObject.status,
-            }
-          : null,
-      };
-    });
+        return {
+          id: batch.id,
+          status: batch.status,
+          captureMode: batch.captureMode.toLowerCase(),
+          pageType: batch.pageType,
+          marketplace: batch.marketplace,
+          payloadSchemaVersion: batch.payloadSchemaVersion,
+          capturedAt: batch.capturedAt,
+          processedAt: batch.processedAt,
+          errorCode: batch.errorCode,
+          errorMessage: batch.errorMessage,
+          createdAt: batch.createdAt,
+          extensionSession: {
+            id: batch.extensionSession.id,
+            deviceLabel: batch.extensionSession.deviceLabel,
+            extensionVersion: batch.extensionSession.extensionVersion,
+            status: batch.extensionSession.status,
+            expiresAt: batch.extensionSession.expiresAt,
+          },
+          shop: batch.shop
+            ? {
+                id: batch.shop.id,
+                name: batch.shop.name,
+                externalId: batch.shop.externalId,
+                status: batch.shop.status,
+                marketplace: {
+                  id: batch.shop.marketplace.id,
+                  code: batch.shop.marketplace.code,
+                  name: batch.shop.marketplace.name,
+                },
+              }
+            : null,
+          rawPayloadObject: rawPayloadObject
+            ? {
+                id: rawPayloadObject.id,
+                storageKey: rawPayloadObject.storageKey,
+                sizeBytes: rawPayloadObject.sizeBytes,
+                retentionUntil: rawPayloadObject.retentionUntil,
+                status: rawPayloadObject.status,
+              }
+            : null,
+          preview,
+        };
+      }),
+    );
   }
 
   async createBatch(
@@ -213,5 +219,88 @@ export class IngestionService {
     });
 
     return subscription?.plan.historyDays ?? 30;
+  }
+
+  private async extractPreviewFromRawPayload(storageKey: string) {
+    const rawPayload = await this.rawDataService.readRawPayload<{
+      pageType?: string;
+      marketplace?: string;
+      content?: {
+        keyword?: string;
+        resultCount?: number;
+        pageTitle?: string;
+        results?: Array<{
+          position?: number;
+          productTitle?: string;
+          productUrl?: string;
+          imageUrl?: string;
+          shopName?: string | null;
+          priceMin?: number;
+          priceMax?: number;
+          salesHint?: string;
+        }>;
+        product?: {
+          productTitle?: string;
+          productUrl?: string;
+          imageUrl?: string;
+          shopName?: string | null;
+          priceMin?: number;
+          priceMax?: number;
+          salesHint?: string;
+          ratingHint?: string;
+          reviewCountHint?: string;
+        };
+        highlights?: string[];
+      };
+    }>(storageKey);
+
+    if (!rawPayload?.content) {
+      return null;
+    }
+
+    if (rawPayload.pageType === 'shopee_public_search') {
+      return {
+        type: 'public_search',
+        keyword: rawPayload.content.keyword ?? null,
+        resultCount: rawPayload.content.resultCount ?? 0,
+        pageTitle: rawPayload.content.pageTitle ?? null,
+        topResults: (rawPayload.content.results ?? [])
+          .slice(0, 5)
+          .map((item) => ({
+            position: item.position ?? null,
+            productTitle: item.productTitle ?? null,
+            productUrl: item.productUrl ?? null,
+            imageUrl: item.imageUrl ?? null,
+            shopName: item.shopName ?? null,
+            priceMin: item.priceMin ?? null,
+            priceMax: item.priceMax ?? null,
+            salesHint: item.salesHint ?? null,
+          })),
+      };
+    }
+
+    if (rawPayload.pageType === 'shopee_public_product') {
+      return {
+        type: 'public_product',
+        pageTitle: rawPayload.content.pageTitle ?? null,
+        product: rawPayload.content.product
+          ? {
+              productTitle: rawPayload.content.product.productTitle ?? null,
+              productUrl: rawPayload.content.product.productUrl ?? null,
+              imageUrl: rawPayload.content.product.imageUrl ?? null,
+              shopName: rawPayload.content.product.shopName ?? null,
+              priceMin: rawPayload.content.product.priceMin ?? null,
+              priceMax: rawPayload.content.product.priceMax ?? null,
+              salesHint: rawPayload.content.product.salesHint ?? null,
+              ratingHint: rawPayload.content.product.ratingHint ?? null,
+              reviewCountHint:
+                rawPayload.content.product.reviewCountHint ?? null,
+            }
+          : null,
+        highlights: (rawPayload.content.highlights ?? []).slice(0, 8),
+      };
+    }
+
+    return null;
   }
 }

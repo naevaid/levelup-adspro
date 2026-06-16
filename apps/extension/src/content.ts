@@ -811,6 +811,13 @@ function ensureOverlayStyle() {
       color: #4b5563;
     }
 
+    #${OVERLAY_ID} .levelup-product-stats {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      margin-top: 12px;
+    }
+
     #${OVERLAY_ID} .levelup-highlights {
       display: flex;
       flex-wrap: wrap;
@@ -1151,12 +1158,27 @@ function renderOverlay(snapshot: PageSnapshot) {
           </div>
           <div class="levelup-product-panel">
             <div class="levelup-product-title">${cleanProductTitle(detail?.productTitle ?? snapshot.title)}</div>
+            <div class="levelup-product-stats">
+              <div class="levelup-card">
+                <div class="levelup-card-label">Harga</div>
+                <div class="levelup-card-value">${priceLabel}</div>
+              </div>
+              <div class="levelup-card">
+                <div class="levelup-card-label">Penjualan</div>
+                <div class="levelup-card-value">${detail?.salesHint ?? "-"}</div>
+              </div>
+              <div class="levelup-card">
+                <div class="levelup-card-label">Rating</div>
+                <div class="levelup-card-value">${detail?.ratingHint ?? "-"}</div>
+              </div>
+              <div class="levelup-card">
+                <div class="levelup-card-label">Ulasan</div>
+                <div class="levelup-card-value">${detail?.reviewCountHint ?? "-"}</div>
+              </div>
+            </div>
             <div class="levelup-product-meta">
-              <div>Harga terbaca: ${priceLabel}</div>
               <div>Toko: ${detail?.shopName ?? 'Toko belum terbaca'}</div>
-              <div>Sinyal penjualan: ${detail?.salesHint ?? '-'}</div>
-              <div>Rating: ${detail?.ratingHint ?? '-'}</div>
-              <div>Ulasan: ${detail?.reviewCountHint ?? '-'}</div>
+              <div>URL produk: ${detail?.productUrl ?? snapshot.url}</div>
             </div>
             ${
               detail?.highlights.length

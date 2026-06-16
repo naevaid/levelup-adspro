@@ -161,6 +161,7 @@ function buildSyncPayload(
               position: result.position,
               productTitle: result.productTitle,
               productUrl: result.productUrl,
+              imageUrl: result.imageUrl,
               shopName: result.shopName,
               priceMin: result.priceMin,
               priceMax: result.priceMax,

@@ -1,5 +1,6 @@
 import {
   CreateBucketCommand,
+  GetObjectCommand,
   HeadBucketCommand,
   PutObjectCommand,
   S3Client,
@@ -95,6 +96,29 @@ export class RawDataService {
         status: RawPayloadObjectStatus.STORED,
       },
     });
+  }
+
+  async readRawPayload<T>(storageKey: string): Promise<T | null> {
+    await this.ensureBucketReady();
+
+    try {
+      const response = await this.s3Client.send(
+        new GetObjectCommand({
+          Bucket: this.bucketName,
+          Key: storageKey,
+        }),
+      );
+
+      const body = response.Body;
+      if (!body) {
+        return null;
+      }
+
+      const rawText = await body.transformToString();
+      return JSON.parse(rawText) as T;
+    } catch {
+      return null;
+    }
   }
 
   private async ensureBucketReady() {
