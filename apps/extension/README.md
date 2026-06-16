@@ -16,7 +16,10 @@ npm run dev --workspace apps/extension
 npm run lint --workspace apps/extension
 ```
 
-Output build ada di `apps/extension/dist`.
+Output build ada di:
+
+- `apps/extension/dist` untuk `Load unpacked`
+- `apps/extension/package/levelup-adspro-collector-v<version>.zip` untuk upload ke Chrome Web Store
 
 ## Load Unpacked
 
@@ -51,7 +54,11 @@ Parser yang paling siap dipakai saat ini adalah `shopee_public_search`.
 
 ## Catatan Chrome Web Store
 
-Code package sudah siap untuk `Load unpacked` dan bisa dijadikan basis upload ke Chrome Web Store.
+Build extension sekarang otomatis:
+
+- menyalin icon final extension ke `dist/icons`
+- menambahkan field `icons` ke `manifest.json`
+- membuat file ZIP siap upload ke Chrome Web Store
 
 Sebelum publish listing, tetap siapkan:
 

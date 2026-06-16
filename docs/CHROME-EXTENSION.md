@@ -29,10 +29,16 @@ Hasil build ada di:
 apps/extension/dist
 ```
 
-Folder ini yang dipakai untuk:
+Dan file ZIP upload-ready dibuat di:
+
+```text
+apps/extension/package/levelup-adspro-collector-v<version>.zip
+```
+
+Output tersebut dipakai untuk:
 
 - `Load unpacked` di browser
-- bahan zip upload ke Chrome Web Store
+- upload ZIP ke Chrome Web Store
 
 ## Load Unpacked
 
@@ -58,7 +64,7 @@ Jika berhasil, backend akan menerima `ingestion batch` dan menyimpan raw payload
 
 ## Packaging Untuk Chrome Web Store
 
-Setelah `dist` siap, buat zip dari isi folder `apps/extension/dist`, lalu upload ke item Chrome Web Store.
+Setelah build selesai, upload file ZIP yang dibuat otomatis di folder `apps/extension/package` ke item Chrome Web Store.
 
 Yang perlu Anda siapkan untuk listing:
 
@@ -66,7 +72,7 @@ Yang perlu Anda siapkan untuk listing:
 - short description
 - detailed description
 - screenshot
-- icon final
+- icon final sudah ikut di package extension
 - kategori extension
 - privacy policy bila diminta oleh form listing
 

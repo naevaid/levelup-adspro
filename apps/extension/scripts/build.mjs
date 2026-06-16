@@ -1,4 +1,6 @@
+import { ZipArchive } from 'archiver';
 import { build, context } from 'esbuild';
+import { createWriteStream } from 'node:fs';
 import { mkdir, readFile, rm, writeFile, copyFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,9 +9,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 const srcDir = path.join(rootDir, 'src');
 const distDir = path.join(rootDir, 'dist');
+const packageDir = path.join(rootDir, 'package');
 const packageJsonPath = path.join(rootDir, 'package.json');
+const assetsDir = path.join(srcDir, 'assets');
 const watchMode = process.argv.includes('--watch');
 const cleanOnly = process.argv.includes('--clean');
+const iconSizes = [16, 32, 48, 128];
 
 const entryPoints = {
   background: path.join(srcDir, 'background.ts'),
@@ -21,12 +26,25 @@ async function cleanDist() {
   await rm(distDir, { recursive: true, force: true });
 }
 
+async function cleanPackage() {
+  await rm(packageDir, { recursive: true, force: true });
+}
+
 async function ensureDist() {
   await mkdir(distDir, { recursive: true });
 }
 
+async function ensurePackageDir() {
+  await mkdir(packageDir, { recursive: true });
+}
+
+function getIconMap() {
+  return Object.fromEntries(iconSizes.map((size) => [size, `icons/icon-${size}.png`]));
+}
+
 async function writeManifest() {
   const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf8'));
+  const icons = getIconMap();
   const manifest = {
     manifest_version: 3,
     name: 'LevelUP adsPRO Collector',
@@ -46,10 +64,12 @@ async function writeManifest() {
     action: {
       default_title: 'LevelUP adsPRO Collector',
       default_popup: 'popup.html',
+      default_icon: icons,
     },
     background: {
       service_worker: 'background.js',
     },
+    icons,
     content_scripts: [
       {
         matches: [
@@ -75,6 +95,18 @@ async function writeManifest() {
 async function copyStaticAssets() {
   await copyFile(path.join(srcDir, 'popup.html'), path.join(distDir, 'popup.html'));
   await copyFile(path.join(srcDir, 'popup.css'), path.join(distDir, 'popup.css'));
+
+  const distIconsDir = path.join(distDir, 'icons');
+  await mkdir(distIconsDir, { recursive: true });
+
+  await Promise.all(
+    iconSizes.map((size) =>
+      copyFile(
+        path.join(assetsDir, `icon-${size}.png`),
+        path.join(distIconsDir, `icon-${size}.png`),
+      ),
+    ),
+  );
 }
 
 function getBuildOptions() {
@@ -98,9 +130,36 @@ async function prepareDist() {
   await writeManifest();
 }
 
+async function createZipPackage() {
+  const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf8'));
+  await cleanPackage();
+  await ensurePackageDir();
+
+  const archivePath = path.join(
+    packageDir,
+    `levelup-adspro-collector-v${packageJson.version}.zip`,
+  );
+
+  await new Promise((resolve, reject) => {
+    const output = createWriteStream(archivePath);
+    const archive = new ZipArchive({ zlib: { level: 9 } });
+
+    output.on('close', resolve);
+    output.on('error', reject);
+    archive.on('error', reject);
+
+    archive.pipe(output);
+    archive.directory(distDir, false);
+    void archive.finalize();
+  });
+
+  return archivePath;
+}
+
 async function main() {
   if (cleanOnly) {
     await cleanDist();
+    await cleanPackage();
     return;
   }
 
@@ -114,6 +173,8 @@ async function main() {
   }
 
   await build(getBuildOptions());
+  const archivePath = await createZipPackage();
+  console.log(`Extension package ready: ${archivePath}`);
 }
 
 main().catch((error) => {
