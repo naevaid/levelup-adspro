@@ -56,6 +56,7 @@ export type CaptureMode = 'owned' | 'public';
 export type PageType =
   | 'unknown'
   | 'shopee_public_search'
+  | 'shopee_public_product'
   | 'shopee_ads_dashboard'
   | 'shopee_seller_product_page'
   | 'tiktok_ads_dashboard'
@@ -74,6 +75,19 @@ export type SearchResultPreview = {
   salesHint?: string;
 };
 
+export type ProductDetailSnapshot = {
+  productTitle: string;
+  productUrl: string;
+  imageUrl?: string;
+  shopName: string | null;
+  priceMin?: number;
+  priceMax?: number;
+  salesHint?: string;
+  ratingHint?: string;
+  reviewCountHint?: string;
+  highlights: string[];
+};
+
 export type PageSnapshot = {
   url: string;
   title: string;
@@ -85,6 +99,7 @@ export type PageSnapshot = {
   statusMessage: string;
   shopIdentifier?: string;
   resultsPreview: SearchResultPreview[];
+  productDetail?: ProductDetailSnapshot;
 };
 
 export type LastSyncStatus = {

@@ -3,6 +3,7 @@ import type {
   Marketplace,
   PageSnapshot,
   PageType,
+  ProductDetailSnapshot,
   SearchResultPreview,
 } from './types';
 
@@ -226,6 +227,129 @@ function extractProductImageUrl(
   }
 }
 
+function getFirstText(
+  document: Document | Element,
+  selectors: string[],
+): string | undefined {
+  for (const selector of selectors) {
+    const value = normalizeText(
+      document.querySelector<HTMLElement>(selector)?.textContent,
+    );
+    if (value.length > 0) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function getFirstImageUrl(
+  document: Document | Element,
+  selectors: string[],
+  url: URL,
+) {
+  for (const selector of selectors) {
+    const image = document.querySelector<HTMLImageElement>(selector);
+    const rawUrl =
+      image?.getAttribute('src') ??
+      image?.getAttribute('data-src') ??
+      image?.currentSrc;
+
+    if (!rawUrl) {
+      continue;
+    }
+
+    try {
+      return new URL(rawUrl, url.origin).toString();
+    } catch {
+      continue;
+    }
+  }
+
+  return undefined;
+}
+
+function detectShopeePublicProduct(
+  document: Document,
+  url: URL,
+): ProductDetailSnapshot | null {
+  const productRoot =
+    document.querySelector('.page-product__content') ??
+    document.querySelector('.product-briefing') ??
+    document.body;
+
+  const productTitle =
+    getFirstText(productRoot, ['h1', '[data-sqe="name"]']) ??
+    normalizeText(document.title.replace(/\s*\|\s*Shopee.*$/i, ''));
+
+  if (productTitle.length < 8) {
+    return null;
+  }
+
+  const shopName =
+    getFirstText(productRoot, [
+      'a[href*="/shop/"]',
+      '[data-sqe="shop_name"]',
+      'button[data-sqe="shop_link"]',
+    ]) ?? null;
+
+  const imageUrl = getFirstImageUrl(
+    productRoot,
+    [
+      'img[alt]',
+      '.product-briefing img',
+      '.page-product__content img',
+      'img',
+    ],
+    url,
+  );
+
+  const pricingText = getFirstText(productRoot, [
+    '[class*="product-price"]',
+    '.pqTWkA',
+    '.IZPeQz',
+    'section',
+  ]);
+  const { priceMin, priceMax } = parsePriceRange(pricingText ?? '');
+
+  const productText = normalizeText(productRoot.textContent);
+  const salesHintMatch =
+    productText.match(/(\d[\d.,A-Za-z+ ]*terjual)/i) ??
+    productText.match(/(\d[\d.,A-Za-z+ ]*sold)/i);
+  const reviewCountMatch =
+    productText.match(/(\d[\d.,A-Za-z+ ]*(?:penilaian|ulasan|reviews?))/i) ??
+    null;
+  const ratingMatch = productText.match(
+    /(\d(?:[.,]\d)?\s*(?:dari 5|\/5|bintang))/i,
+  );
+
+  const highlights = Array.from(
+    productRoot.querySelectorAll<HTMLElement>('button, span, div'),
+  )
+    .map((element) => normalizeText(element.textContent))
+    .filter(
+      (value) =>
+        value.length >= 2 &&
+        value.length <= 40 &&
+        !isLikelyPriceText(value) &&
+        !/^(chat|beli|masukkan keranjang|voucher|garansi)$/i.test(value),
+    )
+    .slice(0, 6);
+
+  return {
+    productTitle,
+    productUrl: url.toString(),
+    imageUrl,
+    shopName,
+    priceMin,
+    priceMax,
+    salesHint: salesHintMatch?.[1],
+    ratingHint: ratingMatch?.[1],
+    reviewCountHint: reviewCountMatch?.[1],
+    highlights,
+  };
+}
+
 function detectShopeePublicSearch(document: Document, url: URL) {
   const keyword = resolveSearchKeyword(document, url);
   const anchors = Array.from(
@@ -305,6 +429,15 @@ function detectPageType(url: URL): {
       };
     }
 
+    if (isProductHref(pathname)) {
+      return {
+        pageType: 'shopee_public_product',
+        captureMode: 'public',
+        marketplace: 'shopee',
+        statusMessage: 'Shopee public product page terdeteksi.',
+      };
+    }
+
     if (hostname.includes('seller') && (pathname.includes('ads') || pathname.includes('marketing'))) {
       return {
         pageType: 'shopee_ads_dashboard',
@@ -371,6 +504,16 @@ export function detectPageSnapshot(document: Document) {
     snapshot.keyword = detail.keyword;
     snapshot.resultsPreview = detail.resultsPreview;
     snapshot.statusMessage = detail.statusMessage;
+  }
+
+  if (baseDetection.pageType === 'shopee_public_product') {
+    const detail = detectShopeePublicProduct(document, url);
+    if (detail) {
+      snapshot.productDetail = detail;
+      snapshot.statusMessage = detail.shopName
+        ? `Produk Shopee terdeteksi dari toko ${detail.shopName}.`
+        : 'Produk Shopee publik terdeteksi.';
+    }
   }
 
   return snapshot;

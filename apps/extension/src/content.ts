@@ -4,6 +4,7 @@ import type {
   DetectionMessage,
   ExtensionState,
   PageSnapshot,
+  ProductDetailSnapshot,
 } from './types';
 
 let lastUrl = window.location.href;
@@ -41,10 +42,26 @@ function cleanProductTitle(title: string) {
   return normalizeText(title).replace(/^view product:\s*/i, '');
 }
 
+function getBadgeTone(label: string) {
+  switch (label) {
+    case 'Termurah':
+      return 'murah';
+    case 'Termahal':
+      return 'mahal';
+    case 'Di bawah median':
+      return 'median';
+    case 'Ada penjualan':
+      return 'penjualan';
+    default:
+      return 'default';
+  }
+}
+
 function getResultsSignature(snapshot: PageSnapshot) {
   return [
     snapshot.pageType,
     snapshot.keyword ?? '',
+    snapshot.productDetail?.productUrl ?? '',
     ...snapshot.resultsPreview.map((result) => result.productUrl),
   ].join('|');
 }
@@ -178,6 +195,29 @@ function getProductBadges(
   }
 
   return badges.slice(0, 2);
+}
+
+function getProductDetailBadges(
+  detail: ProductDetailSnapshot,
+  options: {
+    minPriceValue: number | null;
+    maxPriceValue: number | null;
+    medianPriceValue: number | null;
+  },
+) {
+  return getProductBadges(
+    {
+      position: 1,
+      productTitle: detail.productTitle,
+      productUrl: detail.productUrl,
+      imageUrl: detail.imageUrl,
+      shopName: detail.shopName,
+      priceMin: detail.priceMin,
+      priceMax: detail.priceMax,
+      salesHint: detail.salesHint,
+    },
+    options,
+  );
 }
 
 function countResultsWithSalesSignal(results: PageSnapshot['resultsPreview']) {
@@ -332,7 +372,21 @@ function findTextMarker(pattern: RegExp, minTop = 120) {
   return matches[0] ?? null;
 }
 
-function getShopeeSpecificHost() {
+function getShopeeSpecificHost(snapshot?: PageSnapshot) {
+  if (snapshot?.pageType === 'shopee_public_product') {
+    const productContent =
+      document.querySelector('.page-product__content') ??
+      document.querySelector('.product-briefing');
+
+    if (productContent?.parentElement) {
+      return {
+        parent: productContent.parentElement,
+        before: productContent.nextSibling,
+        layoutMode: 'block' as const,
+      };
+    }
+  }
+
   const productGrid = document.querySelector(
     '.shopee-search-item-result__items',
   );
@@ -361,8 +415,8 @@ function getShopeeSpecificHost() {
   return null;
 }
 
-function getOverlayHost() {
-  const shopeeHost = getShopeeSpecificHost();
+function getOverlayHost(snapshot?: PageSnapshot) {
+  const shopeeHost = getShopeeSpecificHost(snapshot);
   if (shopeeHost) {
     return shopeeHost;
   }
@@ -689,6 +743,93 @@ function ensureOverlayStyle() {
       white-space: nowrap;
     }
 
+    #${OVERLAY_ID} .levelup-result-badge[data-badge-tone="murah"] {
+      background: rgba(220, 252, 231, 0.92);
+      color: #166534;
+      border-color: rgba(34, 197, 94, 0.24);
+    }
+
+    #${OVERLAY_ID} .levelup-result-badge[data-badge-tone="mahal"] {
+      background: rgba(254, 242, 242, 0.92);
+      color: #b91c1c;
+      border-color: rgba(239, 68, 68, 0.2);
+    }
+
+    #${OVERLAY_ID} .levelup-result-badge[data-badge-tone="median"] {
+      background: rgba(239, 246, 255, 0.92);
+      color: #1d4ed8;
+      border-color: rgba(59, 130, 246, 0.2);
+    }
+
+    #${OVERLAY_ID} .levelup-result-badge[data-badge-tone="penjualan"] {
+      background: rgba(255, 247, 237, 0.92);
+      color: #c2410c;
+      border-color: rgba(251, 146, 60, 0.24);
+    }
+
+    #${OVERLAY_ID} .levelup-product-layout {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+      align-items: start;
+    }
+
+    #${OVERLAY_ID} .levelup-product-panel {
+      border: 1px solid rgba(251, 106, 53, 0.16);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.85);
+      padding: 12px;
+    }
+
+    #${OVERLAY_ID} .levelup-product-image {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      border-radius: 10px;
+      overflow: hidden;
+      background: linear-gradient(180deg, rgba(251, 106, 53, 0.08), rgba(251, 106, 53, 0.16));
+    }
+
+    #${OVERLAY_ID} .levelup-product-image img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    #${OVERLAY_ID} .levelup-product-title {
+      font-size: 18px;
+      line-height: 1.5;
+      color: #111827;
+    }
+
+    #${OVERLAY_ID} .levelup-product-meta {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+      font-size: 13px;
+      color: #4b5563;
+    }
+
+    #${OVERLAY_ID} .levelup-highlights {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    #${OVERLAY_ID} .levelup-highlight-chip {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 5px 10px;
+      background: rgba(251, 106, 53, 0.08);
+      color: #9a3412;
+      font-size: 11px;
+      line-height: 1.4;
+      font-weight: 400;
+    }
+
     #${OVERLAY_ID} .levelup-result-rank {
       display: inline-flex;
       align-items: center;
@@ -731,6 +872,10 @@ function ensureOverlayStyle() {
 
     @media (max-width: 960px) {
       #${OVERLAY_ID} .levelup-stats {
+        grid-template-columns: 1fr;
+      }
+
+      #${OVERLAY_ID} .levelup-product-layout {
         grid-template-columns: 1fr;
       }
 
@@ -787,7 +932,8 @@ async function refreshKnownState() {
 
 function renderOverlay(snapshot: PageSnapshot) {
   if (
-    snapshot.pageType !== 'shopee_public_search' ||
+    (snapshot.pageType !== 'shopee_public_search' &&
+      snapshot.pageType !== 'shopee_public_product') ||
     snapshot.captureMode !== 'public'
   ) {
     removeOverlay();
@@ -802,125 +948,234 @@ function renderOverlay(snapshot: PageSnapshot) {
     lastResultsSignature = currentSignature;
   }
 
-  const totalResults = snapshot.resultsPreview.length;
-  const displayedResults = snapshot.resultsPreview.slice(0, visibleResultCount);
-  const canLoadMore = displayedResults.length < totalResults;
-  const uniqueShops = getUniqueShopCount(snapshot.resultsPreview);
-  const priceSummary = collectPriceSummary(snapshot.resultsPreview);
-  const comparablePrices = collectComparablePrices(snapshot.resultsPreview);
-  const medianPrice = collectMedianPrice(snapshot.resultsPreview);
-  const medianPriceValue = collectMedianPriceValue(snapshot.resultsPreview);
-  const salesSignalCount = countResultsWithSalesSignal(snapshot.resultsPreview);
-  const minPriceValue =
-    comparablePrices.length > 0 ? comparablePrices[0] : null;
-  const maxPriceValue =
-    comparablePrices.length > 0
-      ? comparablePrices[comparablePrices.length - 1]
-      : null;
-  const minPrice = collectMinPrice(snapshot.resultsPreview);
-  const maxPrice = collectMaxPrice(snapshot.resultsPreview);
   const statusLabel = lastKnownState?.lastSync.message ?? snapshot.statusMessage;
-  const keywordLabel = snapshot.keyword?.trim() || '(keyword belum terbaca)';
+  const totalResults = snapshot.resultsPreview.length;
   const overlay = document.getElementById(OVERLAY_ID) ?? document.createElement('section');
 
   overlay.id = OVERLAY_ID;
-  overlay.innerHTML = `
-    <div class="levelup-header">
-      <div>
-        <div class="levelup-title">Riset Market | LevelUP adsPRO</div>
-        <div class="levelup-subtitle">Kata kunci: ${keywordLabel}</div>
-        <div class="levelup-status">${statusLabel}</div>
-      </div>
-      <div class="levelup-chip">Pencarian Shopee</div>
-    </div>
-    <div class="levelup-body">
-      <div class="levelup-stats">
-        <div class="levelup-card">
-          <div class="levelup-card-label">Hasil Ditampilkan</div>
-          <div class="levelup-card-value">${displayedResults.length} / ${totalResults}</div>
-        </div>
-        <div class="levelup-card">
-          <div class="levelup-card-label">Rentang Harga</div>
-          <div class="levelup-card-value">${priceSummary}</div>
-        </div>
-        <div class="levelup-card">
-          <div class="levelup-card-label">Toko Terdeteksi</div>
-          <div class="levelup-card-value">${uniqueShops}</div>
-        </div>
-        <div class="levelup-card">
-          <div class="levelup-card-label">Ada Sinyal Terjual</div>
-          <div class="levelup-card-value">${salesSignalCount}</div>
-        </div>
-      </div>
-      <div class="levelup-actions">
-        <button type="button" class="levelup-button levelup-button-primary" data-action="sync">Sinkronkan Sekarang</button>
-        <button type="button" class="levelup-button levelup-button-secondary" data-action="refresh">Muat Ulang Parser</button>
-        ${
-          canLoadMore
-            ? `<button type="button" class="levelup-button levelup-button-ghost" data-action="load-more">Muat Lebih Banyak</button>`
-            : ''
-        }
-      </div>
-      <div class="levelup-summary">
-        <span><strong>Median harga:</strong> ${medianPrice}</span>
-        <span><strong>Harga termurah:</strong> ${minPrice}</span>
-        <span><strong>Harga tertinggi:</strong> ${maxPrice}</span>
-        <span><strong>Insight:</strong> ${salesSignalCount > 0 ? `${salesSignalCount} produk punya sinyal terjual.` : 'Belum ada sinyal terjual yang terbaca.'}</span>
-      </div>
-      <div class="levelup-note">Mode public research aktif. Shop default tidak dipakai untuk sync halaman pencarian publik.</div>
-      <div class="levelup-results">
-        ${displayedResults
-          .map((result) => {
-            const cleanTitle = cleanProductTitle(result.productTitle);
-            const badges = getProductBadges(result, {
-              minPriceValue,
-              maxPriceValue,
-              medianPriceValue,
-            });
-            const meta = [
-              result.shopName,
-              typeof result.priceMin === 'number'
-                ? result.priceMin === result.priceMax
-                  ? formatCurrency(result.priceMin)
-                  : `${formatCurrency(result.priceMin)} - ${formatCurrency(result.priceMax)}`
-                : null,
-              result.salesHint,
-            ]
-              .filter(Boolean)
-              .join(' | ');
+  const isSearchPage = snapshot.pageType === 'shopee_public_search';
 
-            return `
-              <div class="levelup-result">
-                <div class="levelup-result-thumb">
-                  ${
-                    badges.length > 0
-                      ? `<div class="levelup-result-badges">${badges
-                          .map(
-                            (badge) =>
-                              `<span class="levelup-result-badge">${badge}</span>`,
-                          )
-                          .join('')}</div>`
-                      : ''
-                  }
-                  ${
-                    result.imageUrl
-                      ? `<img src="${result.imageUrl}" alt="${cleanTitle}" loading="lazy" referrerpolicy="no-referrer" />`
-                      : ''
-                  }
+  if (isSearchPage) {
+    const totalResults = snapshot.resultsPreview.length;
+    const displayedResults = snapshot.resultsPreview.slice(0, visibleResultCount);
+    const canLoadMore = displayedResults.length < totalResults;
+    const uniqueShops = getUniqueShopCount(snapshot.resultsPreview);
+    const priceSummary = collectPriceSummary(snapshot.resultsPreview);
+    const comparablePrices = collectComparablePrices(snapshot.resultsPreview);
+    const medianPrice = collectMedianPrice(snapshot.resultsPreview);
+    const medianPriceValue = collectMedianPriceValue(snapshot.resultsPreview);
+    const salesSignalCount = countResultsWithSalesSignal(snapshot.resultsPreview);
+    const minPriceValue =
+      comparablePrices.length > 0 ? comparablePrices[0] : null;
+    const maxPriceValue =
+      comparablePrices.length > 0
+        ? comparablePrices[comparablePrices.length - 1]
+        : null;
+    const minPrice = collectMinPrice(snapshot.resultsPreview);
+    const maxPrice = collectMaxPrice(snapshot.resultsPreview);
+    const keywordLabel = snapshot.keyword?.trim() || '(keyword belum terbaca)';
+
+    overlay.innerHTML = `
+      <div class="levelup-header">
+        <div>
+          <div class="levelup-title">Riset Market | LevelUP adsPRO</div>
+          <div class="levelup-subtitle">Kata kunci: ${keywordLabel}</div>
+          <div class="levelup-status">${statusLabel}</div>
+        </div>
+        <div class="levelup-chip">Pencarian Shopee</div>
+      </div>
+      <div class="levelup-body">
+        <div class="levelup-stats">
+          <div class="levelup-card">
+            <div class="levelup-card-label">Hasil Ditampilkan</div>
+            <div class="levelup-card-value">${displayedResults.length} / ${totalResults}</div>
+          </div>
+          <div class="levelup-card">
+            <div class="levelup-card-label">Rentang Harga</div>
+            <div class="levelup-card-value">${priceSummary}</div>
+          </div>
+          <div class="levelup-card">
+            <div class="levelup-card-label">Toko Terdeteksi</div>
+            <div class="levelup-card-value">${uniqueShops}</div>
+          </div>
+          <div class="levelup-card">
+            <div class="levelup-card-label">Ada Sinyal Terjual</div>
+            <div class="levelup-card-value">${salesSignalCount}</div>
+          </div>
+        </div>
+        <div class="levelup-actions">
+          <button type="button" class="levelup-button levelup-button-primary" data-action="sync">Sinkronkan Sekarang</button>
+          <button type="button" class="levelup-button levelup-button-secondary" data-action="refresh">Muat Ulang Parser</button>
+          ${
+            canLoadMore
+              ? `<button type="button" class="levelup-button levelup-button-ghost" data-action="load-more">Muat Lebih Banyak</button>`
+              : ''
+          }
+        </div>
+        <div class="levelup-summary">
+          <span><strong>Median harga:</strong> ${medianPrice}</span>
+          <span><strong>Harga termurah:</strong> ${minPrice}</span>
+          <span><strong>Harga tertinggi:</strong> ${maxPrice}</span>
+          <span><strong>Insight:</strong> ${salesSignalCount > 0 ? `${salesSignalCount} produk punya sinyal terjual.` : 'Belum ada sinyal terjual yang terbaca.'}</span>
+        </div>
+        <div class="levelup-note">Mode public research aktif. Shop default tidak dipakai untuk sync halaman pencarian publik.</div>
+        <div class="levelup-results">
+          ${displayedResults
+            .map((result) => {
+              const cleanTitle = cleanProductTitle(result.productTitle);
+              const badges = getProductBadges(result, {
+                minPriceValue,
+                maxPriceValue,
+                medianPriceValue,
+              });
+              const meta = [
+                result.shopName,
+                typeof result.priceMin === 'number'
+                  ? result.priceMin === result.priceMax
+                    ? formatCurrency(result.priceMin)
+                    : `${formatCurrency(result.priceMin)} - ${formatCurrency(result.priceMax)}`
+                  : null,
+                result.salesHint,
+              ]
+                .filter(Boolean)
+                .join(' | ');
+
+              return `
+                <div class="levelup-result">
+                  <div class="levelup-result-thumb">
+                    ${
+                      badges.length > 0
+                        ? `<div class="levelup-result-badges">${badges
+                            .map(
+                              (badge) =>
+                                `<span class="levelup-result-badge" data-badge-tone="${getBadgeTone(
+                                  badge,
+                                )}">${badge}</span>`,
+                            )
+                            .join('')}</div>`
+                        : ''
+                    }
+                    ${
+                      result.imageUrl
+                        ? `<img src="${result.imageUrl}" alt="${cleanTitle}" loading="lazy" referrerpolicy="no-referrer" />`
+                        : ''
+                    }
+                  </div>
+                  <div class="levelup-result-rank">Urutan ${result.position}</div>
+                  <div class="levelup-result-title">${cleanTitle}</div>
+                  <div class="levelup-result-shop">${result.shopName || 'Toko belum terbaca'}</div>
+                  <div class="levelup-result-meta">${meta || 'Belum ada metadata tambahan.'}</div>
                 </div>
-                <div class="levelup-result-rank">Urutan ${result.position}</div>
-                <div class="levelup-result-title">${cleanTitle}</div>
-                <div class="levelup-result-shop">${result.shopName || 'Toko belum terbaca'}</div>
-                <div class="levelup-result-meta">${meta || 'Belum ada metadata tambahan.'}</div>
-              </div>
-            `;
-          })
-          .join('')}
+              `;
+            })
+            .join('')}
+        </div>
       </div>
-    </div>
-  `;
+    `;
+  } else {
+    const detail = snapshot.productDetail;
+    const detailResults =
+      detail
+        ? [
+            {
+              position: 1,
+              productTitle: detail.productTitle,
+              productUrl: detail.productUrl,
+              imageUrl: detail.imageUrl,
+              shopName: detail.shopName,
+              priceMin: detail.priceMin,
+              priceMax: detail.priceMax,
+              salesHint: detail.salesHint,
+            },
+          ]
+        : [];
+    const medianPriceValue = collectMedianPriceValue(detailResults);
+    const comparablePrices = collectComparablePrices(detailResults);
+    const minPriceValue =
+      comparablePrices.length > 0 ? comparablePrices[0] : null;
+    const maxPriceValue =
+      comparablePrices.length > 0
+        ? comparablePrices[comparablePrices.length - 1]
+        : null;
+    const badges = detail
+      ? getProductDetailBadges(detail, {
+          minPriceValue,
+          maxPriceValue,
+          medianPriceValue,
+        })
+      : [];
+    const priceLabel =
+      detail && (typeof detail.priceMin === 'number' || typeof detail.priceMax === 'number')
+        ? typeof detail.priceMin === 'number' &&
+          typeof detail.priceMax === 'number' &&
+          detail.priceMin !== detail.priceMax
+          ? `${formatCurrency(detail.priceMin)} - ${formatCurrency(detail.priceMax)}`
+          : formatCurrency(detail.priceMin ?? detail.priceMax)
+        : '-';
 
-  const { parent, before, layoutMode } = getOverlayHost();
+    overlay.innerHTML = `
+      <div class="levelup-header">
+        <div>
+          <div class="levelup-title">Riset Produk | LevelUP adsPRO</div>
+          <div class="levelup-subtitle">${cleanProductTitle(detail?.productTitle ?? snapshot.title)}</div>
+          <div class="levelup-status">${statusLabel}</div>
+        </div>
+        <div class="levelup-chip">Produk Shopee</div>
+      </div>
+      <div class="levelup-body">
+        <div class="levelup-actions">
+          <button type="button" class="levelup-button levelup-button-primary" data-action="sync">Sinkronkan Sekarang</button>
+          <button type="button" class="levelup-button levelup-button-secondary" data-action="refresh">Muat Ulang Parser</button>
+        </div>
+        <div class="levelup-product-layout">
+          <div class="levelup-product-panel">
+            <div class="levelup-product-image">
+              ${
+                badges.length > 0
+                  ? `<div class="levelup-result-badges">${badges
+                      .map(
+                        (badge) =>
+                          `<span class="levelup-result-badge" data-badge-tone="${getBadgeTone(
+                            badge,
+                          )}">${badge}</span>`,
+                      )
+                      .join('')}</div>`
+                  : ''
+              }
+              ${
+                detail?.imageUrl
+                  ? `<img src="${detail.imageUrl}" alt="${cleanProductTitle(detail.productTitle)}" loading="lazy" referrerpolicy="no-referrer" />`
+                  : ''
+              }
+            </div>
+          </div>
+          <div class="levelup-product-panel">
+            <div class="levelup-product-title">${cleanProductTitle(detail?.productTitle ?? snapshot.title)}</div>
+            <div class="levelup-product-meta">
+              <div>Harga terbaca: ${priceLabel}</div>
+              <div>Toko: ${detail?.shopName ?? 'Toko belum terbaca'}</div>
+              <div>Sinyal penjualan: ${detail?.salesHint ?? '-'}</div>
+              <div>Rating: ${detail?.ratingHint ?? '-'}</div>
+              <div>Ulasan: ${detail?.reviewCountHint ?? '-'}</div>
+            </div>
+            ${
+              detail?.highlights.length
+                ? `<div class="levelup-highlights">${detail.highlights
+                    .map(
+                      (highlight) =>
+                        `<span class="levelup-highlight-chip">${highlight}</span>`,
+                    )
+                    .join('')}</div>`
+                : ''
+            }
+          </div>
+        </div>
+        <div class="levelup-note">Mode public research aktif. Sinkronisasi halaman produk akan menyimpan konteks produk yang sedang dibuka.</div>
+      </div>
+    `;
+  }
+
+  const { parent, before, layoutMode } = getOverlayHost(snapshot);
   overlay.dataset.layoutMode = layoutMode;
   const shouldMoveOverlay =
     !overlay.isConnected ||
@@ -973,6 +1228,10 @@ function renderOverlay(snapshot: PageSnapshot) {
   });
 
   loadMoreButton?.addEventListener('click', () => {
+    if (!isSearchPage) {
+      return;
+    }
+
     visibleResultCount = Math.min(
       totalResults,
       visibleResultCount + LOAD_MORE_STEP,

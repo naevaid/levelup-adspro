@@ -112,6 +112,13 @@ function buildSyncPayload(
     throw new Error('Keyword pencarian belum berhasil dibaca dari halaman Shopee.');
   }
 
+  if (
+    snapshot.pageType === 'shopee_public_product' &&
+    !snapshot.productDetail?.productTitle
+  ) {
+    throw new Error('Detail produk Shopee belum berhasil dibaca dari halaman.');
+  }
+
   return {
     captureMode: snapshot.captureMode,
     pageType: snapshot.pageType,
@@ -128,7 +135,24 @@ function buildSyncPayload(
     },
     captureReason: 'manual_sync',
     content:
-      snapshot.captureMode === 'public'
+      snapshot.captureMode === 'public' &&
+      snapshot.pageType === 'shopee_public_product'
+        ? {
+            pageTitle: snapshot.title,
+            product: {
+              productTitle: snapshot.productDetail?.productTitle ?? '',
+              productUrl: snapshot.productDetail?.productUrl ?? snapshot.url,
+              imageUrl: snapshot.productDetail?.imageUrl,
+              shopName: snapshot.productDetail?.shopName,
+              priceMin: snapshot.productDetail?.priceMin,
+              priceMax: snapshot.productDetail?.priceMax,
+              salesHint: snapshot.productDetail?.salesHint,
+              ratingHint: snapshot.productDetail?.ratingHint,
+              reviewCountHint: snapshot.productDetail?.reviewCountHint,
+            },
+            highlights: snapshot.productDetail?.highlights ?? [],
+          }
+        : snapshot.captureMode === 'public'
         ? {
             keyword: publicKeyword ?? '',
             resultCount: snapshot.resultsPreview.length,
