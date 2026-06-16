@@ -255,7 +255,12 @@ function getFirstImageUrl(
       image?.getAttribute('data-src') ??
       image?.currentSrc;
 
-    if (!rawUrl) {
+    if (
+      !rawUrl ||
+      rawUrl.startsWith('data:image/svg') ||
+      rawUrl.includes('.svg') ||
+      /icon|avatar|badge|sprite/i.test(rawUrl)
+    ) {
       continue;
     }
 
@@ -267,6 +272,52 @@ function getFirstImageUrl(
   }
 
   return undefined;
+}
+
+function getSmallTextCandidates(
+  root: Document | Element,
+  selectors: string[],
+  options?: {
+    minLength?: number;
+    maxLength?: number;
+    limit?: number;
+  },
+) {
+  const minLength = options?.minLength ?? 2;
+  const maxLength = options?.maxLength ?? 40;
+  const limit = options?.limit ?? 12;
+  const seen = new Set<string>();
+  const values: string[] = [];
+
+  for (const selector of selectors) {
+    for (const element of Array.from(root.querySelectorAll<HTMLElement>(selector))) {
+      const text = normalizeText(element.textContent);
+      if (
+        text.length < minLength ||
+        text.length > maxLength ||
+        seen.has(text) ||
+        isLikelyPriceText(text)
+      ) {
+        continue;
+      }
+
+      seen.add(text);
+      values.push(text);
+
+      if (values.length >= limit) {
+        return values;
+      }
+    }
+  }
+
+  return values;
+}
+
+function extractCompactHint(
+  candidates: string[],
+  pattern: RegExp,
+): string | undefined {
+  return candidates.find((candidate) => pattern.test(candidate));
 }
 
 function detectShopeePublicProduct(
@@ -296,6 +347,9 @@ function detectShopeePublicProduct(
   const imageUrl = getFirstImageUrl(
     productRoot,
     [
+      '.product-briefing img[src], .product-briefing img[data-src]',
+      '.page-product__content img[src], .page-product__content img[data-src]',
+      'img[src*="down-"], img[data-src*="down-"]',
       'img[alt]',
       '.product-briefing img',
       '.page-product__content img',
@@ -308,31 +362,38 @@ function detectShopeePublicProduct(
     '[class*="product-price"]',
     '.pqTWkA',
     '.IZPeQz',
-    'section',
   ]);
   const { priceMin, priceMax } = parsePriceRange(pricingText ?? '');
 
-  const productText = normalizeText(productRoot.textContent);
-  const salesHintMatch =
-    productText.match(/(\d[\d.,A-Za-z+ ]*terjual)/i) ??
-    productText.match(/(\d[\d.,A-Za-z+ ]*sold)/i);
-  const reviewCountMatch =
-    productText.match(/(\d[\d.,A-Za-z+ ]*(?:penilaian|ulasan|reviews?))/i) ??
-    null;
-  const ratingMatch = productText.match(
-    /(\d(?:[.,]\d)?\s*(?:dari 5|\/5|bintang))/i,
+  const compactCandidates = getSmallTextCandidates(
+    productRoot,
+    ['span', 'button', 'div', 'a'],
+    { minLength: 2, maxLength: 36, limit: 40 },
   );
+  const salesHint = extractCompactHint(
+    compactCandidates,
+    /^\d[\d.,A-Za-z+ ]{0,18}\s*(?:terjual|sold)$/i,
+  );
+  const reviewCountHint = extractCompactHint(
+    compactCandidates,
+    /^\d[\d.,A-Za-z+ ]{0,18}\s*(?:penilaian|ulasan|reviews?)$/i,
+  );
+  const ratingHint =
+    extractCompactHint(
+      compactCandidates,
+      /^\d(?:[.,]\d)?\s*(?:dari 5|\/5|bintang)$/i,
+    ) ??
+    compactCandidates.find((candidate) => /^\d(?:[.,]\d)?$/.test(candidate));
 
-  const highlights = Array.from(
-    productRoot.querySelectorAll<HTMLElement>('button, span, div'),
-  )
-    .map((element) => normalizeText(element.textContent))
+  const highlights = compactCandidates
     .filter(
       (value) =>
-        value.length >= 2 &&
-        value.length <= 40 &&
-        !isLikelyPriceText(value) &&
-        !/^(chat|beli|masukkan keranjang|voucher|garansi)$/i.test(value),
+        !/^(chat|beli sekarang|masukkan keranjang|voucher|garansi|laporkan|share|favorit.*|tersedia)$/i.test(
+          value,
+        ) &&
+        !isLikelySalesText(value) &&
+        !/^\d(?:[.,]\d)?$/.test(value) &&
+        !/(penilaian|ulasan|reviews?)/i.test(value),
     )
     .slice(0, 6);
 
@@ -343,9 +404,9 @@ function detectShopeePublicProduct(
     shopName,
     priceMin,
     priceMax,
-    salesHint: salesHintMatch?.[1],
-    ratingHint: ratingMatch?.[1],
-    reviewCountHint: reviewCountMatch?.[1],
+    salesHint,
+    ratingHint,
+    reviewCountHint,
     highlights,
   };
 }

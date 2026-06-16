@@ -599,6 +599,7 @@ function ensureOverlayStyle() {
 
     #${OVERLAY_ID}[data-layout-mode="product"] {
       max-width: 100%;
+      margin-top: 14px;
       margin-left: 0;
       margin-right: 0;
       border-width: 1px;
@@ -622,8 +623,8 @@ function ensureOverlayStyle() {
     }
 
     #${OVERLAY_ID} .levelup-title {
-      font-size: 16px;
-      font-weight: 700;
+      font-size: 15px;
+      font-weight: 600;
       color: #111827;
     }
 
@@ -642,7 +643,7 @@ function ensureOverlayStyle() {
       border-radius: 999px;
       padding: 6px 10px;
       font-size: 11px;
-      font-weight: 700;
+      font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.08em;
       background: rgba(251, 106, 53, 0.12);
@@ -671,17 +672,19 @@ function ensureOverlayStyle() {
 
     #${OVERLAY_ID} .levelup-card-label {
       font-size: 11px;
-      font-weight: 700;
+      font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.08em;
       color: #9a3412;
     }
 
     #${OVERLAY_ID} .levelup-card-value {
-      margin-top: 8px;
-      font-size: 18px;
-      font-weight: 800;
+      margin-top: 6px;
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.45;
       color: #111827;
+      word-break: break-word;
     }
 
     #${OVERLAY_ID} .levelup-actions {
@@ -708,7 +711,7 @@ function ensureOverlayStyle() {
       border-radius: 999px;
       padding: 9px 14px;
       font-size: 12px;
-      font-weight: 700;
+      font-weight: 600;
       cursor: pointer;
     }
 
@@ -816,16 +819,16 @@ function ensureOverlayStyle() {
 
     #${OVERLAY_ID} .levelup-product-layout {
       display: grid;
-      gap: 16px;
-      grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+      gap: 14px;
+      grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
       align-items: start;
     }
 
     #${OVERLAY_ID} .levelup-product-panel {
       border: 1px solid rgba(251, 106, 53, 0.16);
-      border-radius: 12px;
+      border-radius: 14px;
       background: rgba(255, 255, 255, 0.85);
-      padding: 12px;
+      padding: 14px;
     }
 
     #${OVERLAY_ID}[data-layout-mode="product"] .levelup-header {
@@ -840,6 +843,10 @@ function ensureOverlayStyle() {
     #${OVERLAY_ID}[data-layout-mode="product"] .levelup-product-panel {
       border-radius: 16px;
       background: rgba(255, 255, 255, 0.92);
+    }
+
+    #${OVERLAY_ID}[data-layout-mode="product"] .levelup-actions {
+      margin-bottom: 2px;
     }
 
     #${OVERLAY_ID} .levelup-product-image {
@@ -859,23 +866,25 @@ function ensureOverlayStyle() {
     }
 
     #${OVERLAY_ID} .levelup-product-title {
-      font-size: 18px;
-      line-height: 1.5;
+      font-size: 15px;
+      font-weight: 500;
+      line-height: 1.6;
       color: #111827;
     }
 
     #${OVERLAY_ID} .levelup-product-meta {
       display: grid;
-      gap: 8px;
+      gap: 6px;
       margin-top: 12px;
-      font-size: 13px;
+      font-size: 12px;
+      line-height: 1.55;
       color: #4b5563;
     }
 
     #${OVERLAY_ID} .levelup-product-stats {
       display: grid;
       gap: 10px;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       margin-top: 12px;
     }
 
@@ -896,6 +905,14 @@ function ensureOverlayStyle() {
       font-size: 11px;
       line-height: 1.4;
       font-weight: 400;
+    }
+
+    #${OVERLAY_ID} .levelup-product-link {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #64748b;
     }
 
     #${OVERLAY_ID} .levelup-result-rank {
@@ -1240,7 +1257,8 @@ function renderOverlay(snapshot: PageSnapshot) {
             </div>
             <div class="levelup-product-meta">
               <div>Toko: ${detail?.shopName ?? 'Toko belum terbaca'}</div>
-              <div>URL produk: ${detail?.productUrl ?? snapshot.url}</div>
+              <div>URL produk:</div>
+              <div class="levelup-product-link">${detail?.productUrl ?? snapshot.url}</div>
             </div>
             ${
               detail?.highlights.length
