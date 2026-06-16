@@ -4,8 +4,11 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { apiEnvValidationSchema } from './config/env.validation';
 import { AuthModule } from './modules/auth/auth.module';
+import { ExtensionSessionsModule } from './modules/extension-sessions/extension-sessions.module';
+import { IngestionModule } from './modules/ingestion/ingestion.module';
 import { MarketplacesModule } from './modules/marketplaces/marketplaces.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
+import { RawDataModule } from './modules/raw-data/raw-data.module';
 import { ShopsModule } from './modules/shops/shops.module';
 import { PrismaModule } from './prisma/prisma.module';
 
@@ -22,6 +25,9 @@ import { PrismaModule } from './prisma/prisma.module';
     OrganizationsModule,
     MarketplacesModule,
     ShopsModule,
+    ExtensionSessionsModule,
+    RawDataModule,
+    IngestionModule,
   ],
   controllers: [AppController],
   providers: [AppService],

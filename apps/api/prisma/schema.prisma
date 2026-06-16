@@ -60,6 +60,30 @@ enum ShopStatus {
   SUSPENDED
 }
 
+enum ExtensionSessionStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+
+enum CaptureMode {
+  OWNED
+  PUBLIC
+}
+
+enum IngestionBatchStatus {
+  ACCEPTED
+  FAILED
+  PROCESSING
+  COMPLETED
+}
+
+enum RawPayloadObjectStatus {
+  STORED
+  FAILED
+  EXPIRED
+}
+
 model User {
   id                   String          @id @default(uuid()) @db.Uuid
   email                String          @unique
@@ -72,6 +96,7 @@ model User {
   ownedOrganizations   Organization[]  @relation("OrganizationOwner")
   memberships          Membership[]
   userSessions         UserSession[]
+  extensionSessions    ExtensionSession[]
   invitedMemberships   Membership[]    @relation("MembershipInvitedBy")
 
   @@map("users")
@@ -90,6 +115,9 @@ model Organization {
   userSessions   UserSession[]
   subscription   Subscription?
   shops          Shop[]
+  extensionSessions ExtensionSession[]
+  ingestionBatches IngestionBatch[]
+  rawPayloadObjects RawPayloadObject[]
 
   @@index([ownerUserId])
   @@map("organizations")
@@ -182,20 +210,100 @@ model Marketplace {
 }
 
 model Shop {
-  id            String     @id @default(uuid()) @db.Uuid
-  organizationId String     @map("organization_id") @db.Uuid
-  marketplaceId String     @map("marketplace_id") @db.Uuid
-  externalId    String     @map("external_id")
-  name          String?
-  status        ShopStatus @default(ACTIVE)
-  metadataJson  Json       @default("{}") @map("metadata_json")
-  createdAt     DateTime   @default(now()) @map("created_at")
-  updatedAt     DateTime   @updatedAt @map("updated_at")
-  organization  Organization @relation(fields: [organizationId], references: [id])
-  marketplace   Marketplace  @relation(fields: [marketplaceId], references: [id])
+  id                String             @id @default(uuid()) @db.Uuid
+  organizationId    String             @map("organization_id") @db.Uuid
+  marketplaceId     String             @map("marketplace_id") @db.Uuid
+  externalId        String             @map("external_id")
+  name              String?
+  status            ShopStatus         @default(ACTIVE)
+  metadataJson      Json               @default("{}") @map("metadata_json")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  organization      Organization       @relation(fields: [organizationId], references: [id])
+  marketplace       Marketplace        @relation(fields: [marketplaceId], references: [id])
+  extensionSessions ExtensionSession[]
+  ingestionBatches  IngestionBatch[]
+  rawPayloadObjects RawPayloadObject[]
 
   @@unique([organizationId, marketplaceId, externalId])
   @@index([organizationId])
   @@index([marketplaceId])
   @@map("shops")
+}
+
+model ExtensionSession {
+  id               String                 @id @default(uuid()) @db.Uuid
+  organizationId   String                 @map("organization_id") @db.Uuid
+  userId           String                 @map("user_id") @db.Uuid
+  shopId           String?                @map("shop_id") @db.Uuid
+  deviceLabel      String                 @map("device_label")
+  extensionVersion String                 @map("extension_version")
+  sessionTokenHash String                 @unique @map("session_token_hash")
+  status           ExtensionSessionStatus @default(ACTIVE)
+  lastHeartbeatAt  DateTime               @map("last_heartbeat_at")
+  expiresAt        DateTime               @map("expires_at")
+  createdAt        DateTime               @default(now()) @map("created_at")
+  updatedAt        DateTime               @updatedAt @map("updated_at")
+  organization     Organization           @relation(fields: [organizationId], references: [id])
+  user             User                   @relation(fields: [userId], references: [id])
+  shop             Shop?                  @relation(fields: [shopId], references: [id])
+  ingestionBatches IngestionBatch[]
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([shopId])
+  @@map("extension_sessions")
+}
+
+model IngestionBatch {
+  id                   String               @id @default(uuid()) @db.Uuid
+  organizationId       String               @map("organization_id") @db.Uuid
+  shopId               String?              @map("shop_id") @db.Uuid
+  extensionSessionId   String               @map("extension_session_id") @db.Uuid
+  captureMode          CaptureMode          @map("capture_mode")
+  pageType             String               @map("page_type")
+  marketplace          String
+  payloadSchemaVersion String               @map("payload_schema_version")
+  status               IngestionBatchStatus @default(ACCEPTED)
+  capturedAt           DateTime             @map("captured_at")
+  processedAt          DateTime?            @map("processed_at")
+  errorCode            String?              @map("error_code")
+  errorMessage         String?              @map("error_message")
+  createdAt            DateTime             @default(now()) @map("created_at")
+  updatedAt            DateTime             @updatedAt @map("updated_at")
+  organization         Organization         @relation(fields: [organizationId], references: [id])
+  shop                 Shop?                @relation(fields: [shopId], references: [id])
+  extensionSession     ExtensionSession     @relation(fields: [extensionSessionId], references: [id])
+  rawPayloadObjects    RawPayloadObject[]
+
+  @@index([organizationId])
+  @@index([shopId])
+  @@index([extensionSessionId])
+  @@index([organizationId, status])
+  @@index([shopId, capturedAt])
+  @@map("ingestion_batches")
+}
+
+model RawPayloadObject {
+  id               String                 @id @default(uuid()) @db.Uuid
+  organizationId   String                 @map("organization_id") @db.Uuid
+  shopId           String?                @map("shop_id") @db.Uuid
+  ingestionBatchId String                 @map("ingestion_batch_id") @db.Uuid
+  storageKey       String                 @map("storage_key")
+  payloadHash      String                 @map("payload_hash")
+  sizeBytes        Int                    @map("size_bytes")
+  retentionUntil   DateTime               @map("retention_until")
+  status           RawPayloadObjectStatus @default(STORED)
+  createdAt        DateTime               @default(now()) @map("created_at")
+  updatedAt        DateTime               @updatedAt @map("updated_at")
+  organization     Organization           @relation(fields: [organizationId], references: [id])
+  shop             Shop?                  @relation(fields: [shopId], references: [id])
+  ingestionBatch   IngestionBatch         @relation(fields: [ingestionBatchId], references: [id])
+
+  @@unique([ingestionBatchId, payloadHash])
+  @@index([organizationId])
+  @@index([shopId])
+  @@index([ingestionBatchId])
+  @@index([retentionUntil])
+  @@map("raw_payload_objects")
 }

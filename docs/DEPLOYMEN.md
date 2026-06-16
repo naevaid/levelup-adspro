@@ -57,6 +57,8 @@ cd /opt/levelup-adspro
 docker compose -p levelup-adspro -f docker-compose.vps.yml --env-file .env.production ps
 ```
 
+Pastikan service `minio` juga `running`, karena Sprint 3 mulai menyimpan raw payload ke object storage.
+
 ### Cek endpoint cepat
 
 ```bash
@@ -72,6 +74,24 @@ curl -I https://adspro.naeva.id/api/v1/me
 
 Catatan:
 - Endpoint `me` butuh header `Authorization: Bearer <token>`, jadi `-I` akan wajar mendapatkan `401`.
+
+### Cek endpoint Sprint 3
+
+Session extension dibuat dari user yang sudah login ke aplikasi:
+
+```bash
+curl -X POST https://adspro.naeva.id/api/v1/extension/session \
+  -H "Authorization: Bearer <user-session-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"deviceLabel":"Chrome Dev","extensionVersion":"0.1.0"}'
+```
+
+Setelah dapat `accessToken` extension, heartbeat dan ingestion dasar bisa diuji:
+
+```bash
+curl -X POST https://adspro.naeva.id/api/v1/extension/heartbeat \
+  -H "Authorization: Bearer <extension-token>"
+```
 
 ## 6) Nginx Reverse Proxy (host)
 
@@ -129,3 +149,13 @@ journalctl -u levelup-adspro-deploy.service -n 200 --no-pager
 - Pastikan deploy VPS memakai `docker-compose.vps.yml`, bukan compose yang menyalakan reverse proxy container.
 - Host `nginx` memegang port 80/443.
 
+### Ingestion gagal simpan raw payload
+- Pastikan env MinIO di `.env.production` valid:
+  - `MINIO_ENDPOINT`
+  - `MINIO_PORT`
+  - `MINIO_ACCESS_KEY`
+  - `MINIO_SECRET_KEY`
+  - `MINIO_BUCKET_RAW_CAPTURE`
+- Cek container MinIO:
+  - `docker logs levelup-adspro-minio --tail 200`
+- Bucket raw capture akan dibuat otomatis saat payload pertama masuk, jadi kegagalan biasanya berasal dari kredensial atau konektivitas internal container.
