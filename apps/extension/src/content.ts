@@ -85,45 +85,99 @@ function collectPriceSummary(results: PageSnapshot['resultsPreview']) {
   return `${formatCurrency(min)} - ${formatCurrency(max)}`;
 }
 
-function collectMedianPrice(results: PageSnapshot['resultsPreview']) {
-  const normalizedPrices = results
-    .map((result) => {
-      if (
-        typeof result.priceMin === 'number' &&
-        typeof result.priceMax === 'number' &&
-        Number.isFinite(result.priceMin) &&
-        Number.isFinite(result.priceMax)
-      ) {
-        return Math.round((result.priceMin + result.priceMax) / 2);
-      }
+function getComparablePrice(result: PageSnapshot['resultsPreview'][number]) {
+  if (
+    typeof result.priceMin === 'number' &&
+    typeof result.priceMax === 'number' &&
+    Number.isFinite(result.priceMin) &&
+    Number.isFinite(result.priceMax)
+  ) {
+    return Math.round((result.priceMin + result.priceMax) / 2);
+  }
 
-      if (typeof result.priceMin === 'number' && Number.isFinite(result.priceMin)) {
-        return result.priceMin;
-      }
+  if (typeof result.priceMin === 'number' && Number.isFinite(result.priceMin)) {
+    return result.priceMin;
+  }
 
-      if (typeof result.priceMax === 'number' && Number.isFinite(result.priceMax)) {
-        return result.priceMax;
-      }
+  if (typeof result.priceMax === 'number' && Number.isFinite(result.priceMax)) {
+    return result.priceMax;
+  }
 
-      return null;
-    })
+  return null;
+}
+
+function collectComparablePrices(results: PageSnapshot['resultsPreview']) {
+  return results
+    .map((result) => getComparablePrice(result))
     .filter((value): value is number => value !== null)
     .sort((left, right) => left - right);
+}
+
+function collectMedianPriceValue(results: PageSnapshot['resultsPreview']) {
+  const normalizedPrices = collectComparablePrices(results);
 
   if (normalizedPrices.length === 0) {
-    return '-';
+    return null;
   }
 
   const middleIndex = Math.floor(normalizedPrices.length / 2);
-  const median =
-    normalizedPrices.length % 2 === 0
-      ? Math.round(
-          (normalizedPrices[middleIndex - 1] + normalizedPrices[middleIndex]) /
-            2,
-        )
-      : normalizedPrices[middleIndex];
+  return normalizedPrices.length % 2 === 0
+    ? Math.round(
+        (normalizedPrices[middleIndex - 1] + normalizedPrices[middleIndex]) / 2,
+      )
+    : normalizedPrices[middleIndex];
+}
+
+function collectMedianPrice(results: PageSnapshot['resultsPreview']) {
+  const median = collectMedianPriceValue(results);
+
+  if (median === null) {
+    return '-';
+  }
 
   return formatCurrency(median);
+}
+
+function getProductBadges(
+  result: PageSnapshot['resultsPreview'][number],
+  options: {
+    minPriceValue: number | null;
+    maxPriceValue: number | null;
+    medianPriceValue: number | null;
+  },
+) {
+  const badges: string[] = [];
+  const comparablePrice = getComparablePrice(result);
+
+  if (
+    options.minPriceValue !== null &&
+    comparablePrice !== null &&
+    comparablePrice <= options.minPriceValue
+  ) {
+    badges.push('Termurah');
+  }
+
+  if (
+    options.maxPriceValue !== null &&
+    comparablePrice !== null &&
+    comparablePrice >= options.maxPriceValue
+  ) {
+    badges.push('Termahal');
+  }
+
+  if (
+    options.medianPriceValue !== null &&
+    comparablePrice !== null &&
+    comparablePrice < options.medianPriceValue
+  ) {
+    badges.push('Di bawah median');
+  }
+
+  if (normalizeText(result.salesHint).length > 0) {
+    badges.push('Ada penjualan');
+  }
+
+  return badges.slice(0, 2);
 }
 
 function countResultsWithSalesSignal(results: PageSnapshot['resultsPreview']) {
@@ -595,6 +649,7 @@ function ensureOverlayStyle() {
     }
 
     #${OVERLAY_ID} .levelup-result-thumb {
+      position: relative;
       width: 100%;
       aspect-ratio: 1 / 1;
       border-radius: 6px;
@@ -607,6 +662,31 @@ function ensureOverlayStyle() {
       height: 100%;
       object-fit: cover;
       display: block;
+    }
+
+    #${OVERLAY_ID} .levelup-result-badges {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      max-width: calc(100% - 12px);
+    }
+
+    #${OVERLAY_ID} .levelup-result-badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 2px 6px;
+      background: rgba(255, 255, 255, 0.9);
+      color: #7c2d12;
+      font-size: 10px;
+      line-height: 1.2;
+      font-weight: 400;
+      border: 1px solid rgba(251, 106, 53, 0.16);
+      backdrop-filter: blur(4px);
+      white-space: nowrap;
     }
 
     #${OVERLAY_ID} .levelup-result-rank {
@@ -727,8 +807,16 @@ function renderOverlay(snapshot: PageSnapshot) {
   const canLoadMore = displayedResults.length < totalResults;
   const uniqueShops = getUniqueShopCount(snapshot.resultsPreview);
   const priceSummary = collectPriceSummary(snapshot.resultsPreview);
+  const comparablePrices = collectComparablePrices(snapshot.resultsPreview);
   const medianPrice = collectMedianPrice(snapshot.resultsPreview);
+  const medianPriceValue = collectMedianPriceValue(snapshot.resultsPreview);
   const salesSignalCount = countResultsWithSalesSignal(snapshot.resultsPreview);
+  const minPriceValue =
+    comparablePrices.length > 0 ? comparablePrices[0] : null;
+  const maxPriceValue =
+    comparablePrices.length > 0
+      ? comparablePrices[comparablePrices.length - 1]
+      : null;
   const minPrice = collectMinPrice(snapshot.resultsPreview);
   const maxPrice = collectMaxPrice(snapshot.resultsPreview);
   const statusLabel = lastKnownState?.lastSync.message ?? snapshot.statusMessage;
@@ -784,6 +872,11 @@ function renderOverlay(snapshot: PageSnapshot) {
         ${displayedResults
           .map((result) => {
             const cleanTitle = cleanProductTitle(result.productTitle);
+            const badges = getProductBadges(result, {
+              minPriceValue,
+              maxPriceValue,
+              medianPriceValue,
+            });
             const meta = [
               result.shopName,
               typeof result.priceMin === 'number'
@@ -799,6 +892,16 @@ function renderOverlay(snapshot: PageSnapshot) {
             return `
               <div class="levelup-result">
                 <div class="levelup-result-thumb">
+                  ${
+                    badges.length > 0
+                      ? `<div class="levelup-result-badges">${badges
+                          .map(
+                            (badge) =>
+                              `<span class="levelup-result-badge">${badge}</span>`,
+                          )
+                          .join('')}</div>`
+                      : ''
+                  }
                   ${
                     result.imageUrl
                       ? `<img src="${result.imageUrl}" alt="${cleanTitle}" loading="lazy" referrerpolicy="no-referrer" />`
