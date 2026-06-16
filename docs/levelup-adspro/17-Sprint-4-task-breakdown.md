@@ -340,3 +340,5 @@ Sprint ini bergantung pada:
 - TikTok Shop bisa menyusul setelah mapping owned data stabil
 - public market intelligence cukup diproses dasar pada sprint ini, belum perlu insight AI penuh
 - recommendation harus memakai `data_quality` badge sejak awal
+- integrasi official marketplace OpenAPI untuk Shopee atau TikTok Shop belum menjadi fokus sprint ini; jalur `extension -> ingestion` harus distabilkan terlebih dahulu
+- keputusan memakai akun OpenAPI lintas project, termasuk kemungkinan reuse dari `mcgroup`, harus ditinjau terpisah pada fase berikutnya agar isolasi credential, scope tenant, dan risiko operasional jelas

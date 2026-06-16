@@ -99,8 +99,21 @@ function renderResultsList(state: ExtensionState) {
   }
 
   for (const result of results) {
+    const priceLabel =
+      typeof result.priceMin === 'number' && typeof result.priceMax === 'number'
+        ? result.priceMin === result.priceMax
+          ? `Rp${result.priceMin.toLocaleString('id-ID')}`
+          : `Rp${result.priceMin.toLocaleString('id-ID')} - Rp${result.priceMax.toLocaleString('id-ID')}`
+        : typeof result.priceMin === 'number'
+          ? `Rp${result.priceMin.toLocaleString('id-ID')}`
+          : null;
+
+    const meta = [result.shopName, priceLabel, result.salesHint].filter(Boolean);
     const item = document.createElement('li');
-    item.textContent = `${result.position}. ${result.productTitle}`;
+    item.textContent =
+      meta.length > 0
+        ? `${result.position}. ${result.productTitle} | ${meta.join(' | ')}`
+        : `${result.position}. ${result.productTitle}`;
     resultsList.appendChild(item);
   }
 }

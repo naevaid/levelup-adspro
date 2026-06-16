@@ -6,6 +6,10 @@ import type {
   SearchResultPreview,
 } from './types';
 
+function normalizeText(rawValue?: string | null) {
+  return rawValue?.replace(/\s+/g, ' ').trim() ?? '';
+}
+
 function parsePriceRange(rawValue: string) {
   const matches = rawValue.match(/\d[\d.,]*/g);
   if (!matches || matches.length === 0) {
@@ -45,46 +49,204 @@ function isSearchResultPreview(
   return result !== null;
 }
 
+function isProductHref(rawHref: string) {
+  return rawHref.includes('/product/') || /-i\.\d+\.\d+/i.test(rawHref);
+}
+
+function resolveSearchKeyword(document: Document, url: URL) {
+  const candidates = [
+    url.searchParams.get('keyword'),
+    url.searchParams.get('q'),
+    document.querySelector<HTMLInputElement>('input[name="keyword"]')?.value,
+    document.querySelector<HTMLInputElement>('input[type="search"]')?.value,
+    document.querySelector<HTMLInputElement>('input[aria-label*="Cari"]')?.value,
+    document.querySelector<HTMLInputElement>('input[placeholder*="Cari"]')?.value,
+  ];
+
+  const keyword = candidates
+    .map((candidate) => normalizeText(candidate))
+    .find((candidate) => candidate.length >= 2);
+
+  return keyword || undefined;
+}
+
+function findSearchCardElement(anchor: HTMLAnchorElement) {
+  const prioritizedContainer = anchor.closest(
+    '[data-sqe="item"], [data-sqe="itemCard"], li, article, section',
+  );
+
+  if (prioritizedContainer) {
+    return prioritizedContainer;
+  }
+
+  let current: Element | null = anchor;
+  let fallback: Element = anchor;
+
+  while (current && current !== anchor.ownerDocument.body) {
+    const text = normalizeText(current.textContent);
+    if (text.length >= 40 && text.length <= 800) {
+      fallback = current;
+    }
+
+    current = current.parentElement;
+  }
+
+  return fallback;
+}
+
+function collectTextCandidates(root: Element) {
+  const rawCandidates = [
+    root.getAttribute('aria-label'),
+    root.getAttribute('title'),
+    ...Array.from(
+      root.querySelectorAll<HTMLElement>(
+        'img[alt], h1, h2, h3, h4, [aria-label], [title], span, div, p',
+      ),
+    ).flatMap((element) => {
+      const imageAlt =
+        element instanceof HTMLImageElement ? element.getAttribute('alt') : null;
+
+      return [
+        imageAlt,
+        element.getAttribute('aria-label'),
+        element.getAttribute('title'),
+        element.textContent,
+      ];
+    }),
+  ];
+
+  const uniqueCandidates: string[] = [];
+  const seen = new Set<string>();
+
+  for (const candidate of rawCandidates) {
+    const normalized = normalizeText(candidate);
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+
+    seen.add(normalized);
+    uniqueCandidates.push(normalized);
+  }
+
+  return uniqueCandidates;
+}
+
+function isLikelyPriceText(value: string) {
+  return /^rp\s?[\d.,\s-]+$/i.test(value) || /^\d[\d.,\s-]+$/.test(value);
+}
+
+function isLikelySalesText(value: string) {
+  return /(terjual|sold|rating|ulasan|reviews?|penilaian)/i.test(value);
+}
+
+function isLikelyUiMetaText(value: string) {
+  return /^(iklan|ad|promo|diskon|voucher|chat|termurah|termurah di toko ini|gratis ongkir|star\+|mall)$/i.test(
+    value,
+  );
+}
+
+function extractProductTitle(
+  anchor: HTMLAnchorElement,
+  cardElement: Element,
+) {
+  const candidates = [
+    normalizeText(anchor.getAttribute('aria-label')),
+    ...collectTextCandidates(anchor),
+    ...collectTextCandidates(cardElement),
+  ];
+
+  return (
+    candidates.find(
+      (candidate) =>
+        candidate.length >= 8 &&
+        !isLikelyPriceText(candidate) &&
+        !isLikelySalesText(candidate) &&
+        !isLikelyUiMetaText(candidate),
+    ) ?? ''
+  );
+}
+
+function extractShopName(cardElement: Element, title: string) {
+  const titleLower = title.toLowerCase();
+  const candidates = collectTextCandidates(cardElement).filter((candidate) => {
+    const normalized = candidate.toLowerCase();
+
+    if (candidate.length < 2 || candidate.length > 60) {
+      return false;
+    }
+
+    if (normalized === titleLower) {
+      return false;
+    }
+
+    if (normalized.includes(titleLower) || titleLower.includes(normalized)) {
+      return false;
+    }
+
+    if (isLikelyPriceText(candidate) || isLikelySalesText(candidate)) {
+      return false;
+    }
+
+    if (isLikelyUiMetaText(candidate)) {
+      return false;
+    }
+
+    if (/^[\d\s.,%+-]+$/.test(candidate)) {
+      return false;
+    }
+
+    return true;
+  });
+
+  return candidates.at(-1) ?? null;
+}
+
 function detectShopeePublicSearch(document: Document, url: URL) {
-  const keyword =
-    url.searchParams.get('keyword') ??
-    url.searchParams.get('q') ??
-    undefined;
+  const keyword = resolveSearchKeyword(document, url);
   const anchors = Array.from(
-    document.querySelectorAll<HTMLAnchorElement>('a[href*="/product/"]'),
-  );
+    document.querySelectorAll<HTMLAnchorElement>('a[href]'),
+  ).filter((anchor) => {
+    const href = anchor.getAttribute('href');
+    return Boolean(href && isProductHref(href));
+  });
 
-  const rawResults: Array<SearchResultPreview | null> = anchors.map(
-    (anchor, index) => {
-        const title =
-          anchor.getAttribute('aria-label') ??
-          anchor.textContent?.replace(/\s+/g, ' ').trim() ??
-          '';
+  const rawResults: Array<SearchResultPreview | null> = anchors.map((anchor) => {
+    const href = anchor.getAttribute('href');
+    if (!href) {
+      return null;
+    }
 
-        if (!title || title.length < 8) {
-          return null;
-        }
+    const cardElement = findSearchCardElement(anchor);
+    const title = extractProductTitle(anchor, cardElement);
 
-        const cardText =
-          anchor.closest('section, div')?.textContent?.replace(/\s+/g, ' ') ?? '';
-        const { priceMin, priceMax } = parsePriceRange(cardText);
-        const salesHintMatch =
-          cardText.match(/(\d[\d.,A-Za-z+ ]*terjual)/i) ??
-          cardText.match(/(\d[\d.,A-Za-z+ ]*sold)/i);
+    if (!title || title.length < 8) {
+      return null;
+    }
 
-        return {
-          position: index + 1,
-          productTitle: title,
-          productUrl: new URL(anchor.getAttribute('href') ?? '/', url.origin).toString(),
-          shopName: null,
-          priceMin,
-          priceMax,
-          salesHint: salesHintMatch?.[1],
-        } satisfies SearchResultPreview;
-      },
-  );
+    const productUrl = new URL(href, url.origin).toString();
+    const cardText = normalizeText(cardElement.textContent);
+    const { priceMin, priceMax } = parsePriceRange(cardText);
+    const salesHintMatch =
+      cardText.match(/(\d[\d.,A-Za-z+ ]*terjual)/i) ??
+      cardText.match(/(\d[\d.,A-Za-z+ ]*sold)/i);
 
-  const results = uniqueResults(rawResults.filter(isSearchResultPreview)).slice(0, 8);
+    return {
+      position: 0,
+      productTitle: title,
+      productUrl,
+      shopName: extractShopName(cardElement, title),
+      priceMin,
+      priceMax,
+      salesHint: salesHintMatch?.[1],
+    } satisfies SearchResultPreview;
+  });
+
+  const results = uniqueResults(rawResults.filter(isSearchResultPreview))
+    .slice(0, 10)
+    .map((result, index) => ({
+      ...result,
+      position: index + 1,
+    }));
 
   return {
     pageType: 'shopee_public_search' as const,
@@ -92,8 +254,8 @@ function detectShopeePublicSearch(document: Document, url: URL) {
     marketplace: 'shopee' as const,
     keyword,
     statusMessage: keyword
-      ? `Shopee public search terdeteksi untuk keyword "${keyword}".`
-      : 'Shopee public search terdeteksi.',
+      ? `Shopee public search terdeteksi untuk keyword "${keyword}" dengan ${results.length} hasil preview.`
+      : `Shopee public search terdeteksi dengan ${results.length} hasil preview.`,
     resultsPreview: results,
   };
 }

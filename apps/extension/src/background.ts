@@ -107,6 +107,11 @@ function buildSyncPayload(
     throw new Error('Pilih shop default terlebih dahulu untuk owned sync.');
   }
 
+  const publicKeyword = snapshot.keyword?.trim();
+  if (snapshot.pageType === 'shopee_public_search' && !publicKeyword) {
+    throw new Error('Keyword pencarian belum berhasil dibaca dari halaman Shopee.');
+  }
+
   return {
     captureMode: snapshot.captureMode,
     pageType: snapshot.pageType,
@@ -125,7 +130,9 @@ function buildSyncPayload(
     content:
       snapshot.captureMode === 'public'
         ? {
-            keyword: snapshot.keyword ?? '',
+            keyword: publicKeyword ?? '',
+            resultCount: snapshot.resultsPreview.length,
+            pageTitle: snapshot.title,
             results: snapshot.resultsPreview.map((result) => ({
               position: result.position,
               productTitle: result.productTitle,
