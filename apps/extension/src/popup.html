@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LevelUP adsPRO Collector</title>
+    <link rel="stylesheet" href="./popup.css" />
+  </head>
+  <body>
+    <main class="popup">
+      <header class="hero">
+        <p class="eyebrow">Chrome Extension</p>
+        <h1>LevelUP adsPRO Collector</h1>
+        <p class="subtitle">
+          Login, cek page type aktif, lalu kirim payload ke ingestion backend.
+        </p>
+      </header>
+
+      <section class="panel" id="login-panel">
+        <h2>Login Extension</h2>
+        <form id="login-form" class="stack">
+          <label class="field">
+            <span>API Base URL</span>
+            <input id="api-base-url" name="apiBaseUrl" type="url" required />
+          </label>
+          <label class="field">
+            <span>Email</span>
+            <input id="email" name="email" type="email" required />
+          </label>
+          <label class="field">
+            <span>Password</span>
+            <input id="password" name="password" type="password" required />
+          </label>
+          <button class="primary" type="submit">Login & Buat Session</button>
+        </form>
+      </section>
+
+      <section class="panel hidden" id="dashboard-panel">
+        <div class="row between">
+          <div>
+            <h2>Status Extension</h2>
+            <p id="auth-summary" class="muted"></p>
+          </div>
+          <button id="logout-button" class="ghost" type="button">Logout</button>
+        </div>
+
+        <div class="info-grid">
+          <div>
+            <span class="label">Organization</span>
+            <strong id="organization-name">-</strong>
+          </div>
+          <div>
+            <span class="label">User</span>
+            <strong id="user-email">-</strong>
+          </div>
+          <div>
+            <span class="label">Extension Session</span>
+            <strong id="session-status">-</strong>
+          </div>
+          <div>
+            <span class="label">Last Sync</span>
+            <strong id="last-sync-at">-</strong>
+          </div>
+        </div>
+
+        <label class="field">
+          <span>Shop Default Untuk Owned Sync</span>
+          <select id="shop-select"></select>
+        </label>
+
+        <div class="row gap">
+          <button id="refresh-page-button" class="ghost" type="button">
+            Refresh Page State
+          </button>
+          <button id="sync-now-button" class="primary" type="button">
+            Sync Now
+          </button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Page Debug</h2>
+        <div class="info-grid compact">
+          <div>
+            <span class="label">Page Type</span>
+            <strong id="page-type">unknown</strong>
+          </div>
+          <div>
+            <span class="label">Capture Mode</span>
+            <strong id="capture-mode">-</strong>
+          </div>
+          <div>
+            <span class="label">Marketplace</span>
+            <strong id="marketplace">-</strong>
+          </div>
+          <div>
+            <span class="label">Keyword</span>
+            <strong id="keyword">-</strong>
+          </div>
+        </div>
+        <p id="page-status" class="muted">Belum ada snapshot halaman.</p>
+        <p id="page-url" class="url"></p>
+        <div>
+          <span class="label">Preview Results</span>
+          <ul id="results-list" class="results-list"></ul>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Activity</h2>
+        <p id="activity-message" class="muted">Belum ada aktivitas.</p>
+      </section>
+    </main>
+    <script src="./popup.js"></script>
+  </body>
+</html>
