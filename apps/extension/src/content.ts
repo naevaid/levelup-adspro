@@ -13,7 +13,6 @@ let mutationObserver: MutationObserver | null = null;
 let refreshTimeoutId: number | null = null;
 let visibleResultCount = 10;
 let lastResultsSignature = '';
-let isCompactMode = true;
 
 const OVERLAY_ID = 'levelup-adspro-market-overlay';
 const OVERLAY_STYLE_ID = 'levelup-adspro-market-overlay-style';
@@ -549,30 +548,6 @@ function ensureOverlayStyle() {
       font-weight: 700;
     }
 
-    #${OVERLAY_ID} .levelup-preview-strip {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-
-    #${OVERLAY_ID} .levelup-preview-pill {
-      display: inline-flex;
-      max-width: 100%;
-      align-items: center;
-      border-radius: 999px;
-      padding: 6px 10px;
-      background: rgba(251, 106, 53, 0.08);
-      color: #7c2d12;
-      font-size: 11px;
-      line-height: 1.4;
-    }
-
-    #${OVERLAY_ID} .levelup-preview-pill span {
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
     #${OVERLAY_ID} .levelup-button {
       border: none;
       border-radius: 999px;
@@ -749,7 +724,6 @@ function renderOverlay(snapshot: PageSnapshot) {
 
   const totalResults = snapshot.resultsPreview.length;
   const displayedResults = snapshot.resultsPreview.slice(0, visibleResultCount);
-  const compactPreviewResults = snapshot.resultsPreview.slice(0, 3);
   const canLoadMore = displayedResults.length < totalResults;
   const uniqueShops = getUniqueShopCount(snapshot.resultsPreview);
   const priceSummary = collectPriceSummary(snapshot.resultsPreview);
@@ -793,9 +767,8 @@ function renderOverlay(snapshot: PageSnapshot) {
       <div class="levelup-actions">
         <button type="button" class="levelup-button levelup-button-primary" data-action="sync">Sinkronkan Sekarang</button>
         <button type="button" class="levelup-button levelup-button-secondary" data-action="refresh">Muat Ulang Parser</button>
-        <button type="button" class="levelup-button levelup-button-secondary" data-action="toggle-mode">${isCompactMode ? 'Buka Mode Penuh' : 'Kembali ke Mode Ringkas'}</button>
         ${
-          !isCompactMode && canLoadMore
+          canLoadMore
             ? `<button type="button" class="levelup-button levelup-button-ghost" data-action="load-more">Muat Lebih Banyak</button>`
             : ''
         }
@@ -807,17 +780,7 @@ function renderOverlay(snapshot: PageSnapshot) {
         <span><strong>Insight:</strong> ${salesSignalCount > 0 ? `${salesSignalCount} produk punya sinyal terjual.` : 'Belum ada sinyal terjual yang terbaca.'}</span>
       </div>
       <div class="levelup-note">Mode public research aktif. Shop default tidak dipakai untuk sync halaman pencarian publik.</div>
-      ${
-        isCompactMode
-          ? `<div class="levelup-preview-strip">
-              ${compactPreviewResults
-                .map((result) => {
-                  const cleanTitle = cleanProductTitle(result.productTitle);
-                  return `<div class="levelup-preview-pill"><span>${result.position}. ${cleanTitle}</span></div>`;
-                })
-                .join('')}
-            </div>`
-          : `<div class="levelup-results">
+      <div class="levelup-results">
         ${displayedResults
           .map((result) => {
             const cleanTitle = cleanProductTitle(result.productTitle);
@@ -850,8 +813,7 @@ function renderOverlay(snapshot: PageSnapshot) {
             `;
           })
           .join('')}
-      </div>`
-      }
+      </div>
     </div>
   `;
 
@@ -871,9 +833,6 @@ function renderOverlay(snapshot: PageSnapshot) {
   );
   const refreshButton = overlay.querySelector<HTMLButtonElement>(
     '[data-action="refresh"]',
-  );
-  const toggleModeButton = overlay.querySelector<HTMLButtonElement>(
-    '[data-action="toggle-mode"]',
   );
   const loadMoreButton = overlay.querySelector<HTMLButtonElement>(
     '[data-action="load-more"]',
@@ -908,14 +867,6 @@ function renderOverlay(snapshot: PageSnapshot) {
 
   refreshButton?.addEventListener('click', () => {
     queueRefresh();
-  });
-
-  toggleModeButton?.addEventListener('click', () => {
-    isCompactMode = !isCompactMode;
-
-    if (lastSnapshot) {
-      renderOverlay(lastSnapshot);
-    }
   });
 
   loadMoreButton?.addEventListener('click', () => {
