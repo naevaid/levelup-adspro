@@ -13,6 +13,7 @@ let mutationObserver: MutationObserver | null = null;
 let refreshTimeoutId: number | null = null;
 let visibleResultCount = 10;
 let lastResultsSignature = '';
+let isCompactMode = true;
 
 const OVERLAY_ID = 'levelup-adspro-market-overlay';
 const OVERLAY_STYLE_ID = 'levelup-adspro-market-overlay-style';
@@ -129,6 +130,36 @@ function collectMedianPrice(results: PageSnapshot['resultsPreview']) {
 function countResultsWithSalesSignal(results: PageSnapshot['resultsPreview']) {
   return results.filter((result) => normalizeText(result.salesHint).length > 0)
     .length;
+}
+
+function collectMinPrice(results: PageSnapshot['resultsPreview']) {
+  const prices = results
+    .flatMap((result) => [result.priceMin, result.priceMax])
+    .filter(
+      (value): value is number =>
+        typeof value === 'number' && Number.isFinite(value),
+    );
+
+  if (prices.length === 0) {
+    return '-';
+  }
+
+  return formatCurrency(Math.min(...prices));
+}
+
+function collectMaxPrice(results: PageSnapshot['resultsPreview']) {
+  const prices = results
+    .flatMap((result) => [result.priceMin, result.priceMax])
+    .filter(
+      (value): value is number =>
+        typeof value === 'number' && Number.isFinite(value),
+    );
+
+  if (prices.length === 0) {
+    return '-';
+  }
+
+  return formatCurrency(Math.max(...prices));
 }
 
 function getUniqueShopCount(results: PageSnapshot['resultsPreview']) {
@@ -518,6 +549,30 @@ function ensureOverlayStyle() {
       font-weight: 700;
     }
 
+    #${OVERLAY_ID} .levelup-preview-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    #${OVERLAY_ID} .levelup-preview-pill {
+      display: inline-flex;
+      max-width: 100%;
+      align-items: center;
+      border-radius: 999px;
+      padding: 6px 10px;
+      background: rgba(251, 106, 53, 0.08);
+      color: #7c2d12;
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    #${OVERLAY_ID} .levelup-preview-pill span {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
     #${OVERLAY_ID} .levelup-button {
       border: none;
       border-radius: 999px;
@@ -694,11 +749,14 @@ function renderOverlay(snapshot: PageSnapshot) {
 
   const totalResults = snapshot.resultsPreview.length;
   const displayedResults = snapshot.resultsPreview.slice(0, visibleResultCount);
+  const compactPreviewResults = snapshot.resultsPreview.slice(0, 3);
   const canLoadMore = displayedResults.length < totalResults;
   const uniqueShops = getUniqueShopCount(snapshot.resultsPreview);
   const priceSummary = collectPriceSummary(snapshot.resultsPreview);
   const medianPrice = collectMedianPrice(snapshot.resultsPreview);
   const salesSignalCount = countResultsWithSalesSignal(snapshot.resultsPreview);
+  const minPrice = collectMinPrice(snapshot.resultsPreview);
+  const maxPrice = collectMaxPrice(snapshot.resultsPreview);
   const statusLabel = lastKnownState?.lastSync.message ?? snapshot.statusMessage;
   const keywordLabel = snapshot.keyword?.trim() || '(keyword belum terbaca)';
   const overlay = document.getElementById(OVERLAY_ID) ?? document.createElement('section');
@@ -735,18 +793,31 @@ function renderOverlay(snapshot: PageSnapshot) {
       <div class="levelup-actions">
         <button type="button" class="levelup-button levelup-button-primary" data-action="sync">Sinkronkan Sekarang</button>
         <button type="button" class="levelup-button levelup-button-secondary" data-action="refresh">Muat Ulang Parser</button>
+        <button type="button" class="levelup-button levelup-button-secondary" data-action="toggle-mode">${isCompactMode ? 'Buka Mode Penuh' : 'Kembali ke Mode Ringkas'}</button>
         ${
-          canLoadMore
+          !isCompactMode && canLoadMore
             ? `<button type="button" class="levelup-button levelup-button-ghost" data-action="load-more">Muat Lebih Banyak</button>`
             : ''
         }
       </div>
       <div class="levelup-summary">
         <span><strong>Median harga:</strong> ${medianPrice}</span>
+        <span><strong>Harga termurah:</strong> ${minPrice}</span>
+        <span><strong>Harga tertinggi:</strong> ${maxPrice}</span>
         <span><strong>Insight:</strong> ${salesSignalCount > 0 ? `${salesSignalCount} produk punya sinyal terjual.` : 'Belum ada sinyal terjual yang terbaca.'}</span>
       </div>
       <div class="levelup-note">Mode public research aktif. Shop default tidak dipakai untuk sync halaman pencarian publik.</div>
-      <div class="levelup-results">
+      ${
+        isCompactMode
+          ? `<div class="levelup-preview-strip">
+              ${compactPreviewResults
+                .map((result) => {
+                  const cleanTitle = cleanProductTitle(result.productTitle);
+                  return `<div class="levelup-preview-pill"><span>${result.position}. ${cleanTitle}</span></div>`;
+                })
+                .join('')}
+            </div>`
+          : `<div class="levelup-results">
         ${displayedResults
           .map((result) => {
             const cleanTitle = cleanProductTitle(result.productTitle);
@@ -779,7 +850,8 @@ function renderOverlay(snapshot: PageSnapshot) {
             `;
           })
           .join('')}
-      </div>
+      </div>`
+      }
     </div>
   `;
 
@@ -799,6 +871,9 @@ function renderOverlay(snapshot: PageSnapshot) {
   );
   const refreshButton = overlay.querySelector<HTMLButtonElement>(
     '[data-action="refresh"]',
+  );
+  const toggleModeButton = overlay.querySelector<HTMLButtonElement>(
+    '[data-action="toggle-mode"]',
   );
   const loadMoreButton = overlay.querySelector<HTMLButtonElement>(
     '[data-action="load-more"]',
@@ -833,6 +908,14 @@ function renderOverlay(snapshot: PageSnapshot) {
 
   refreshButton?.addEventListener('click', () => {
     queueRefresh();
+  });
+
+  toggleModeButton?.addEventListener('click', () => {
+    isCompactMode = !isCompactMode;
+
+    if (lastSnapshot) {
+      renderOverlay(lastSnapshot);
+    }
   });
 
   loadMoreButton?.addEventListener('click', () => {
