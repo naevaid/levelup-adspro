@@ -176,7 +176,41 @@ function findTextMarker(pattern: RegExp, minTop = 120) {
   return matches[0] ?? null;
 }
 
+function getShopeeSpecificHost() {
+  const productGrid = document.querySelector(
+    '.shopee-search-item-result__items',
+  );
+  const sortBar = document.querySelector('.shopee-sort-bar');
+  const searchResultRoot =
+    productGrid?.closest('.shopee-search-item-result') ??
+    sortBar?.parentElement ??
+    null;
+
+  if (productGrid) {
+    return {
+      parent: productGrid,
+      before: productGrid.firstChild,
+      layoutMode: 'grid' as const,
+    };
+  }
+
+  if (searchResultRoot && sortBar) {
+    return {
+      parent: searchResultRoot,
+      before: sortBar.nextSibling ?? searchResultRoot.firstChild,
+      layoutMode: 'block' as const,
+    };
+  }
+
+  return null;
+}
+
 function getOverlayHost() {
+  const shopeeHost = getShopeeSpecificHost();
+  if (shopeeHost) {
+    return shopeeHost;
+  }
+
   const resultsHeaderMarker = findTextMarker(/hasil pencarian untuk/i);
   const sortBarMarker =
     findTextMarker(/urutkan/i, 160) ??
@@ -196,6 +230,7 @@ function getOverlayHost() {
     return {
       parent: mainContent,
       before: mainContent.firstChild,
+      layoutMode: 'block' as const,
     };
   }
 
@@ -274,12 +309,14 @@ function getOverlayHost() {
     return {
       parent: overlayParent,
       before: insertAfterMarker.nextSibling,
+      layoutMode: 'block' as const,
     };
   }
 
   return {
     parent: overlayParent,
     before: firstCardInContainer ?? overlayParent.firstChild,
+    layoutMode: isPotentialProductGrid(overlayParent) ? ('grid' as const) : ('block' as const),
   };
 }
 
@@ -301,7 +338,16 @@ function ensureOverlayStyle() {
       font-family: Inter, Arial, sans-serif;
       overflow: hidden;
       width: 100%;
+    }
+
+    #${OVERLAY_ID}[data-layout-mode="grid"] {
       grid-column: 1 / -1;
+    }
+
+    #${OVERLAY_ID}[data-layout-mode="block"] {
+      max-width: 1200px;
+      margin-left: auto;
+      margin-right: auto;
     }
 
     #${OVERLAY_ID} * {
@@ -623,7 +669,8 @@ function renderOverlay(snapshot: PageSnapshot) {
     </div>
   `;
 
-  const { parent, before } = getOverlayHost();
+  const { parent, before, layoutMode } = getOverlayHost();
+  overlay.dataset.layoutMode = layoutMode;
   const shouldMoveOverlay =
     !overlay.isConnected ||
     overlay.parentElement !== parent ||
