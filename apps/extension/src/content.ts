@@ -65,6 +65,10 @@ function getUniqueShopCount(results: PageSnapshot['resultsPreview']) {
   return shops.size;
 }
 
+function isProductLink(rawHref: string) {
+  return rawHref.includes('/product/') || /-i\.\d+\.\d+/i.test(rawHref);
+}
+
 function findProductCardElement(anchor: HTMLAnchorElement) {
   return (
     anchor.closest('[data-sqe="item"], [data-sqe="itemCard"], li, article') ??
@@ -83,33 +87,129 @@ function isPotentialProductGrid(element: Element) {
   return isGridLike && productAnchors >= 4;
 }
 
-function getOverlayHost() {
-  const firstProductAnchor = document.querySelector<HTMLAnchorElement>(
-    'a[href*="/product/"], a[href*="-i."]',
-  );
+type ProductCardMatch = {
+  anchor: HTMLAnchorElement;
+  card: Element;
+  rect: DOMRect;
+};
 
-  const productCard = firstProductAnchor
-    ? findProductCardElement(firstProductAnchor)
-    : null;
+function getVisibleProductCards() {
+  const matches: ProductCardMatch[] = [];
+  const seenCards = new Set<Element>();
 
-  let gridContainer: Element | null = productCard?.parentElement ?? null;
-  while (gridContainer && gridContainer !== document.body) {
-    if (isPotentialProductGrid(gridContainer)) {
-      break;
+  for (const anchor of Array.from(
+    document.querySelectorAll<HTMLAnchorElement>('a[href]'),
+  )) {
+    const href = anchor.getAttribute('href');
+    if (!href || !isProductLink(href)) {
+      continue;
     }
 
-    gridContainer = gridContainer.parentElement;
+    const card = findProductCardElement(anchor);
+    if (!card || seenCards.has(card)) {
+      continue;
+    }
+
+    const rect = card.getBoundingClientRect();
+    const text = normalizeText(card.textContent);
+
+    if (
+      rect.width < 120 ||
+      rect.height < 180 ||
+      rect.bottom <= 0 ||
+      text.length < 20 ||
+      !card.querySelector('img')
+    ) {
+      continue;
+    }
+
+    seenCards.add(card);
+    matches.push({ anchor, card, rect });
   }
 
-  const mainContent =
-    gridContainer ??
-    firstProductAnchor?.closest('main') ??
+  return matches.sort((left, right) => {
+    if (left.rect.top === right.rect.top) {
+      return left.rect.left - right.rect.left;
+    }
+
+    return left.rect.top - right.rect.top;
+  });
+}
+
+function countCardsInside(container: Element, cards: ProductCardMatch[]) {
+  return cards.filter((candidate) => container.contains(candidate.card)).length;
+}
+
+function getOverlayHost() {
+  const productCards = getVisibleProductCards();
+  if (productCards.length === 0) {
+    const mainContent = document.querySelector('main') ?? document.body;
+
+    return {
+      parent: mainContent,
+      before: mainContent.firstChild,
+    };
+  }
+
+  const containerCandidates = new Map<
+    Element,
+    { count: number; top: number; width: number }
+  >();
+
+  for (const match of productCards.slice(0, 20)) {
+    let current: Element | null = match.card.parentElement;
+    let depth = 0;
+
+    while (current && current !== document.body && depth < 6) {
+      const rect = current.getBoundingClientRect();
+      const count = countCardsInside(current, productCards);
+
+      if (
+        count >= 6 &&
+        rect.width >= 600 &&
+        rect.height >= 250 &&
+        isPotentialProductGrid(current)
+      ) {
+        const existing = containerCandidates.get(current);
+        if (!existing || count > existing.count) {
+          containerCandidates.set(current, {
+            count,
+            top: rect.top,
+            width: rect.width,
+          });
+        }
+      }
+
+      current = current.parentElement;
+      depth += 1;
+    }
+  }
+
+  const bestContainer =
+    Array.from(containerCandidates.entries())
+      .sort((left, right) => {
+        if (right[1].count !== left[1].count) {
+          return right[1].count - left[1].count;
+        }
+
+        return left[1].top - right[1].top;
+      })
+      .at(0)?.[0] ?? null;
+
+  const overlayParent =
+    bestContainer ??
+    productCards[0]?.card.parentElement ??
     document.querySelector('main') ??
     document.body;
 
+  const firstCardInContainer =
+    productCards.find((candidate) => overlayParent.contains(candidate.card))?.card ??
+    productCards[0]?.card ??
+    null;
+
   return {
-    parent: mainContent,
-    before: productCard ?? firstProductAnchor ?? mainContent.firstChild,
+    parent: overlayParent,
+    before: firstCardInContainer ?? overlayParent.firstChild,
   };
 }
 
