@@ -16,6 +16,73 @@ export class IngestionService {
     private readonly rawDataService: RawDataService,
   ) {}
 
+  async listLatestForOrganization(organizationId: string) {
+    const batches = await this.prisma.ingestionBatch.findMany({
+      where: { organizationId },
+      include: {
+        shop: {
+          include: {
+            marketplace: true,
+          },
+        },
+        extensionSession: true,
+        rawPayloadObjects: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+
+    return batches.map((batch) => {
+      const rawPayloadObject = batch.rawPayloadObjects[0] ?? null;
+
+      return {
+        id: batch.id,
+        status: batch.status,
+        captureMode: batch.captureMode.toLowerCase(),
+        pageType: batch.pageType,
+        marketplace: batch.marketplace,
+        payloadSchemaVersion: batch.payloadSchemaVersion,
+        capturedAt: batch.capturedAt,
+        processedAt: batch.processedAt,
+        errorCode: batch.errorCode,
+        errorMessage: batch.errorMessage,
+        createdAt: batch.createdAt,
+        extensionSession: {
+          id: batch.extensionSession.id,
+          deviceLabel: batch.extensionSession.deviceLabel,
+          extensionVersion: batch.extensionSession.extensionVersion,
+          status: batch.extensionSession.status,
+          expiresAt: batch.extensionSession.expiresAt,
+        },
+        shop: batch.shop
+          ? {
+              id: batch.shop.id,
+              name: batch.shop.name,
+              externalId: batch.shop.externalId,
+              status: batch.shop.status,
+              marketplace: {
+                id: batch.shop.marketplace.id,
+                code: batch.shop.marketplace.code,
+                name: batch.shop.marketplace.name,
+              },
+            }
+          : null,
+        rawPayloadObject: rawPayloadObject
+          ? {
+              id: rawPayloadObject.id,
+              storageKey: rawPayloadObject.storageKey,
+              sizeBytes: rawPayloadObject.sizeBytes,
+              retentionUntil: rawPayloadObject.retentionUntil,
+              status: rawPayloadObject.status,
+            }
+          : null,
+      };
+    });
+  }
+
   async createBatch(
     request: ExtensionAuthenticatedRequest,
     dto: CreateIngestionBatchDto,
