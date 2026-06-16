@@ -201,6 +201,31 @@ function extractShopName(cardElement: Element, title: string) {
   return candidates.at(-1) ?? null;
 }
 
+function extractProductImageUrl(
+  anchor: HTMLAnchorElement,
+  cardElement: Element,
+  url: URL,
+) {
+  const image =
+    anchor.querySelector<HTMLImageElement>('img[src], img[data-src]') ??
+    cardElement.querySelector<HTMLImageElement>('img[src], img[data-src]');
+
+  const rawUrl =
+    image?.getAttribute('src') ??
+    image?.getAttribute('data-src') ??
+    image?.currentSrc;
+
+  if (!rawUrl) {
+    return undefined;
+  }
+
+  try {
+    return new URL(rawUrl, url.origin).toString();
+  } catch {
+    return undefined;
+  }
+}
+
 function detectShopeePublicSearch(document: Document, url: URL) {
   const keyword = resolveSearchKeyword(document, url);
   const anchors = Array.from(
@@ -234,6 +259,7 @@ function detectShopeePublicSearch(document: Document, url: URL) {
       position: 0,
       productTitle: title,
       productUrl,
+      imageUrl: extractProductImageUrl(anchor, cardElement, url),
       shopName: extractShopName(cardElement, title),
       priceMin,
       priceMax,

@@ -65,22 +65,51 @@ function getUniqueShopCount(results: PageSnapshot['resultsPreview']) {
   return shops.size;
 }
 
+function findProductCardElement(anchor: HTMLAnchorElement) {
+  return (
+    anchor.closest('[data-sqe="item"], [data-sqe="itemCard"], li, article') ??
+    anchor.closest('div')
+  );
+}
+
+function isPotentialProductGrid(element: Element) {
+  const style = window.getComputedStyle(element);
+  const isGridLike =
+    style.display.includes('grid') || style.display.includes('flex');
+  const productAnchors = element.querySelectorAll(
+    'a[href*="/product/"], a[href*="-i."]',
+  ).length;
+
+  return isGridLike && productAnchors >= 4;
+}
+
 function getOverlayHost() {
   const firstProductAnchor = document.querySelector<HTMLAnchorElement>(
     'a[href*="/product/"], a[href*="-i."]',
   );
 
+  const productCard = firstProductAnchor
+    ? findProductCardElement(firstProductAnchor)
+    : null;
+
+  let gridContainer: Element | null = productCard?.parentElement ?? null;
+  while (gridContainer && gridContainer !== document.body) {
+    if (isPotentialProductGrid(gridContainer)) {
+      break;
+    }
+
+    gridContainer = gridContainer.parentElement;
+  }
+
   const mainContent =
+    gridContainer ??
     firstProductAnchor?.closest('main') ??
     document.querySelector('main') ??
     document.body;
 
-  const nearbyContainer =
-    firstProductAnchor?.closest('section, div, ul') ?? mainContent;
-
   return {
-    parent: nearbyContainer.parentElement ?? mainContent,
-    before: nearbyContainer,
+    parent: mainContent,
+    before: productCard ?? firstProductAnchor ?? mainContent.firstChild,
   };
 }
 
@@ -93,14 +122,16 @@ function ensureOverlayStyle() {
   style.id = OVERLAY_STYLE_ID;
   style.textContent = `
     #${OVERLAY_ID} {
-      margin: 12px 0 16px;
+      margin: 0 0 16px;
       border: 2px solid #fb6a35;
-      border-radius: 18px;
+      border-radius: 10px;
       background: linear-gradient(180deg, rgba(255, 243, 238, 0.96), rgba(255, 248, 245, 0.96));
       box-shadow: 0 18px 40px rgba(251, 106, 53, 0.14);
       color: #1f2937;
       font-family: Inter, Arial, sans-serif;
       overflow: hidden;
+      width: 100%;
+      grid-column: 1 / -1;
     }
 
     #${OVERLAY_ID} * {
@@ -112,7 +143,7 @@ function ensureOverlayStyle() {
       align-items: flex-start;
       justify-content: space-between;
       gap: 12px;
-      padding: 14px 16px 10px;
+      padding: 12px 14px 10px;
       border-bottom: 1px solid rgba(251, 106, 53, 0.18);
       background: rgba(255, 255, 255, 0.55);
     }
@@ -147,9 +178,9 @@ function ensureOverlayStyle() {
     }
 
     #${OVERLAY_ID} .levelup-body {
-      padding: 14px 16px 16px;
+      padding: 12px 14px 14px;
       display: grid;
-      gap: 14px;
+      gap: 12px;
     }
 
     #${OVERLAY_ID} .levelup-stats {
@@ -212,26 +243,71 @@ function ensureOverlayStyle() {
 
     #${OVERLAY_ID} .levelup-results {
       display: grid;
-      gap: 8px;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     }
 
     #${OVERLAY_ID} .levelup-result {
       border: 1px solid rgba(251, 106, 53, 0.16);
-      border-radius: 12px;
+      border-radius: 8px;
       background: rgba(255, 255, 255, 0.8);
-      padding: 10px 12px;
+      padding: 8px;
+      display: grid;
+      gap: 8px;
+      min-height: 100%;
+    }
+
+    #${OVERLAY_ID} .levelup-result-thumb {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      border-radius: 6px;
+      background: linear-gradient(180deg, rgba(251, 106, 53, 0.08), rgba(251, 106, 53, 0.14));
+      overflow: hidden;
+    }
+
+    #${OVERLAY_ID} .levelup-result-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    #${OVERLAY_ID} .levelup-result-rank {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 4px 7px;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      background: rgba(251, 106, 53, 0.12);
+      color: #c2410c;
+      width: fit-content;
     }
 
     #${OVERLAY_ID} .levelup-result-title {
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 700;
-      line-height: 1.45;
+      line-height: 1.5;
       color: #111827;
+      min-height: 36px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    #${OVERLAY_ID} .levelup-result-shop {
+      font-size: 11px;
+      color: #6b7280;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     #${OVERLAY_ID} .levelup-result-meta {
-      margin-top: 4px;
-      font-size: 12px;
+      font-size: 11px;
       line-height: 1.5;
       color: #6b7280;
     }
@@ -239,6 +315,10 @@ function ensureOverlayStyle() {
     @media (max-width: 960px) {
       #${OVERLAY_ID} .levelup-stats {
         grid-template-columns: 1fr;
+      }
+
+      #${OVERLAY_ID} .levelup-results {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
       }
     }
   `;
@@ -353,7 +433,16 @@ function renderOverlay(snapshot: PageSnapshot) {
 
             return `
               <div class="levelup-result">
-                <div class="levelup-result-title">${result.position}. ${result.productTitle}</div>
+                <div class="levelup-result-thumb">
+                  ${
+                    result.imageUrl
+                      ? `<img src="${result.imageUrl}" alt="${result.productTitle}" loading="lazy" referrerpolicy="no-referrer" />`
+                      : ''
+                  }
+                </div>
+                <div class="levelup-result-rank">Top ${result.position}</div>
+                <div class="levelup-result-title">${result.productTitle}</div>
+                <div class="levelup-result-shop">${result.shopName || 'Toko belum terbaca'}</div>
                 <div class="levelup-result-meta">${meta || 'Belum ada metadata tambahan.'}</div>
               </div>
             `;

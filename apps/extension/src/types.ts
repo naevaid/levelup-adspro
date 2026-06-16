@@ -67,6 +67,7 @@ export type SearchResultPreview = {
   position: number;
   productTitle: string;
   productUrl: string;
+  imageUrl?: string;
   shopName: string | null;
   priceMin?: number;
   priceMax?: number;
