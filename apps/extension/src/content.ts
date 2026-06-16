@@ -11,9 +11,13 @@ let lastSnapshot: PageSnapshot | null = null;
 let lastKnownState: ExtensionState | null = null;
 let mutationObserver: MutationObserver | null = null;
 let refreshTimeoutId: number | null = null;
+let visibleResultCount = 10;
+let lastResultsSignature = '';
 
 const OVERLAY_ID = 'levelup-adspro-market-overlay';
 const OVERLAY_STYLE_ID = 'levelup-adspro-market-overlay-style';
+const INITIAL_VISIBLE_RESULTS = 10;
+const LOAD_MORE_STEP = 10;
 
 type BackgroundResponse<T> = {
   ok: boolean;
@@ -35,6 +39,14 @@ function formatCurrency(value?: number) {
 
 function cleanProductTitle(title: string) {
   return normalizeText(title).replace(/^view product:\s*/i, '');
+}
+
+function getResultsSignature(snapshot: PageSnapshot) {
+  return [
+    snapshot.pageType,
+    snapshot.keyword ?? '',
+    ...snapshot.resultsPreview.map((result) => result.productUrl),
+  ].join('|');
 }
 
 function collectPriceSummary(results: PageSnapshot['resultsPreview']) {
@@ -452,6 +464,12 @@ function ensureOverlayStyle() {
       color: #c2410c;
     }
 
+    #${OVERLAY_ID} .levelup-button-ghost {
+      background: #fff;
+      color: #9a3412;
+      border: 1px solid rgba(251, 106, 53, 0.22);
+    }
+
     #${OVERLAY_ID} .levelup-button:disabled {
       opacity: 0.6;
       cursor: not-allowed;
@@ -595,7 +613,15 @@ function renderOverlay(snapshot: PageSnapshot) {
 
   ensureOverlayStyle();
 
-  const topResults = snapshot.resultsPreview.slice(0, 5);
+  const currentSignature = getResultsSignature(snapshot);
+  if (currentSignature !== lastResultsSignature) {
+    visibleResultCount = INITIAL_VISIBLE_RESULTS;
+    lastResultsSignature = currentSignature;
+  }
+
+  const totalResults = snapshot.resultsPreview.length;
+  const displayedResults = snapshot.resultsPreview.slice(0, visibleResultCount);
+  const canLoadMore = displayedResults.length < totalResults;
   const uniqueShops = getUniqueShopCount(snapshot.resultsPreview);
   const priceSummary = collectPriceSummary(snapshot.resultsPreview);
   const statusLabel = lastKnownState?.lastSync.message ?? snapshot.statusMessage;
@@ -615,8 +641,8 @@ function renderOverlay(snapshot: PageSnapshot) {
     <div class="levelup-body">
       <div class="levelup-stats">
         <div class="levelup-card">
-          <div class="levelup-card-label">Preview Result</div>
-          <div class="levelup-card-value">${snapshot.resultsPreview.length}</div>
+          <div class="levelup-card-label">Hasil Ditampilkan</div>
+          <div class="levelup-card-value">${displayedResults.length} / ${totalResults}</div>
         </div>
         <div class="levelup-card">
           <div class="levelup-card-label">Rentang Harga</div>
@@ -628,12 +654,17 @@ function renderOverlay(snapshot: PageSnapshot) {
         </div>
       </div>
       <div class="levelup-actions">
-        <button type="button" class="levelup-button levelup-button-primary" data-action="sync">Sync Now</button>
-        <button type="button" class="levelup-button levelup-button-secondary" data-action="refresh">Refresh Parser</button>
+        <button type="button" class="levelup-button levelup-button-primary" data-action="sync">Sinkronkan Sekarang</button>
+        <button type="button" class="levelup-button levelup-button-secondary" data-action="refresh">Muat Ulang Parser</button>
+        ${
+          canLoadMore
+            ? `<button type="button" class="levelup-button levelup-button-ghost" data-action="load-more">Muat Lebih Banyak</button>`
+            : ''
+        }
       </div>
       <div class="levelup-note">Mode public research aktif. Shop default tidak dipakai untuk sync halaman pencarian publik.</div>
       <div class="levelup-results">
-        ${topResults
+        ${displayedResults
           .map((result) => {
             const cleanTitle = cleanProductTitle(result.productTitle);
             const meta = [
@@ -686,6 +717,9 @@ function renderOverlay(snapshot: PageSnapshot) {
   const refreshButton = overlay.querySelector<HTMLButtonElement>(
     '[data-action="refresh"]',
   );
+  const loadMoreButton = overlay.querySelector<HTMLButtonElement>(
+    '[data-action="load-more"]',
+  );
 
   syncButton?.addEventListener('click', async () => {
     if (!syncButton) {
@@ -694,7 +728,7 @@ function renderOverlay(snapshot: PageSnapshot) {
 
     syncButton.disabled = true;
     const previousLabel = syncButton.textContent;
-    syncButton.textContent = 'Syncing...';
+    syncButton.textContent = 'Menyinkronkan...';
 
     try {
       await sendBackgroundMessage<{ batchId: string; state: ExtensionState }>({
@@ -710,12 +744,23 @@ function renderOverlay(snapshot: PageSnapshot) {
         error instanceof Error ? error.message : 'Sync gagal dari overlay.';
     } finally {
       syncButton.disabled = false;
-      syncButton.textContent = previousLabel ?? 'Sync Now';
+      syncButton.textContent = previousLabel ?? 'Sinkronkan Sekarang';
     }
   });
 
   refreshButton?.addEventListener('click', () => {
     queueRefresh();
+  });
+
+  loadMoreButton?.addEventListener('click', () => {
+    visibleResultCount = Math.min(
+      totalResults,
+      visibleResultCount + LOAD_MORE_STEP,
+    );
+
+    if (lastSnapshot) {
+      renderOverlay(lastSnapshot);
+    }
   });
 }
 

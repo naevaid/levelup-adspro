@@ -268,7 +268,7 @@ function detectShopeePublicSearch(document: Document, url: URL) {
   });
 
   const results = uniqueResults(rawResults.filter(isSearchResultPreview))
-    .slice(0, 10)
+    .slice(0, 30)
     .map((result, index) => ({
       ...result,
       position: index + 1,
