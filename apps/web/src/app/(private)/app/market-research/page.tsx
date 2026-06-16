@@ -139,6 +139,21 @@ function formatPriceRange(
   return "-";
 }
 
+function countPreviewItemsWithSales(
+  items: Array<{ salesHint: string | null }>,
+) {
+  return items.filter((item) => Boolean(item.salesHint)).length;
+}
+
+function countPreviewItemsWithPrice(
+  items: Array<{ priceMin: number | null; priceMax: number | null }>,
+) {
+  return items.filter(
+    (item) =>
+      typeof item.priceMin === "number" || typeof item.priceMax === "number",
+  ).length;
+}
+
 export default function MarketResearchPage() {
   const { isReady, session } = useAuth();
   const [batches, setBatches] = useState<IngestionBatchSummary[]>([]);
@@ -353,6 +368,27 @@ export default function MarketResearchPage() {
                     </div>
                   </div>
 
+                  <div className="mt-4 grid gap-3 md:grid-cols-3">
+                    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
+                      Produk dengan harga:
+                      <div className="mt-2 text-xl font-semibold text-white">
+                        {countPreviewItemsWithPrice(batch.preview.topResults)}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
+                      Ada sinyal terjual:
+                      <div className="mt-2 text-xl font-semibold text-white">
+                        {countPreviewItemsWithSales(batch.preview.topResults)}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
+                      Keyword:
+                      <div className="mt-2 text-base font-semibold text-white">
+                        {batch.preview.keyword || "-"}
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                     {batch.preview.topResults.map((result, index) => (
                       <article
@@ -385,6 +421,16 @@ export default function MarketResearchPage() {
                         <p className="mt-1 text-xs text-slate-400">
                           {result.salesHint || "Belum ada sinyal terjual"}
                         </p>
+                        {result.productUrl ? (
+                          <a
+                            href={result.productUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-3 inline-flex rounded-full border border-sky-300/15 bg-sky-400/10 px-3 py-1.5 text-xs font-medium text-sky-100 transition hover:border-sky-300/35 hover:bg-sky-400/15"
+                          >
+                            Buka Produk
+                          </a>
+                        ) : null}
                       </article>
                     ))}
                   </div>
@@ -393,9 +439,26 @@ export default function MarketResearchPage() {
 
               {batch.preview?.type === "public_product" ? (
                 <div className="mt-4 rounded-[1.5rem] border border-sky-300/12 bg-slate-950/40 p-4 sm:p-5">
-                  <p className="text-sm text-sky-200/75">
-                    Preview Detail Produk
-                  </p>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm text-sky-200/75">
+                        Preview Detail Produk
+                      </p>
+                      <p className="mt-2 text-sm muted-text">
+                        {batch.preview.pageTitle || "Judul halaman produk tidak tersedia"}
+                      </p>
+                    </div>
+                    {batch.preview.product?.productUrl ? (
+                      <a
+                        href={batch.preview.product.productUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex rounded-full border border-sky-300/15 bg-sky-400/10 px-4 py-2 text-sm font-medium text-sky-100 transition hover:border-sky-300/35 hover:bg-sky-400/15"
+                      >
+                        Buka Produk Asli
+                      </a>
+                    ) : null}
+                  </div>
                   <div className="mt-4 grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
                     <div>
                       {batch.preview.product?.imageUrl ? (
@@ -416,30 +479,38 @@ export default function MarketResearchPage() {
                           batch.preview.pageTitle ||
                           "Detail produk belum terbaca"}
                       </h3>
-                      <div className="mt-3 grid gap-2 text-sm text-slate-100">
-                        <p>
-                          Harga:{" "}
-                          {formatPriceRange(
-                            batch.preview.product?.priceMin,
-                            batch.preview.product?.priceMax,
-                          )}
-                        </p>
-                        <p>
-                          Toko:{" "}
-                          {batch.preview.product?.shopName ||
-                            "Toko belum terbaca"}
-                        </p>
-                        <p>
-                          Penjualan:{" "}
-                          {batch.preview.product?.salesHint ||
-                            "Belum ada sinyal penjualan"}
-                        </p>
-                        <p>
-                          Rating: {batch.preview.product?.ratingHint || "-"}
-                        </p>
-                        <p>
-                          Ulasan: {batch.preview.product?.reviewCountHint || "-"}
-                        </p>
+                      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                        <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
+                          Harga
+                          <div className="mt-2 text-base font-semibold text-white">
+                            {formatPriceRange(
+                              batch.preview.product?.priceMin,
+                              batch.preview.product?.priceMax,
+                            )}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
+                          Toko
+                          <div className="mt-2 text-base font-semibold text-white">
+                            {batch.preview.product?.shopName ||
+                              "Belum terbaca"}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
+                          Penjualan
+                          <div className="mt-2 text-base font-semibold text-white">
+                            {batch.preview.product?.salesHint || "-"}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
+                          Rating / Ulasan
+                          <div className="mt-2 text-base font-semibold text-white">
+                            {batch.preview.product?.ratingHint || "-"}
+                          </div>
+                          <div className="mt-1 text-xs text-slate-400">
+                            {batch.preview.product?.reviewCountHint || "-"}
+                          </div>
+                        </div>
                       </div>
                       {batch.preview.highlights.length > 0 ? (
                         <div className="mt-4 flex flex-wrap gap-2">

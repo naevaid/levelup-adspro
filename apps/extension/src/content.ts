@@ -372,17 +372,54 @@ function findTextMarker(pattern: RegExp, minTop = 120) {
   return matches[0] ?? null;
 }
 
+function findShopeeProductSection() {
+  return (
+    document.querySelector(
+      '.page-product__content, .product-briefing, [data-sqe="detail_product"]',
+    ) ?? null
+  );
+}
+
+function findShopeeShopSection() {
+  return (
+    document.querySelector(
+      '.page-product__shop, [data-sqe="shop"], [class*="page-product__shop"], [class*="shop-page"]',
+    ) ?? null
+  );
+}
+
 function getShopeeSpecificHost(snapshot?: PageSnapshot) {
   if (snapshot?.pageType === 'shopee_public_product') {
-    const productContent =
-      document.querySelector('.page-product__content') ??
-      document.querySelector('.product-briefing');
+    const productContent = findShopeeProductSection();
+    const shopSection = findShopeeShopSection();
+
+    if (
+      productContent &&
+      shopSection &&
+      productContent.parentElement &&
+      shopSection.parentElement &&
+      productContent.parentElement === shopSection.parentElement
+    ) {
+      return {
+        parent: shopSection.parentElement,
+        before: shopSection,
+        layoutMode: 'product' as const,
+      };
+    }
+
+    if (shopSection?.parentElement) {
+      return {
+        parent: shopSection.parentElement,
+        before: shopSection,
+        layoutMode: 'product' as const,
+      };
+    }
 
     if (productContent?.parentElement) {
       return {
         parent: productContent.parentElement,
         before: productContent.nextSibling,
-        layoutMode: 'block' as const,
+        layoutMode: 'product' as const,
       };
     }
   }
@@ -558,6 +595,16 @@ function ensureOverlayStyle() {
       max-width: 1200px;
       margin-left: auto;
       margin-right: auto;
+    }
+
+    #${OVERLAY_ID}[data-layout-mode="product"] {
+      max-width: 100%;
+      margin-left: 0;
+      margin-right: 0;
+      border-width: 1px;
+      border-color: rgba(251, 106, 53, 0.28);
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+      background: linear-gradient(180deg, rgba(255, 247, 243, 0.98), rgba(255, 251, 249, 0.98));
     }
 
     #${OVERLAY_ID} * {
@@ -781,6 +828,20 @@ function ensureOverlayStyle() {
       padding: 12px;
     }
 
+    #${OVERLAY_ID}[data-layout-mode="product"] .levelup-header {
+      padding: 14px 16px 12px;
+    }
+
+    #${OVERLAY_ID}[data-layout-mode="product"] .levelup-body {
+      padding: 14px 16px 16px;
+      gap: 14px;
+    }
+
+    #${OVERLAY_ID}[data-layout-mode="product"] .levelup-product-panel {
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.92);
+    }
+
     #${OVERLAY_ID} .levelup-product-image {
       position: relative;
       width: 100%;
@@ -961,6 +1022,7 @@ function renderOverlay(snapshot: PageSnapshot) {
 
   overlay.id = OVERLAY_ID;
   const isSearchPage = snapshot.pageType === 'shopee_public_search';
+  overlay.dataset.pageKind = isSearchPage ? 'search' : 'product';
 
   if (isSearchPage) {
     const totalResults = snapshot.resultsPreview.length;
