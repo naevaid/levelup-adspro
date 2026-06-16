@@ -49,6 +49,20 @@ function getResultsSignature(snapshot: PageSnapshot) {
   ].join('|');
 }
 
+function isIgnorableRuntimeError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes('receiving end does not exist') ||
+    message.includes('could not establish connection') ||
+    message.includes('message port closed') ||
+    message.includes('extension context invalidated')
+  );
+}
+
 function collectPriceSummary(results: PageSnapshot['resultsPreview']) {
   const priceValues = results.flatMap((result) =>
     [result.priceMin, result.priceMax].filter(
@@ -69,6 +83,52 @@ function collectPriceSummary(results: PageSnapshot['resultsPreview']) {
   }
 
   return `${formatCurrency(min)} - ${formatCurrency(max)}`;
+}
+
+function collectMedianPrice(results: PageSnapshot['resultsPreview']) {
+  const normalizedPrices = results
+    .map((result) => {
+      if (
+        typeof result.priceMin === 'number' &&
+        typeof result.priceMax === 'number' &&
+        Number.isFinite(result.priceMin) &&
+        Number.isFinite(result.priceMax)
+      ) {
+        return Math.round((result.priceMin + result.priceMax) / 2);
+      }
+
+      if (typeof result.priceMin === 'number' && Number.isFinite(result.priceMin)) {
+        return result.priceMin;
+      }
+
+      if (typeof result.priceMax === 'number' && Number.isFinite(result.priceMax)) {
+        return result.priceMax;
+      }
+
+      return null;
+    })
+    .filter((value): value is number => value !== null)
+    .sort((left, right) => left - right);
+
+  if (normalizedPrices.length === 0) {
+    return '-';
+  }
+
+  const middleIndex = Math.floor(normalizedPrices.length / 2);
+  const median =
+    normalizedPrices.length % 2 === 0
+      ? Math.round(
+          (normalizedPrices[middleIndex - 1] + normalizedPrices[middleIndex]) /
+            2,
+        )
+      : normalizedPrices[middleIndex];
+
+  return formatCurrency(median);
+}
+
+function countResultsWithSalesSignal(results: PageSnapshot['resultsPreview']) {
+  return results.filter((result) => normalizeText(result.salesHint).length > 0)
+    .length;
 }
 
 function getUniqueShopCount(results: PageSnapshot['resultsPreview']) {
@@ -414,7 +474,7 @@ function ensureOverlayStyle() {
     #${OVERLAY_ID} .levelup-stats {
       display: grid;
       gap: 10px;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 
     #${OVERLAY_ID} .levelup-card {
@@ -443,6 +503,19 @@ function ensureOverlayStyle() {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
+    }
+
+    #${OVERLAY_ID} .levelup-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    #${OVERLAY_ID} .levelup-summary strong {
+      color: #9a3412;
+      font-weight: 700;
     }
 
     #${OVERLAY_ID} .levelup-button {
@@ -624,6 +697,8 @@ function renderOverlay(snapshot: PageSnapshot) {
   const canLoadMore = displayedResults.length < totalResults;
   const uniqueShops = getUniqueShopCount(snapshot.resultsPreview);
   const priceSummary = collectPriceSummary(snapshot.resultsPreview);
+  const medianPrice = collectMedianPrice(snapshot.resultsPreview);
+  const salesSignalCount = countResultsWithSalesSignal(snapshot.resultsPreview);
   const statusLabel = lastKnownState?.lastSync.message ?? snapshot.statusMessage;
   const keywordLabel = snapshot.keyword?.trim() || '(keyword belum terbaca)';
   const overlay = document.getElementById(OVERLAY_ID) ?? document.createElement('section');
@@ -633,10 +708,10 @@ function renderOverlay(snapshot: PageSnapshot) {
     <div class="levelup-header">
       <div>
         <div class="levelup-title">Riset Market | LevelUP adsPRO</div>
-        <div class="levelup-subtitle">Keyword: ${keywordLabel}</div>
+        <div class="levelup-subtitle">Kata kunci: ${keywordLabel}</div>
         <div class="levelup-status">${statusLabel}</div>
       </div>
-      <div class="levelup-chip">Shopee Search</div>
+      <div class="levelup-chip">Pencarian Shopee</div>
     </div>
     <div class="levelup-body">
       <div class="levelup-stats">
@@ -652,6 +727,10 @@ function renderOverlay(snapshot: PageSnapshot) {
           <div class="levelup-card-label">Toko Terdeteksi</div>
           <div class="levelup-card-value">${uniqueShops}</div>
         </div>
+        <div class="levelup-card">
+          <div class="levelup-card-label">Ada Sinyal Terjual</div>
+          <div class="levelup-card-value">${salesSignalCount}</div>
+        </div>
       </div>
       <div class="levelup-actions">
         <button type="button" class="levelup-button levelup-button-primary" data-action="sync">Sinkronkan Sekarang</button>
@@ -661,6 +740,10 @@ function renderOverlay(snapshot: PageSnapshot) {
             ? `<button type="button" class="levelup-button levelup-button-ghost" data-action="load-more">Muat Lebih Banyak</button>`
             : ''
         }
+      </div>
+      <div class="levelup-summary">
+        <span><strong>Median harga:</strong> ${medianPrice}</span>
+        <span><strong>Insight:</strong> ${salesSignalCount > 0 ? `${salesSignalCount} produk punya sinyal terjual.` : 'Belum ada sinyal terjual yang terbaca.'}</span>
       </div>
       <div class="levelup-note">Mode public research aktif. Shop default tidak dipakai untuk sync halaman pencarian publik.</div>
       <div class="levelup-results">
@@ -688,7 +771,7 @@ function renderOverlay(snapshot: PageSnapshot) {
                       : ''
                   }
                 </div>
-                <div class="levelup-result-rank">Top ${result.position}</div>
+                <div class="levelup-result-rank">Urutan ${result.position}</div>
                 <div class="levelup-result-title">${cleanTitle}</div>
                 <div class="levelup-result-shop">${result.shopName || 'Toko belum terbaca'}</div>
                 <div class="levelup-result-meta">${meta || 'Belum ada metadata tambahan.'}</div>
@@ -767,11 +850,18 @@ function renderOverlay(snapshot: PageSnapshot) {
 async function sendSnapshot() {
   const payload = detectPageSnapshot(document);
   lastSnapshot = payload;
-  await chrome.runtime.sendMessage({
-    type: 'PAGE_SNAPSHOT_UPDATED',
-    payload,
-  } satisfies DetectionMessage);
   renderOverlay(payload);
+
+  try {
+    await chrome.runtime.sendMessage({
+      type: 'PAGE_SNAPSHOT_UPDATED',
+      payload,
+    } satisfies DetectionMessage);
+  } catch (error) {
+    if (!isIgnorableRuntimeError(error)) {
+      throw error;
+    }
+  }
 }
 
 function queueRefresh() {
