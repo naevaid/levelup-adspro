@@ -1,23 +1,468 @@
 import { detectPageSnapshot } from './detection';
-import type { DetectionMessage } from './types';
+import type {
+  BackgroundMessage,
+  DetectionMessage,
+  ExtensionState,
+  PageSnapshot,
+} from './types';
 
 let lastUrl = window.location.href;
+let lastSnapshot: PageSnapshot | null = null;
+let lastKnownState: ExtensionState | null = null;
+let mutationObserver: MutationObserver | null = null;
+let refreshTimeoutId: number | null = null;
+
+const OVERLAY_ID = 'levelup-adspro-market-overlay';
+const OVERLAY_STYLE_ID = 'levelup-adspro-market-overlay-style';
+
+type BackgroundResponse<T> = {
+  ok: boolean;
+  data?: T;
+  error?: string;
+};
+
+function normalizeText(rawValue?: string | null) {
+  return rawValue?.replace(/\s+/g, ' ').trim() ?? '';
+}
+
+function formatCurrency(value?: number) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return '-';
+  }
+
+  return `Rp${value.toLocaleString('id-ID')}`;
+}
+
+function collectPriceSummary(results: PageSnapshot['resultsPreview']) {
+  const priceValues = results.flatMap((result) =>
+    [result.priceMin, result.priceMax].filter(
+      (value): value is number =>
+        typeof value === 'number' && Number.isFinite(value),
+    ),
+  );
+
+  if (priceValues.length === 0) {
+    return '-';
+  }
+
+  const min = Math.min(...priceValues);
+  const max = Math.max(...priceValues);
+
+  if (min === max) {
+    return formatCurrency(min);
+  }
+
+  return `${formatCurrency(min)} - ${formatCurrency(max)}`;
+}
+
+function getUniqueShopCount(results: PageSnapshot['resultsPreview']) {
+  const shops = new Set(
+    results
+      .map((result) => normalizeText(result.shopName))
+      .filter((shopName) => shopName.length > 0),
+  );
+
+  return shops.size;
+}
+
+function getOverlayHost() {
+  const firstProductAnchor = document.querySelector<HTMLAnchorElement>(
+    'a[href*="/product/"], a[href*="-i."]',
+  );
+
+  const mainContent =
+    firstProductAnchor?.closest('main') ??
+    document.querySelector('main') ??
+    document.body;
+
+  const nearbyContainer =
+    firstProductAnchor?.closest('section, div, ul') ?? mainContent;
+
+  return {
+    parent: nearbyContainer.parentElement ?? mainContent,
+    before: nearbyContainer,
+  };
+}
+
+function ensureOverlayStyle() {
+  if (document.getElementById(OVERLAY_STYLE_ID)) {
+    return;
+  }
+
+  const style = document.createElement('style');
+  style.id = OVERLAY_STYLE_ID;
+  style.textContent = `
+    #${OVERLAY_ID} {
+      margin: 12px 0 16px;
+      border: 2px solid #fb6a35;
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(255, 243, 238, 0.96), rgba(255, 248, 245, 0.96));
+      box-shadow: 0 18px 40px rgba(251, 106, 53, 0.14);
+      color: #1f2937;
+      font-family: Inter, Arial, sans-serif;
+      overflow: hidden;
+    }
+
+    #${OVERLAY_ID} * {
+      box-sizing: border-box;
+    }
+
+    #${OVERLAY_ID} .levelup-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px 10px;
+      border-bottom: 1px solid rgba(251, 106, 53, 0.18);
+      background: rgba(255, 255, 255, 0.55);
+    }
+
+    #${OVERLAY_ID} .levelup-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #111827;
+    }
+
+    #${OVERLAY_ID} .levelup-subtitle,
+    #${OVERLAY_ID} .levelup-note,
+    #${OVERLAY_ID} .levelup-status {
+      margin-top: 4px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #6b7280;
+    }
+
+    #${OVERLAY_ID} .levelup-chip {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      background: rgba(251, 106, 53, 0.12);
+      color: #c2410c;
+      white-space: nowrap;
+    }
+
+    #${OVERLAY_ID} .levelup-body {
+      padding: 14px 16px 16px;
+      display: grid;
+      gap: 14px;
+    }
+
+    #${OVERLAY_ID} .levelup-stats {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    #${OVERLAY_ID} .levelup-card {
+      border: 1px solid rgba(251, 106, 53, 0.22);
+      border-radius: 14px;
+      background: #fff;
+      padding: 12px;
+    }
+
+    #${OVERLAY_ID} .levelup-card-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #9a3412;
+    }
+
+    #${OVERLAY_ID} .levelup-card-value {
+      margin-top: 8px;
+      font-size: 18px;
+      font-weight: 800;
+      color: #111827;
+    }
+
+    #${OVERLAY_ID} .levelup-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    #${OVERLAY_ID} .levelup-button {
+      border: none;
+      border-radius: 999px;
+      padding: 9px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    #${OVERLAY_ID} .levelup-button-primary {
+      background: #fb6a35;
+      color: #fff;
+    }
+
+    #${OVERLAY_ID} .levelup-button-secondary {
+      background: rgba(251, 106, 53, 0.12);
+      color: #c2410c;
+    }
+
+    #${OVERLAY_ID} .levelup-button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    #${OVERLAY_ID} .levelup-results {
+      display: grid;
+      gap: 8px;
+    }
+
+    #${OVERLAY_ID} .levelup-result {
+      border: 1px solid rgba(251, 106, 53, 0.16);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.8);
+      padding: 10px 12px;
+    }
+
+    #${OVERLAY_ID} .levelup-result-title {
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.45;
+      color: #111827;
+    }
+
+    #${OVERLAY_ID} .levelup-result-meta {
+      margin-top: 4px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #6b7280;
+    }
+
+    @media (max-width: 960px) {
+      #${OVERLAY_ID} .levelup-stats {
+        grid-template-columns: 1fr;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+function removeOverlay() {
+  document.getElementById(OVERLAY_ID)?.remove();
+}
+
+function isManagedOverlayNode(node: Node) {
+  if (node instanceof HTMLStyleElement) {
+    return node.id === OVERLAY_STYLE_ID;
+  }
+
+  if (node instanceof HTMLElement) {
+    return (
+      node.id === OVERLAY_ID ||
+      node.id === OVERLAY_STYLE_ID ||
+      Boolean(node.closest?.(`#${OVERLAY_ID}`))
+    );
+  }
+
+  return false;
+}
+
+async function sendBackgroundMessage<T>(message: BackgroundMessage): Promise<T> {
+  const response = (await chrome.runtime.sendMessage(
+    message,
+  )) as BackgroundResponse<T>;
+
+  if (!response.ok) {
+    throw new Error(response.error ?? 'Permintaan extension gagal.');
+  }
+
+  return response.data as T;
+}
+
+async function refreshKnownState() {
+  try {
+    lastKnownState = await sendBackgroundMessage<ExtensionState>({
+      type: 'GET_STATE',
+    });
+  } catch {
+    // Ignore state refresh errors in content script overlay.
+  }
+}
+
+function renderOverlay(snapshot: PageSnapshot) {
+  if (
+    snapshot.pageType !== 'shopee_public_search' ||
+    snapshot.captureMode !== 'public'
+  ) {
+    removeOverlay();
+    return;
+  }
+
+  ensureOverlayStyle();
+
+  const topResults = snapshot.resultsPreview.slice(0, 5);
+  const uniqueShops = getUniqueShopCount(snapshot.resultsPreview);
+  const priceSummary = collectPriceSummary(snapshot.resultsPreview);
+  const statusLabel = lastKnownState?.lastSync.message ?? snapshot.statusMessage;
+  const keywordLabel = snapshot.keyword?.trim() || '(keyword belum terbaca)';
+  const overlay = document.getElementById(OVERLAY_ID) ?? document.createElement('section');
+
+  overlay.id = OVERLAY_ID;
+  overlay.innerHTML = `
+    <div class="levelup-header">
+      <div>
+        <div class="levelup-title">Riset Market | LevelUP adsPRO</div>
+        <div class="levelup-subtitle">Keyword: ${keywordLabel}</div>
+        <div class="levelup-status">${statusLabel}</div>
+      </div>
+      <div class="levelup-chip">Shopee Search</div>
+    </div>
+    <div class="levelup-body">
+      <div class="levelup-stats">
+        <div class="levelup-card">
+          <div class="levelup-card-label">Preview Result</div>
+          <div class="levelup-card-value">${snapshot.resultsPreview.length}</div>
+        </div>
+        <div class="levelup-card">
+          <div class="levelup-card-label">Rentang Harga</div>
+          <div class="levelup-card-value">${priceSummary}</div>
+        </div>
+        <div class="levelup-card">
+          <div class="levelup-card-label">Toko Terdeteksi</div>
+          <div class="levelup-card-value">${uniqueShops}</div>
+        </div>
+      </div>
+      <div class="levelup-actions">
+        <button type="button" class="levelup-button levelup-button-primary" data-action="sync">Sync Now</button>
+        <button type="button" class="levelup-button levelup-button-secondary" data-action="refresh">Refresh Parser</button>
+      </div>
+      <div class="levelup-note">Mode public research aktif. Shop default tidak dipakai untuk sync halaman pencarian publik.</div>
+      <div class="levelup-results">
+        ${topResults
+          .map((result) => {
+            const meta = [
+              result.shopName,
+              typeof result.priceMin === 'number'
+                ? result.priceMin === result.priceMax
+                  ? formatCurrency(result.priceMin)
+                  : `${formatCurrency(result.priceMin)} - ${formatCurrency(result.priceMax)}`
+                : null,
+              result.salesHint,
+            ]
+              .filter(Boolean)
+              .join(' | ');
+
+            return `
+              <div class="levelup-result">
+                <div class="levelup-result-title">${result.position}. ${result.productTitle}</div>
+                <div class="levelup-result-meta">${meta || 'Belum ada metadata tambahan.'}</div>
+              </div>
+            `;
+          })
+          .join('')}
+      </div>
+    </div>
+  `;
+
+  const { parent, before } = getOverlayHost();
+  if (!overlay.isConnected) {
+    parent.insertBefore(overlay, before);
+  }
+
+  const syncButton = overlay.querySelector<HTMLButtonElement>(
+    '[data-action="sync"]',
+  );
+  const refreshButton = overlay.querySelector<HTMLButtonElement>(
+    '[data-action="refresh"]',
+  );
+
+  syncButton?.addEventListener('click', async () => {
+    if (!syncButton) {
+      return;
+    }
+
+    syncButton.disabled = true;
+    const previousLabel = syncButton.textContent;
+    syncButton.textContent = 'Syncing...';
+
+    try {
+      await sendBackgroundMessage<{ batchId: string; state: ExtensionState }>({
+        type: 'SYNC_NOW',
+      });
+      await refreshKnownState();
+      if (lastSnapshot) {
+        renderOverlay(lastSnapshot);
+      }
+    } catch (error) {
+      const statusElement = overlay.querySelector<HTMLElement>('.levelup-status');
+      statusElement!.textContent =
+        error instanceof Error ? error.message : 'Sync gagal dari overlay.';
+    } finally {
+      syncButton.disabled = false;
+      syncButton.textContent = previousLabel ?? 'Sync Now';
+    }
+  });
+
+  refreshButton?.addEventListener('click', () => {
+    queueRefresh();
+  });
+}
 
 async function sendSnapshot() {
   const payload = detectPageSnapshot(document);
+  lastSnapshot = payload;
   await chrome.runtime.sendMessage({
     type: 'PAGE_SNAPSHOT_UPDATED',
     payload,
   } satisfies DetectionMessage);
+  renderOverlay(payload);
+}
+
+function queueRefresh() {
+  if (refreshTimeoutId) {
+    window.clearTimeout(refreshTimeoutId);
+  }
+
+  refreshTimeoutId = window.setTimeout(() => {
+    void sendSnapshot();
+  }, 300);
 }
 
 function watchRouteChanges() {
   window.setInterval(() => {
     if (window.location.href !== lastUrl) {
       lastUrl = window.location.href;
-      void sendSnapshot();
+      queueRefresh();
     }
   }, 1000);
+}
+
+function watchDomChanges() {
+  mutationObserver?.disconnect();
+  mutationObserver = new MutationObserver((mutations) => {
+    const shouldRefresh = mutations.some((mutation) => {
+      const changedNodes = [
+        ...Array.from(mutation.addedNodes),
+        ...Array.from(mutation.removedNodes),
+      ];
+
+      if (changedNodes.length === 0) {
+        return !isManagedOverlayNode(mutation.target);
+      }
+
+      return changedNodes.some((node) => !isManagedOverlayNode(node));
+    });
+
+    if (!shouldRefresh) {
+      return;
+    }
+
+    queueRefresh();
+  });
+
+  mutationObserver.observe(document.body, {
+    childList: true,
+    subtree: true,
+  });
 }
 
 chrome.runtime.onMessage.addListener((message: DetectionMessage) => {
@@ -26,5 +471,6 @@ chrome.runtime.onMessage.addListener((message: DetectionMessage) => {
   }
 });
 
-void sendSnapshot();
+void refreshKnownState().then(() => sendSnapshot());
 watchRouteChanges();
+watchDomChanges();

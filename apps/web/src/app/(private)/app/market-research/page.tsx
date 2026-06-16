@@ -230,15 +230,22 @@ export default function MarketResearchPage() {
                   <div className="mt-3 space-y-2 text-sm text-slate-100">
                     <p>
                       Shop:{" "}
-                      {batch.shop
-                        ? batch.shop.name || batch.shop.externalId
-                        : "Public capture / tanpa shop"}
+                      {batch.captureMode === "public"
+                        ? "Tidak dipakai untuk public research"
+                        : batch.shop
+                          ? batch.shop.name || batch.shop.externalId
+                          : "Belum ada shop context"}
                     </p>
                     <p>
                       Marketplace:{" "}
-                      {batch.shop ? batch.shop.marketplace.name : "-"}
+                      {batch.shop ? batch.shop.marketplace.name : batch.marketplace}
                     </p>
-                    <p>Status: {batch.shop?.status ?? "-"}</p>
+                    <p>
+                      Status:{" "}
+                      {batch.captureMode === "public"
+                        ? "Public capture"
+                        : batch.shop?.status ?? "-"}
+                    </p>
                   </div>
                 </div>
 
