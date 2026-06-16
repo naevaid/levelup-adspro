@@ -33,6 +33,10 @@ function formatCurrency(value?: number) {
   return `Rp${value.toLocaleString('id-ID')}`;
 }
 
+function cleanProductTitle(title: string) {
+  return normalizeText(title).replace(/^view product:\s*/i, '');
+}
+
 function collectPriceSummary(results: PageSnapshot['resultsPreview']) {
   const priceValues = results.flatMap((result) =>
     [result.priceMin, result.priceMax].filter(
@@ -454,7 +458,7 @@ function ensureOverlayStyle() {
 
     #${OVERLAY_ID} .levelup-result-title {
       font-size: 12px;
-      font-weight: 700;
+      font-weight: 400;
       line-height: 1.5;
       color: #111827;
       min-height: 36px;
@@ -585,6 +589,7 @@ function renderOverlay(snapshot: PageSnapshot) {
       <div class="levelup-results">
         ${topResults
           .map((result) => {
+            const cleanTitle = cleanProductTitle(result.productTitle);
             const meta = [
               result.shopName,
               typeof result.priceMin === 'number'
@@ -602,12 +607,12 @@ function renderOverlay(snapshot: PageSnapshot) {
                 <div class="levelup-result-thumb">
                   ${
                     result.imageUrl
-                      ? `<img src="${result.imageUrl}" alt="${result.productTitle}" loading="lazy" referrerpolicy="no-referrer" />`
+                      ? `<img src="${result.imageUrl}" alt="${cleanTitle}" loading="lazy" referrerpolicy="no-referrer" />`
                       : ''
                   }
                 </div>
                 <div class="levelup-result-rank">Top ${result.position}</div>
-                <div class="levelup-result-title">${result.productTitle}</div>
+                <div class="levelup-result-title">${cleanTitle}</div>
                 <div class="levelup-result-shop">${result.shopName || 'Toko belum terbaca'}</div>
                 <div class="levelup-result-meta">${meta || 'Belum ada metadata tambahan.'}</div>
               </div>
@@ -619,7 +624,12 @@ function renderOverlay(snapshot: PageSnapshot) {
   `;
 
   const { parent, before } = getOverlayHost();
-  if (!overlay.isConnected) {
+  const shouldMoveOverlay =
+    !overlay.isConnected ||
+    overlay.parentElement !== parent ||
+    (before instanceof Node && overlay.nextSibling !== before);
+
+  if (shouldMoveOverlay) {
     parent.insertBefore(overlay, before);
   }
 
