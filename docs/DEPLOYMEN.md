@@ -64,6 +64,7 @@ Pastikan service `minio` juga `running`, karena Sprint 3 mulai menyimpan raw pay
 ```bash
 curl -I https://adspro.naeva.id/
 curl -I https://adspro.naeva.id/signup
+curl -I https://adspro.naeva.id/privacy-policy
 ```
 
 Jika perlu cek API:

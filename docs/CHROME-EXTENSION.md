@@ -76,6 +76,12 @@ Yang perlu Anda siapkan untuk listing:
 - kategori extension
 - privacy policy bila diminta oleh form listing
 
+URL privacy policy publik untuk listing Chrome Web Store:
+
+```text
+https://adspro.naeva.id/privacy-policy
+```
+
 ## Catatan
 
 - Untuk development lokal, popup mendukung ganti `API Base URL`

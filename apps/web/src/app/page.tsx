@@ -102,6 +102,12 @@ export default async function Home() {
               >
                 Buka App Shell
               </Link>
+              <Link
+                href="/privacy-policy"
+                className="rounded-full border border-white/12 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100"
+              >
+                Kebijakan Privasi
+              </Link>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
