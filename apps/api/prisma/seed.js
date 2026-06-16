@@ -1,4 +1,9 @@
-const { PrismaClient, BillingInterval, PlanStatus } = require('@prisma/client');
+const {
+  PrismaClient,
+  BillingInterval,
+  MarketplaceCode,
+  PlanStatus,
+} = require('@prisma/client');
 
 const prisma = new PrismaClient();
 
@@ -62,12 +67,31 @@ const plans = [
   },
 ];
 
+const marketplaces = [
+  {
+    code: MarketplaceCode.SHOPEE,
+    name: 'Shopee',
+  },
+  {
+    code: MarketplaceCode.TIKTOK_SHOP,
+    name: 'TikTok Shop',
+  },
+];
+
 async function main() {
   for (const plan of plans) {
     await prisma.plan.upsert({
       where: { code: plan.code },
       update: plan,
       create: plan,
+    });
+  }
+
+  for (const marketplace of marketplaces) {
+    await prisma.marketplace.upsert({
+      where: { code: marketplace.code },
+      update: marketplace,
+      create: marketplace,
     });
   }
 }

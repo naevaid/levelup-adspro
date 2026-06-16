@@ -49,6 +49,17 @@ enum SubscriptionStatus {
   CANCELED
 }
 
+enum MarketplaceCode {
+  SHOPEE
+  TIKTOK_SHOP
+}
+
+enum ShopStatus {
+  ACTIVE
+  DISCONNECTED
+  SUSPENDED
+}
+
 model User {
   id                   String          @id @default(uuid()) @db.Uuid
   email                String          @unique
@@ -78,6 +89,7 @@ model Organization {
   memberships    Membership[]
   userSessions   UserSession[]
   subscription   Subscription?
+  shops          Shop[]
 
   @@index([ownerUserId])
   @@map("organizations")
@@ -156,4 +168,34 @@ model Subscription {
   @@index([planId])
   @@index([organizationId, status])
   @@map("subscriptions")
+}
+
+model Marketplace {
+  id        String          @id @default(uuid()) @db.Uuid
+  code      MarketplaceCode @unique
+  name      String
+  createdAt DateTime        @default(now()) @map("created_at")
+  updatedAt DateTime        @updatedAt @map("updated_at")
+  shops     Shop[]
+
+  @@map("marketplaces")
+}
+
+model Shop {
+  id            String     @id @default(uuid()) @db.Uuid
+  organizationId String     @map("organization_id") @db.Uuid
+  marketplaceId String     @map("marketplace_id") @db.Uuid
+  externalId    String     @map("external_id")
+  name          String?
+  status        ShopStatus @default(ACTIVE)
+  metadataJson  Json       @default("{}") @map("metadata_json")
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+  organization  Organization @relation(fields: [organizationId], references: [id])
+  marketplace   Marketplace  @relation(fields: [marketplaceId], references: [id])
+
+  @@unique([organizationId, marketplaceId, externalId])
+  @@index([organizationId])
+  @@index([marketplaceId])
+  @@map("shops")
 }
