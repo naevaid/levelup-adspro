@@ -93,6 +93,11 @@ type ProductCardMatch = {
   rect: DOMRect;
 };
 
+type TextMarkerMatch = {
+  element: Element;
+  rect: DOMRect;
+};
+
 function getVisibleProductCards() {
   const matches: ProductCardMatch[] = [];
   const seenCards = new Set<Element>();
@@ -140,8 +145,47 @@ function countCardsInside(container: Element, cards: ProductCardMatch[]) {
   return cards.filter((candidate) => container.contains(candidate.card)).length;
 }
 
+function findTextMarker(pattern: RegExp, minTop = 120) {
+  const matches = Array.from(document.querySelectorAll('div, section, span, h1, h2, h3'))
+    .map((element) => {
+      const text = normalizeText(element.textContent);
+      if (!pattern.test(text)) {
+        return null;
+      }
+
+      const rect = element.getBoundingClientRect();
+      if (rect.width < 160 || rect.height < 16 || rect.top < minTop) {
+        return null;
+      }
+
+      return { element, rect } satisfies TextMarkerMatch;
+    })
+    .filter((match): match is TextMarkerMatch => match !== null)
+    .sort((left, right) => {
+      if (left.rect.top === right.rect.top) {
+        return left.rect.height - right.rect.height;
+      }
+
+      return left.rect.top - right.rect.top;
+    });
+
+  return matches[0] ?? null;
+}
+
 function getOverlayHost() {
-  const productCards = getVisibleProductCards();
+  const resultsHeaderMarker = findTextMarker(/hasil pencarian untuk/i);
+  const sortBarMarker =
+    findTextMarker(/urutkan/i, 160) ??
+    findTextMarker(/terkait.*terbaru.*terlaris.*harga/i, 160);
+
+  const contentStartTop =
+    sortBarMarker?.rect.top ??
+    resultsHeaderMarker?.rect.top ??
+    0;
+
+  const productCards = getVisibleProductCards().filter(
+    (candidate) => candidate.rect.top >= contentStartTop - 24,
+  );
   if (productCards.length === 0) {
     const mainContent = document.querySelector('main') ?? document.body;
 
@@ -188,6 +232,12 @@ function getOverlayHost() {
   const bestContainer =
     Array.from(containerCandidates.entries())
       .sort((left, right) => {
+        const topDelta = Math.abs(left[1].top - contentStartTop) - Math.abs(right[1].top - contentStartTop);
+
+        if (topDelta !== 0) {
+          return topDelta;
+        }
+
         if (right[1].count !== left[1].count) {
           return right[1].count - left[1].count;
         }
@@ -202,10 +252,26 @@ function getOverlayHost() {
     document.querySelector('main') ??
     document.body;
 
+  const insertAfterMarker =
+    sortBarMarker?.element ??
+    resultsHeaderMarker?.element ??
+    null;
+
   const firstCardInContainer =
     productCards.find((candidate) => overlayParent.contains(candidate.card))?.card ??
     productCards[0]?.card ??
     null;
+
+  if (
+    insertAfterMarker &&
+    overlayParent.contains(insertAfterMarker) &&
+    insertAfterMarker.nextSibling
+  ) {
+    return {
+      parent: overlayParent,
+      before: insertAfterMarker.nextSibling,
+    };
+  }
 
   return {
     parent: overlayParent,
