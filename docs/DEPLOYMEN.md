@@ -1,6 +1,6 @@
 # Deployment (VPS)
 
-Dokumen ini menjelaskan cara deploy `levelup-adspro` ke VPS secara manual menggunakan mekanisme yang saat ini dipakai di server: `docker compose` + `nginx` host reverse proxy + `systemd` service/timer untuk auto-poll.
+Dokumen ini menjelaskan cara deploy `levelup-adspro` ke VPS secara manual menggunakan mekanisme yang saat ini dipakai di server: `docker compose` + `nginx` host reverse proxy. Auto deploy berbasis timer/polling tidak dipakai.
 
 ## 1) Gambaran Arsitektur
 
@@ -18,8 +18,8 @@ Dokumen ini menjelaskan cara deploy `levelup-adspro` ke VPS secara manual menggu
   - Buat dari `.env.production.example` lalu isi value yang benar.
 - `infra/nginx/adspro.naeva.id.conf`
   - Contoh konfigurasi nginx yang benar (penting: `proxy_pass` untuk `/api/` tidak memakai trailing slash).
-- `infra/vps/systemd/*`
-  - Unit `systemd` untuk auto start dan polling deploy.
+- `infra/vps/systemd/levelup-adspro.service`
+  - Unit `systemd` opsional untuk auto-start stack setelah reboot, bukan untuk auto deploy.
 
 ## 3) Setup Awal (sekali saja)
 
@@ -117,22 +117,20 @@ Reload nginx setelah perubahan:
 nginx -t && systemctl reload nginx
 ```
 
-## 7) Auto Deploy (Polling) via systemd
+## 7) Opsional: Auto Start Setelah Reboot
 
-Jika auto deploy berbasis polling diaktifkan, VPS akan menjalankan `infra/vps/deploy.sh` secara berkala.
-
-File unit berada di:
-- `infra/vps/systemd/levelup-adspro.service`
-- `infra/vps/systemd/levelup-adspro-deploy.service`
-- `infra/vps/systemd/levelup-adspro-deploy.timer`
-
-Perintah umum:
+Jika ingin stack container otomatis hidup lagi setelah VPS reboot, gunakan service berikut:
 
 ```bash
-systemctl status levelup-adspro.service
-systemctl status levelup-adspro-deploy.timer
-journalctl -u levelup-adspro-deploy.service -n 200 --no-pager
+sudo cp infra/vps/systemd/levelup-adspro.service /etc/systemd/system/levelup-adspro.service
+sudo systemctl daemon-reload
+sudo systemctl enable levelup-adspro.service
+sudo systemctl start levelup-adspro.service
 ```
+
+Catatan:
+- Service ini hanya untuk `docker compose up -d` saat boot.
+- Service ini bukan auto deploy dan tidak melakukan `git pull`.
 
 ## 8) Troubleshooting
 
