@@ -26,6 +26,7 @@ let hasDeferredRefresh = false;
 let searchEnrichmentRequestId = 0;
 let productDetailEnrichmentRequestId = 0;
 let searchEnrichmentDebugLabel = '';
+let lastAppliedRoasDefaultsShopId: string | null = null;
 
 const OVERLAY_ID = 'levelup-adspro-market-overlay';
 const OVERLAY_STYLE_ID = 'levelup-adspro-market-overlay-style';
@@ -72,7 +73,6 @@ type RoasCalculatorState = {
   promoXtraEnabled: boolean;
   categoryLabel: string | null;
   kategoriFeePct: number | null;
-  pajakProdukPct: number | null;
 };
 
 const roasCalculatorState: RoasCalculatorState = {
@@ -83,8 +83,11 @@ const roasCalculatorState: RoasCalculatorState = {
   promoXtraEnabled: false,
   categoryLabel: null,
   kategoriFeePct: 0,
-  pajakProdukPct: 0,
 };
+
+const SHOPEE_ORDER_PROCESSING_FEE_IDR = 1250;
+const SHOPEE_PROMO_XTRA_FEE_PCT = 4.5;
+const SHOPEE_PROMO_XTRA_FEE_CAP_IDR = 60000;
 
 type CategoryPickerCatalog = Record<
   RoasCalculatorState['storeType'],
@@ -111,6 +114,32 @@ const roasCategoryCatalogState: {
 
 function hasExtensionLogin(state?: ExtensionState | null) {
   return Boolean(state?.authSession && state?.extensionSession);
+}
+
+function getSelectedShopRoasDefaults(state: ExtensionState | null) {
+  const selectedShopId = state?.selectedShopId ?? null;
+  if (!selectedShopId) {
+    return null;
+  }
+
+  const shop = state?.shops?.find((entry) => entry.id === selectedShopId) ?? null;
+  const defaults = shop?.roasDefaults ?? null;
+  if (!defaults) {
+    return null;
+  }
+
+  const storeType =
+    defaults.storeType === 'non_star' ||
+    defaults.storeType === 'star' ||
+    defaults.storeType === 'mall'
+      ? defaults.storeType
+      : null;
+
+  return {
+    shopId: selectedShopId,
+    storeType,
+    promoXtraEnabled: Boolean(defaults.promoXtraEnabled),
+  };
 }
 
 function normalizeText(rawValue?: string | null) {
@@ -1319,6 +1348,104 @@ function ensureOverlayStyle() {
       display: flex;
       justify-content: space-between;
       gap: 10px;
+      align-items: flex-start;
+      position: relative;
+      overflow: visible;
+    }
+
+    #${OVERLAY_ID} .levelup-roas-tier-main {
+      display: inline-flex;
+      align-items: center;
+      min-width: 0;
+    }
+
+    #${OVERLAY_ID} .levelup-roas-tier-label {
+      min-width: 0;
+    }
+
+    #${OVERLAY_ID} .levelup-tooltip {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    #${OVERLAY_ID} .levelup-tooltip-trigger {
+      border: none;
+      background: transparent;
+      padding: 0;
+      margin: 0;
+      color: #dc2626;
+      font-size: 13px;
+      line-height: 1;
+      font-weight: 700;
+      cursor: help;
+    }
+
+    #${OVERLAY_ID} .levelup-tooltip-panel {
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 10px);
+      transform: translateX(-50%) translateY(4px);
+      min-width: 220px;
+      max-width: 280px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(17, 24, 39, 0.96);
+      color: #f8fafc;
+      box-shadow: 0 18px 38px rgba(15, 23, 42, 0.28);
+      border: 1px solid rgba(248, 113, 113, 0.18);
+      font-size: 12px;
+      line-height: 1.5;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition:
+        opacity 140ms ease,
+        transform 140ms ease,
+        visibility 140ms ease;
+      z-index: 35;
+      white-space: normal;
+    }
+
+    #${OVERLAY_ID} .levelup-tooltip-panel::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 100%;
+      width: 10px;
+      height: 10px;
+      transform: translateX(-50%) rotate(45deg);
+      background: rgba(17, 24, 39, 0.96);
+      border-right: 1px solid rgba(248, 113, 113, 0.18);
+      border-bottom: 1px solid rgba(248, 113, 113, 0.18);
+    }
+
+    #${OVERLAY_ID} .levelup-tooltip:hover .levelup-tooltip-panel,
+    #${OVERLAY_ID} .levelup-tooltip:focus-within .levelup-tooltip-panel {
+      opacity: 1;
+      visibility: visible;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    #${OVERLAY_ID} .levelup-roas-tier:hover .levelup-tooltip-panel,
+    #${OVERLAY_ID} .levelup-roas-tier:focus-within .levelup-tooltip-panel {
+      opacity: 1;
+      visibility: visible;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    #${OVERLAY_ID} .levelup-tooltip-lines {
+      display: grid;
+      gap: 4px;
+    }
+
+    #${OVERLAY_ID} .levelup-field-label-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
     }
 
     #${OVERLAY_ID} .levelup-roas-tier[data-tone="danger"] {
@@ -2160,28 +2287,78 @@ function computeRoasMetrics() {
   const hpp = roasCalculatorState.hpp ?? 0;
   const operasional = roasCalculatorState.operasional ?? 0;
   const kategoriPct = roasCalculatorState.kategoriFeePct ?? 0;
-  const pajakProdukPct = roasCalculatorState.pajakProdukPct ?? 0;
-  const pajakOngkirPct = 0;
 
   const feeKategori = price * (kategoriPct / 100);
-  const pajakProduk = price * (pajakProdukPct / 100);
-  const pajakOngkir = price * (pajakOngkirPct / 100);
-  const biayaPokok = hpp + operasional + feeKategori + pajakProduk + pajakOngkir;
+  const feePromoXtra = roasCalculatorState.promoXtraEnabled
+    ? Math.min(
+        price * (SHOPEE_PROMO_XTRA_FEE_PCT / 100),
+        SHOPEE_PROMO_XTRA_FEE_CAP_IDR,
+      )
+    : 0;
+  const feeProsesPesanan = SHOPEE_ORDER_PROCESSING_FEE_IDR;
+  const totalBiayaShopee = feeKategori + feePromoXtra + feeProsesPesanan;
+  const totalBiayaShopeePct = (totalBiayaShopee / price) * 100;
+
+  const biayaPokok = hpp + operasional + totalBiayaShopee;
   const profitSebelumIklan = price - biayaPokok;
 
   const tiers = [
-    { key: 'rugi', label: 'Rugi', tone: 'danger', roas: 1.8 },
-    { key: 'kompetitif', label: 'Kompetitif', tone: 'warning', roas: 3.0 },
-    { key: 'konservatif', label: 'Konservatif', tone: 'safe', roas: 3.5 },
-    { key: 'prospektif', label: 'Prospektif', tone: 'prospect', roas: 7.0 },
+    { key: 'rugi', label: 'Rugi', tone: 'danger', adSpendShare: 1.0 },
+    { key: 'kompetitif', label: 'Kompetitif', tone: 'warning', adSpendShare: 0.7 },
+    { key: 'konservatif', label: 'Konservatif', tone: 'safe', adSpendShare: 0.5 },
+    { key: 'prospektif', label: 'Prospektif', tone: 'prospect', adSpendShare: 0.25 },
   ].map((tier) => {
-    const biayaIklan = price / tier.roas;
+    if (!Number.isFinite(profitSebelumIklan) || profitSebelumIklan <= 0) {
+      return {
+        ...tier,
+        roas: null as number | null,
+        biayaIklan: null as number | null,
+        profit: profitSebelumIklan,
+        marginPct: (profitSebelumIklan / price) * 100,
+      };
+    }
+
+    const biayaIklan = profitSebelumIklan * tier.adSpendShare;
+    const roas = biayaIklan > 0 ? price / biayaIklan : null;
     const profit = profitSebelumIklan - biayaIklan;
     const marginPct = (profit / price) * 100;
-    return { ...tier, biayaIklan, profit, marginPct };
+    return { ...tier, roas, biayaIklan, profit, marginPct };
   });
 
-  return { price, biayaPokok, profitSebelumIklan, tiers };
+  return {
+    price,
+    biayaPokok,
+    profitSebelumIklan,
+    tiers,
+    totalBiayaShopee,
+    totalBiayaShopeePct,
+    feeKategori,
+    feePromoXtra,
+    feeProsesPesanan,
+  };
+}
+
+function getRoasTierTooltipText(
+  key: 'rugi' | 'kompetitif' | 'konservatif' | 'prospektif',
+  roasValue: number | null,
+) {
+  if (typeof roasValue !== 'number' || !Number.isFinite(roasValue) || roasValue <= 0) {
+    return 'Nilai ROAS belum bisa dihitung karena profit sebelum iklan <= 0.';
+  }
+
+  if (key === 'rugi') {
+    return `Jika ROAS anda di bawah ${roasValue.toFixed(1)}, maka iklan anda boncos.`;
+  }
+
+  if (key === 'kompetitif') {
+    return 'Pakai target ROAS ini untuk iklan dengan tujuan traffic.';
+  }
+
+  if (key === 'konservatif') {
+    return 'Pakai target ROAS ini untuk iklan dengan tujuan profit.';
+  }
+
+  return 'Alokasi ROAS ini hanya untuk tes pasar, bukan hero product.';
 }
 
 function closeRoasCalculator() {
@@ -2334,6 +2511,215 @@ async function loadRoasCategoryCatalog(force = false) {
   return request;
 }
 
+type ShopeeBreadcrumbCategory = {
+  primary: string | null;
+  secondary: string | null;
+  name: string | null;
+  parts: string[];
+};
+
+type RoasCategorySuggestion = {
+  storeType: RoasCalculatorState['storeType'];
+  primary: string;
+  secondary: string | null;
+  name: string | null;
+  pct: number | null;
+};
+
+let lastRoasCategorySuggestion: RoasCategorySuggestion | null = null;
+let lastRoasCategorySuggestionKey: string | null = null;
+
+function normalizeComparableLabel(value: string) {
+  return normalizeText(value).toLowerCase();
+}
+
+function extractShopeeBreadcrumbCategory(): ShopeeBreadcrumbCategory | null {
+  const selectors = [
+    '.page-product__breadcrumb a',
+    '.shopee-breadcrumb a',
+    '[aria-label="breadcrumb"] a',
+    'nav[aria-label="breadcrumb"] a',
+    'nav[aria-label="Breadcrumb"] a',
+    '.breadcrumb a',
+  ];
+
+  let parts: string[] = [];
+  for (const selector of selectors) {
+    const nodes = Array.from(document.querySelectorAll<HTMLElement>(selector));
+    const labels = nodes
+      .map((node) => normalizeText(node.textContent))
+      .filter((label) => label.length > 0);
+    if (labels.length >= 2) {
+      parts = labels;
+      break;
+    }
+  }
+
+  if (parts.length < 2) {
+    return null;
+  }
+
+  const cleaned = parts
+    .map((part) => normalizeText(part))
+    .filter((part) => part.length > 0)
+    .filter((part) => normalizeComparableLabel(part) !== 'shopee');
+
+  if (cleaned.length === 0) {
+    return null;
+  }
+
+  return {
+    parts: cleaned,
+    primary: cleaned[0] ?? null,
+    secondary: cleaned[1] ?? null,
+    name: cleaned[2] ?? null,
+  };
+}
+
+function findBestRoasCatalogMatch(
+  catalog: CategoryPickerCatalog,
+  storeType: RoasCalculatorState['storeType'],
+  breadcrumb: ShopeeBreadcrumbCategory,
+) {
+  const groups = catalog[storeType] ?? [];
+  if (groups.length === 0) {
+    return null;
+  }
+
+  const primaryCandidate = breadcrumb.primary ? normalizeComparableLabel(breadcrumb.primary) : null;
+  const secondaryCandidate = breadcrumb.secondary ? normalizeComparableLabel(breadcrumb.secondary) : null;
+  const nameCandidate = breadcrumb.name ? normalizeComparableLabel(breadcrumb.name) : null;
+
+  const groupIndex = primaryCandidate
+    ? groups.findIndex((group) => normalizeComparableLabel(group.name) === primaryCandidate)
+    : -1;
+  const resolvedGroup = groupIndex >= 0 ? groups[groupIndex] : null;
+
+  const fallbackGroupIndex =
+    resolvedGroup || !primaryCandidate
+      ? groupIndex
+      : groups.findIndex((group) =>
+          breadcrumb.parts.some(
+            (part) => normalizeComparableLabel(group.name) === normalizeComparableLabel(part),
+          ),
+        );
+  const finalGroupIndex = fallbackGroupIndex >= 0 ? fallbackGroupIndex : -1;
+  const group = finalGroupIndex >= 0 ? groups[finalGroupIndex] : null;
+  if (!group) {
+    return null;
+  }
+
+  const subs = group.subs ?? [];
+  const subIndex = secondaryCandidate
+    ? subs.findIndex((sub) => normalizeComparableLabel(sub.name) === secondaryCandidate)
+    : -1;
+  const resolvedSub = subIndex >= 0 ? subs[subIndex] : null;
+  const fallbackSubIndex =
+    resolvedSub || !secondaryCandidate
+      ? subIndex
+      : subs.findIndex((sub) =>
+          breadcrumb.parts.some(
+            (part) => normalizeComparableLabel(sub.name) === normalizeComparableLabel(part),
+          ),
+        );
+  const finalSubIndex = fallbackSubIndex >= 0 ? fallbackSubIndex : -1;
+  const sub = finalSubIndex >= 0 ? subs[finalSubIndex] : null;
+
+  const items = sub?.items ?? [];
+  const item =
+    nameCandidate && items.length
+      ? items.find((candidate) => normalizeComparableLabel(candidate.name) === nameCandidate) ??
+        items.find((candidate) =>
+          breadcrumb.parts.some(
+            (part) =>
+              normalizeComparableLabel(candidate.name) === normalizeComparableLabel(part),
+          ),
+        ) ??
+        null
+      : null;
+
+  return {
+    groupIndex: finalGroupIndex,
+    subIndex: finalSubIndex,
+    primary: group.name,
+    secondary: sub?.name ?? null,
+    name: item?.name ?? null,
+    pct: typeof item?.pct === 'number' ? item.pct : null,
+  };
+}
+
+async function maybeAutoSuggestRoasCategory(detail: ProductDetailSnapshot) {
+  const breadcrumb = extractShopeeBreadcrumbCategory();
+  if (!breadcrumb) {
+    return false;
+  }
+
+  const suggestionKey = `${detail.productUrl}|${roasCalculatorState.storeType}|${breadcrumb.parts.join('>')}`;
+  if (suggestionKey === lastRoasCategorySuggestionKey) {
+    return false;
+  }
+
+  const currentState = await sendBackgroundMessage<ExtensionState>({
+    type: 'GET_STATE',
+  }).catch(() => null);
+  if (currentState) {
+    lastKnownState = currentState;
+  }
+
+  if (!hasExtensionLogin(currentState ?? lastKnownState)) {
+    return false;
+  }
+
+  const catalog = await loadRoasCategoryCatalog().catch(() => null);
+  if (!catalog) {
+    return false;
+  }
+
+  lastRoasCategorySuggestionKey = suggestionKey;
+
+  const match = findBestRoasCatalogMatch(
+    catalog,
+    roasCalculatorState.storeType,
+    breadcrumb,
+  );
+  if (!match) {
+    lastRoasCategorySuggestion = {
+      storeType: roasCalculatorState.storeType,
+      primary: breadcrumb.primary ?? 'Lainnya',
+      secondary: breadcrumb.secondary,
+      name: breadcrumb.name,
+      pct: null,
+    };
+    return false;
+  }
+
+  lastRoasCategorySuggestion = {
+    storeType: roasCalculatorState.storeType,
+    primary: match.primary,
+    secondary: match.secondary,
+    name: match.name,
+    pct: match.pct,
+  };
+
+  const alreadyChosen =
+    Boolean(roasCalculatorState.categoryLabel) ||
+    (typeof roasCalculatorState.kategoriFeePct === 'number' &&
+      roasCalculatorState.kategoriFeePct > 0);
+
+  if (alreadyChosen) {
+    return false;
+  }
+
+  if (typeof match.pct === 'number' && Number.isFinite(match.pct)) {
+    const previousPct = roasCalculatorState.kategoriFeePct;
+    roasCalculatorState.categoryLabel = match.primary;
+    roasCalculatorState.kategoriFeePct = match.pct;
+    return previousPct !== match.pct;
+  }
+
+  return false;
+}
+
 function openRoasCategoryLoginGate(storeTypeLabel: string) {
   const overlay = document.getElementById(OVERLAY_ID);
   if (!overlay) {
@@ -2469,6 +2855,7 @@ async function openRoasCategoryPicker() {
   let isLoading = true;
   let loadError: string | null = null;
   let activePrimaryCategoryLabel = '';
+  let hasAppliedSuggestion = false;
 
   const groupList = modal.querySelector<HTMLElement>('[data-role="group-list"]');
   const subList = modal.querySelector<HTMLElement>('[data-role="sub-list"]');
@@ -2478,6 +2865,33 @@ async function openRoasCategoryPicker() {
 
   const render = () => {
     const groups = catalog[roasCalculatorState.storeType] ?? [];
+    if (
+      !hasAppliedSuggestion &&
+      lastRoasCategorySuggestion &&
+      lastRoasCategorySuggestion.storeType === roasCalculatorState.storeType &&
+      groups.length > 0
+    ) {
+      const suggestedGroupIndex = groups.findIndex(
+        (group) =>
+          normalizeComparableLabel(group.name) ===
+          normalizeComparableLabel(lastRoasCategorySuggestion.primary),
+      );
+      if (suggestedGroupIndex >= 0) {
+        activeGroupIndex = suggestedGroupIndex;
+        const subs = groups[suggestedGroupIndex]?.subs ?? [];
+        if (lastRoasCategorySuggestion.secondary) {
+          const suggestedSubIndex = subs.findIndex(
+            (sub) =>
+              normalizeComparableLabel(sub.name) ===
+              normalizeComparableLabel(lastRoasCategorySuggestion.secondary ?? ''),
+          );
+          if (suggestedSubIndex >= 0) {
+            activeSubIndex = suggestedSubIndex;
+          }
+        }
+      }
+      hasAppliedSuggestion = true;
+    }
     const activeGroup = groups[activeGroupIndex] ?? groups[0] ?? null;
     const subs = activeGroup?.subs ?? [];
     const activeSub = subs[activeSubIndex] ?? subs[0] ?? null;
@@ -2688,9 +3102,40 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
   isRoasCalculatorOpen = true;
   isOverlayInteractionLocked = true;
 
+  const defaults = getSelectedShopRoasDefaults(lastKnownState);
+  if (defaults) {
+    if (defaults.shopId !== lastAppliedRoasDefaultsShopId) {
+      const previousStoreType = roasCalculatorState.storeType;
+      if (defaults.storeType) {
+        roasCalculatorState.storeType = defaults.storeType;
+      }
+      roasCalculatorState.promoXtraEnabled = defaults.promoXtraEnabled;
+      lastAppliedRoasDefaultsShopId = defaults.shopId;
+
+      if (roasCalculatorState.storeType !== previousStoreType) {
+        roasCalculatorState.categoryLabel = null;
+        roasCalculatorState.kategoriFeePct = 0;
+        lastRoasCategorySuggestion = null;
+        lastRoasCategorySuggestionKey = null;
+      }
+    }
+  } else {
+    lastAppliedRoasDefaultsShopId = null;
+  }
+
   if (roasCalculatorState.price === null) {
     roasCalculatorState.price = getRepresentativeProductPrice(detail);
   }
+
+  void maybeAutoSuggestRoasCategory(detail).then((didUpdate) => {
+    if (!didUpdate) {
+      return;
+    }
+    if (!isRoasCalculatorOpen || lastRoasProductDetail?.productUrl !== detail.productUrl) {
+      return;
+    }
+    openRoasCalculator(detail);
+  });
 
   const existing = overlay.querySelector<HTMLElement>('[data-role="roas-modal"]');
   if (existing) {
@@ -2699,7 +3144,11 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
 
   const metrics = computeRoasMetrics();
   const tiers = metrics?.tiers ?? [];
-  const profitPrimary = tiers.find((tier) => tier.key === 'kompetitif') ?? null;
+  const profitSebelumIklan = metrics?.profitSebelumIklan ?? null;
+  const profitSebelumIklanPct =
+    metrics && typeof metrics.price === 'number' && metrics.price > 0
+      ? (metrics.profitSebelumIklan / metrics.price) * 100
+      : null;
 
   const modal = document.createElement('div');
   modal.className = 'levelup-modal-backdrop';
@@ -2717,9 +3166,12 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
         ${tiers
           .map(
             (tier) => `
-              <div class="levelup-roas-tier" data-tone="${tier.tone}">
-                <span>${tier.label} ROAS ${tier.roas.toFixed(1)}</span>
-                <span>${formatCompactCurrency(Math.round(tier.profit))}</span>
+              <div class="levelup-roas-tier" data-tone="${tier.tone}" data-key="${tier.key}">
+                <div class="levelup-roas-tier-main">
+                  <span class="levelup-roas-tier-label" data-role="roas-tier-label">${tier.label} ROAS ${typeof tier.roas === 'number' ? tier.roas.toFixed(1) : '-'}</span>
+                </div>
+                <span data-role="roas-tier-profit">${formatCompactCurrency(Math.round(tier.profit))}</span>
+                <span class="levelup-tooltip-panel" data-role="roas-tier-tooltip">${getRoasTierTooltipText(tier.key, tier.roas)}</span>
               </div>
             `,
           )
@@ -2734,21 +3186,6 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
           <div class="levelup-roas-field">
             <div class="levelup-roas-field-label">Harga Jual</div>
             <input class="levelup-roas-input" data-field="price" inputmode="numeric" placeholder="Rp 0" value="${roasCalculatorState.price ? formatCompactCurrency(roasCalculatorState.price) : ''}" />
-          </div>
-          <div class="levelup-roas-field">
-            <div class="levelup-roas-field-label">Operasional</div>
-            <input class="levelup-roas-input" data-field="operasional" inputmode="numeric" placeholder="Rp 0" value="${roasCalculatorState.operasional ? formatCompactCurrency(roasCalculatorState.operasional) : ''}" />
-          </div>
-          <div class="levelup-roas-field">
-            <div class="levelup-roas-field-label">Kategori Produk</div>
-            <div class="levelup-roas-field-row">
-              <button type="button" class="levelup-button levelup-button-secondary levelup-roas-category-button" data-action="roas-pick-category">${roasCalculatorState.categoryLabel ? roasCalculatorState.categoryLabel : 'Pilih'}</button>
-              <input class="levelup-roas-input" data-variant="pct" data-field="kategoriFeePct" inputmode="decimal" placeholder="0.00" value="${roasCalculatorState.kategoriFeePct ?? 0}" />
-            </div>
-          </div>
-          <div class="levelup-roas-field">
-            <div class="levelup-roas-field-label">Pajak Produk (%)</div>
-            <input class="levelup-roas-input" data-field="pajakProdukPct" inputmode="decimal" placeholder="0.00" value="${roasCalculatorState.pajakProdukPct ?? 0}" />
           </div>
           <div class="levelup-roas-field">
             <div class="levelup-roas-field-label">Jenis Toko</div>
@@ -2767,12 +3204,37 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
               </div>
             </div>
           </div>
+          <div class="levelup-roas-field">
+            <div class="levelup-roas-field-label">Kategori Produk</div>
+            <div class="levelup-roas-field-row">
+              <button type="button" class="levelup-button levelup-button-secondary levelup-roas-category-button" data-action="roas-pick-category">${roasCalculatorState.categoryLabel ? roasCalculatorState.categoryLabel : 'Pilih'}</button>
+              <input class="levelup-roas-input" data-variant="pct" data-field="kategoriFeePct" inputmode="decimal" placeholder="0.00" value="${roasCalculatorState.kategoriFeePct ?? 0}" />
+            </div>
+          </div>
+          <div class="levelup-roas-field">
+            <div class="levelup-roas-field-label">Operasional</div>
+            <input class="levelup-roas-input" data-field="operasional" inputmode="numeric" placeholder="Rp 0" value="${roasCalculatorState.operasional ? formatCompactCurrency(roasCalculatorState.operasional) : ''}" />
+          </div>
+          <div class="levelup-roas-field">
+            <div class="levelup-roas-field-label levelup-field-label-row">
+              <span>Biaya Shopee (Total)</span>
+              <span class="levelup-tooltip">
+                <button type="button" class="levelup-tooltip-trigger" data-role="tooltip-trigger" aria-label="Info Biaya Shopee">ⓘ</button>
+                <span class="levelup-tooltip-panel">
+                  <span class="levelup-tooltip-lines" data-role="roas-shopee-tooltip-content"></span>
+                </span>
+              </span>
+            </div>
+            <div class="levelup-roas-output">
+              <span data-role="roas-shopee-fee">-</span>
+            </div>
+          </div>
         </div>
         <div class="levelup-roas-field">
           <div class="levelup-roas-field-label">Profit Kotor</div>
           <div class="levelup-roas-output">
-            <span data-role="roas-profit-label">${profitPrimary ? formatCompactCurrency(Math.round(profitPrimary.profit)) : '-'}</span>
-            <small data-role="roas-profit-pct">${profitPrimary ? formatPercent(profitPrimary.marginPct) : '-'}</small>
+            <span data-role="roas-profit-label">${typeof profitSebelumIklan === 'number' ? formatCompactCurrency(Math.round(profitSebelumIklan)) : '-'}</span>
+            <small data-role="roas-profit-pct">${typeof profitSebelumIklanPct === 'number' ? formatPercent(profitSebelumIklanPct) : '-'}</small>
           </div>
         </div>
       </div>
@@ -2787,29 +3249,75 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
   const promoToggle = modal.querySelector<HTMLInputElement>('[data-field="promoXtraEnabled"]');
   const profitLabel = modal.querySelector<HTMLElement>('[data-role="roas-profit-label"]');
   const profitPct = modal.querySelector<HTMLElement>('[data-role="roas-profit-pct"]');
+  const shopeeFeeLabel = modal.querySelector<HTMLElement>('[data-role="roas-shopee-fee"]');
+  const shopeeFeeTooltipContent = modal.querySelector<HTMLElement>(
+    '[data-role="roas-shopee-tooltip-content"]',
+  );
 
   const refreshComputed = () => {
     const computed = computeRoasMetrics();
-    const primary = computed?.tiers.find((tier) => tier.key === 'kompetitif') ?? null;
     if (profitLabel) {
-      profitLabel.textContent = primary ? formatCompactCurrency(Math.round(primary.profit)) : '-';
+      profitLabel.textContent =
+        computed && typeof computed.profitSebelumIklan === 'number'
+          ? formatCompactCurrency(Math.round(computed.profitSebelumIklan))
+          : '-';
     }
     if (profitPct) {
-      profitPct.textContent = primary ? formatPercent(primary.marginPct) : '-';
+      profitPct.textContent =
+        computed &&
+        typeof computed.price === 'number' &&
+        computed.price > 0 &&
+        typeof computed.profitSebelumIklan === 'number'
+          ? formatPercent((computed.profitSebelumIklan / computed.price) * 100)
+          : '-';
+    }
+    if (shopeeFeeLabel) {
+      shopeeFeeLabel.textContent = computed
+        ? `${formatCompactCurrency(Math.round(computed.totalBiayaShopee))} (${formatPercent(computed.totalBiayaShopeePct)})`
+        : '-';
+    }
+    if (shopeeFeeTooltipContent) {
+      if (!computed) {
+        shopeeFeeTooltipContent.innerHTML = '';
+      } else {
+        const parts = [
+          `Fee kategori: ${formatCompactCurrency(Math.round(computed.feeKategori))} (${formatPercent(roasCalculatorState.kategoriFeePct ?? 0)})`,
+          `Biaya proses pesanan: Rp${SHOPEE_ORDER_PROCESSING_FEE_IDR.toLocaleString('id-ID')}`,
+        ];
+        if (roasCalculatorState.promoXtraEnabled) {
+          parts.push(
+            `Promo Xtra: ${formatCompactCurrency(Math.round(computed.feePromoXtra))} (${SHOPEE_PROMO_XTRA_FEE_PCT.toFixed(1)}%, maks Rp${SHOPEE_PROMO_XTRA_FEE_CAP_IDR.toLocaleString('id-ID')})`,
+          );
+        }
+        shopeeFeeTooltipContent.innerHTML = parts
+          .map((part) => `<span>${part}</span>`)
+          .join('');
+      }
     }
 
     const tierElements = Array.from(modal.querySelectorAll<HTMLElement>('.levelup-roas-tier'));
     for (const element of tierElements) {
-      const label = normalizeText(element.textContent);
-      const matched = label.match(/ROAS\s+(\d(?:\.\d)?)/i);
-      const roasValue = matched ? Number.parseFloat(matched[1]) : null;
-      const tier =
-        roasValue && computed
-          ? computed.tiers.find((candidate) => candidate.roas === roasValue) ?? null
-          : null;
-      const profitNode = element.querySelectorAll('span')[1];
+      const key = element.dataset.key as
+        | 'rugi'
+        | 'kompetitif'
+        | 'konservatif'
+        | 'prospektif'
+        | undefined;
+      const tier = key && computed ? computed.tiers.find((entry) => entry.key === key) ?? null : null;
+      const labelNode = element.querySelector<HTMLElement>('[data-role="roas-tier-label"]');
+      const profitNode = element.querySelector<HTMLElement>('[data-role="roas-tier-profit"]');
+      const tooltipNode = element.querySelector<HTMLElement>('[data-role="roas-tier-tooltip"]');
+
+      if (labelNode) {
+        labelNode.textContent = tier
+          ? `${tier.label} ROAS ${typeof tier.roas === 'number' ? tier.roas.toFixed(1) : '-'}`
+          : normalizeText(labelNode.textContent);
+      }
       if (profitNode) {
         profitNode.textContent = tier ? formatCompactCurrency(Math.round(tier.profit)) : '-';
+      }
+      if (tooltipNode && key) {
+        tooltipNode.textContent = getRoasTierTooltipText(key, tier?.roas ?? null);
       }
     }
   };
@@ -2825,7 +3333,6 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
     roasCalculatorState.promoXtraEnabled = false;
     roasCalculatorState.categoryLabel = null;
     roasCalculatorState.kategoriFeePct = 0;
-    roasCalculatorState.pajakProdukPct = 0;
     roasCalculatorState.price = getRepresentativeProductPrice(detail);
 
     for (const input of inputs) {

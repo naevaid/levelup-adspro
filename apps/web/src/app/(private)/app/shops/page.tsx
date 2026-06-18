@@ -18,6 +18,10 @@ type ShopSummary = {
   status: string;
   externalId: string;
   createdAt: string;
+  roasDefaults: {
+    storeType: "non_star" | "star" | "mall" | null;
+    promoXtraEnabled: boolean;
+  } | null;
   marketplace: MarketplaceSummary;
 };
 
@@ -27,6 +31,7 @@ export default function ShopsPage() {
   const [marketplaces, setMarketplaces] = useState<MarketplaceSummary[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [updatingShopId, setUpdatingShopId] = useState<string | null>(null);
 
   const [marketplaceId, setMarketplaceId] = useState<string>("");
   const [externalId, setExternalId] = useState("");
@@ -118,6 +123,34 @@ export default function ShopsPage() {
       );
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const updateRoasDefaults = async (
+    shopId: string,
+    payload: { defaultStoreType?: "non_star" | "star" | "mall"; promoXtraEnabled?: boolean },
+  ) => {
+    if (!authorization) {
+      return;
+    }
+
+    setUpdatingShopId(shopId);
+    try {
+      const updated = await apiFetch<ShopSummary>(`/api/v1/shops/${shopId}`, {
+        method: "PATCH",
+        headers: { Authorization: authorization },
+        body: JSON.stringify(payload),
+      });
+
+      setShops((previous) =>
+        previous.map((shop) => (shop.id === shopId ? updated : shop)),
+      );
+    } catch (patchError) {
+      setError(
+        patchError instanceof Error ? patchError.message : "Gagal memperbarui shop.",
+      );
+    } finally {
+      setUpdatingShopId(null);
     }
   };
 
@@ -241,6 +274,63 @@ export default function ShopsPage() {
                 <span className="rounded-full border border-white/12 px-4 py-2 text-xs font-semibold tracking-wide text-slate-100">
                   {shop.status}
                 </span>
+              </div>
+
+              <div className="mt-6 grid gap-4 rounded-3xl border border-white/10 bg-slate-950/35 p-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className="text-xs font-semibold tracking-wide text-slate-200">
+                    Default Jenis Toko (ROAS)
+                  </span>
+                  <select
+                    value={shop.roasDefaults?.storeType || "non_star"}
+                    onChange={(event) =>
+                      void updateRoasDefaults(shop.id, {
+                        defaultStoreType: event.target.value as
+                          | "non_star"
+                          | "star"
+                          | "mall",
+                      })
+                    }
+                    disabled={!authorization || updatingShopId === shop.id}
+                    className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    <option value="non_star">Non-Star</option>
+                    <option value="star">Star/Star+</option>
+                    <option value="mall">Mall</option>
+                  </select>
+                </label>
+
+                <div className="flex items-end justify-between gap-4 rounded-2xl border border-white/10 bg-slate-950/25 px-4 py-3">
+                  <div>
+                    <p className="text-xs font-semibold tracking-wide text-slate-200">
+                      Promo Xtra (ROAS)
+                    </p>
+                    <p className="mt-1 text-xs muted-text">
+                      Default toggle saat membuka kalkulator ROAS.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void updateRoasDefaults(shop.id, {
+                        promoXtraEnabled: !(shop.roasDefaults?.promoXtraEnabled ?? false),
+                      })
+                    }
+                    disabled={!authorization || updatingShopId === shop.id}
+                    className={`h-9 w-16 rounded-full border transition disabled:cursor-not-allowed disabled:opacity-70 ${
+                      shop.roasDefaults?.promoXtraEnabled
+                        ? "border-emerald-300/30 bg-emerald-400/20"
+                        : "border-white/12 bg-slate-900/45"
+                    }`}
+                    aria-label="Toggle Promo Xtra"
+                  >
+                    <span
+                      className={`block h-7 w-7 translate-x-1 rounded-full bg-white/85 shadow transition ${
+                        shop.roasDefaults?.promoXtraEnabled ? "translate-x-8" : ""
+                      }`}
+                    />
+                  </button>
+                </div>
               </div>
             </div>
           ))}

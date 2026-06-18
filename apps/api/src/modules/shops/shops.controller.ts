@@ -1,7 +1,17 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
 import type { AuthenticatedRequest } from '../auth/authenticated-request';
 import { CreateShopDto } from './dto/create-shop.dto';
+import { UpdateShopDto } from './dto/update-shop.dto';
 import { ShopsService } from './shops.service';
 
 @Controller('api/v1/shops')
@@ -21,5 +31,15 @@ export class ShopsController {
       request.auth.organization.id,
       dto,
     );
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Patch(':id')
+  update(
+    @Req() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() dto: UpdateShopDto,
+  ) {
+    return this.shopsService.updateForOrganization(request.auth.organization.id, id, dto);
   }
 }

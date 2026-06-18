@@ -197,6 +197,70 @@ Jika `contribution_margin_ratio <= 0`, maka:
 - produk secara struktur biaya tidak layak diiklankan
 - `Break Even ROAS` ditandai `invalid` atau `not achievable`
 
+## 8A. Product ROAS Estimator (Extension)
+
+Untuk modal `Kalkulator ROAS` di extension, pendekatan yang dipakai adalah estimator cepat per produk, bukan analytics historis campaign.
+
+### Input Minimum
+
+- `selling_price`
+- `hpp`
+- `operasional`
+- `category_fee_percent`
+- `promo_xtra_enabled`
+- `order_processing_fee`
+
+### Biaya Shopee (Total)
+
+```text
+category_fee_amount = selling_price * category_fee_percent
+promo_xtra_fee = jika aktif, min(selling_price * 4.5%, 60000)
+order_processing_fee = 1250
+
+total_shopee_cost =
+  category_fee_amount
+  + promo_xtra_fee
+  + order_processing_fee
+```
+
+### Biaya Pokok Sebelum Iklan
+
+```text
+base_cost_before_ads =
+  hpp
+  + operasional
+  + total_shopee_cost
+```
+
+### Profit Kotor Sebelum Iklan
+
+```text
+gross_profit_before_ads =
+  selling_price - base_cost_before_ads
+```
+
+### Tier ROAS Dinamis
+
+Tier di extension dihitung dari porsi `gross_profit_before_ads` yang dialokasikan sebagai biaya iklan:
+
+- `Rugi`: 100% dari profit sebelum iklan
+- `Kompetitif`: 70% dari profit sebelum iklan
+- `Konservatif`: 50% dari profit sebelum iklan
+- `Prospektif`: 25% dari profit sebelum iklan
+
+Rumus:
+
+```text
+ad_spend_for_tier = gross_profit_before_ads * tier_share
+tier_roas = selling_price / ad_spend_for_tier
+profit_after_ads_for_tier = gross_profit_before_ads - ad_spend_for_tier
+```
+
+Catatan:
+
+- jika `gross_profit_before_ads <= 0`, maka produk secara struktur biaya belum layak diiklankan dan tier ROAS harus ditandai tidak valid / belum bisa dihitung.
+- nilai tier ROAS harus berubah realtime ketika user mengubah `HPP`, `Harga Jual`, `Operasional`, `Kategori`, atau `Promo Xtra`.
+
 ## 9. Growth Formulas
 
 ### Revenue Growth Rate

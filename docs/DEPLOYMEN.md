@@ -84,7 +84,7 @@ Session extension dibuat dari user yang sudah login ke aplikasi:
 curl -X POST https://adspro.naeva.id/api/v1/extension/session \
   -H "Authorization: Bearer <user-session-token>" \
   -H "Content-Type: application/json" \
-  -d '{"deviceLabel":"Chrome Dev","extensionVersion":"0.1.0"}'
+  -d '{"deviceLabel":"Chrome Dev","extensionVersion":"0.1.1"}'
 ```
 
 Setelah dapat `accessToken` extension, heartbeat dan ingestion dasar bisa diuji:
@@ -160,3 +160,23 @@ journalctl -u levelup-adspro-deploy.service -n 200 --no-pager
 - Cek container MinIO:
   - `docker logs levelup-adspro-minio --tail 200`
 - Bucket raw capture akan dibuat otomatis saat payload pertama masuk, jadi kegagalan biasanya berasal dari kredensial atau konektivitas internal container.
+
+### Prisma migrate gagal karena nama index terlalu panjang (PostgreSQL identifier truncation)
+Kadang migration gagal dengan error seperti:
+
+- `relation "..._already exists"`
+
+Penyebab umum:
+
+- PostgreSQL membatasi panjang identifier dan memotong nama index yang terlalu panjang.
+- Dua index berbeda bisa menjadi nama yang sama setelah dipotong, sehingga bentrok.
+
+Solusi yang dipakai di repo ini:
+
+- Pastikan nama index dibuat pendek dan eksplisit di `schema.prisma` / `migration.sql`.
+- Jika migration sempat tercatat gagal di `_prisma_migrations`, lakukan recovery dengan `prisma migrate resolve` memakai binary lokal di container runner:
+
+```bash
+cd /opt/levelup-adspro/apps/api
+./node_modules/.bin/prisma migrate resolve --rolled-back <migration_name> --schema prisma/schema.prisma
+```

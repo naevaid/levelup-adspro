@@ -7,6 +7,7 @@ import {
 import { Prisma, SubscriptionStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateShopDto } from './dto/create-shop.dto';
+import { UpdateShopDto } from './dto/update-shop.dto';
 
 @Injectable()
 export class ShopsService {
@@ -20,6 +21,24 @@ export class ShopsService {
     });
 
     return shops.map((shop) => ({
+      roasDefaults:
+        shop.metadataJson &&
+        typeof shop.metadataJson === 'object' &&
+        'roasDefaults' in shop.metadataJson &&
+        shop.metadataJson.roasDefaults &&
+        typeof shop.metadataJson.roasDefaults === 'object' &&
+        'storeType' in shop.metadataJson.roasDefaults
+          ? {
+              storeType:
+                typeof shop.metadataJson.roasDefaults.storeType === 'string'
+                  ? shop.metadataJson.roasDefaults.storeType
+                  : null,
+              promoXtraEnabled:
+                typeof shop.metadataJson.roasDefaults.promoXtraEnabled === 'boolean'
+                  ? shop.metadataJson.roasDefaults.promoXtraEnabled
+                  : false,
+            }
+          : null,
       id: shop.id,
       name: shop.name,
       status: shop.status,
@@ -51,7 +70,12 @@ export class ShopsService {
           marketplaceId: marketplace.id,
           externalId: dto.externalId.trim(),
           name: dto.name?.trim() ? dto.name.trim() : null,
-          metadataJson: {},
+          metadataJson: {
+            roasDefaults: {
+              storeType: 'non_star',
+              promoXtraEnabled: false,
+            },
+          },
         },
         include: {
           marketplace: true,
@@ -59,6 +83,10 @@ export class ShopsService {
       });
 
       return {
+        roasDefaults: {
+          storeType: 'non_star',
+          promoXtraEnabled: false,
+        },
         id: shop.id,
         name: shop.name,
         status: shop.status,
@@ -81,6 +109,82 @@ export class ShopsService {
 
       throw error;
     }
+  }
+
+  async updateForOrganization(
+    organizationId: string,
+    shopId: string,
+    dto: UpdateShopDto,
+  ) {
+    const shop = await this.prisma.shop.findUnique({
+      where: { id: shopId },
+    });
+
+    if (!shop) {
+      throw new NotFoundException('Shop tidak ditemukan.');
+    }
+
+    if (shop.organizationId !== organizationId) {
+      throw new ForbiddenException('Tidak memiliki akses untuk mengubah shop ini.');
+    }
+
+    const existingMetadata =
+      shop.metadataJson && typeof shop.metadataJson === 'object'
+        ? (shop.metadataJson as Record<string, unknown>)
+        : {};
+    const existingRoasDefaultsRaw = existingMetadata['roasDefaults'];
+    const existingRoasDefaults =
+      existingRoasDefaultsRaw && typeof existingRoasDefaultsRaw === 'object'
+        ? (existingRoasDefaultsRaw as Record<string, unknown>)
+        : {};
+
+    const nextStoreType =
+      typeof dto.defaultStoreType === 'string'
+        ? dto.defaultStoreType
+        : typeof existingRoasDefaults['storeType'] === 'string'
+        ? (existingRoasDefaults['storeType'] as string)
+        : 'non_star';
+
+    const nextPromoXtraEnabled =
+      typeof dto.promoXtraEnabled === 'boolean'
+        ? dto.promoXtraEnabled
+        : typeof existingRoasDefaults['promoXtraEnabled'] === 'boolean'
+        ? (existingRoasDefaults['promoXtraEnabled'] as boolean)
+        : false;
+
+    const updated = await this.prisma.shop.update({
+      where: { id: shopId },
+      data: {
+        metadataJson: {
+          ...existingMetadata,
+          roasDefaults: {
+            ...existingRoasDefaults,
+            storeType: nextStoreType,
+            promoXtraEnabled: nextPromoXtraEnabled,
+          },
+        },
+      },
+      include: {
+        marketplace: true,
+      },
+    });
+
+    return {
+      roasDefaults: {
+        storeType: nextStoreType,
+        promoXtraEnabled: nextPromoXtraEnabled,
+      },
+      id: updated.id,
+      name: updated.name,
+      status: updated.status,
+      externalId: updated.externalId,
+      createdAt: updated.createdAt,
+      marketplace: {
+        id: updated.marketplace.id,
+        code: updated.marketplace.code,
+        name: updated.marketplace.name,
+      },
+    };
   }
 
   private async assertWithinShopLimit(organizationId: string) {

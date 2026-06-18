@@ -55,6 +55,15 @@ Tugas:
 - mengambil data yang terlihat
 - mengirim hasil parsing ke background script
 
+### Page Bridge (Injected Script)
+
+Untuk beberapa halaman marketplace (terutama Shopee public search), request ke endpoint publik dapat memberikan hasil berbeda tergantung konteks request (page context vs extension background). Untuk itu extension dapat menyisipkan script ringan (page bridge) agar request dilakukan dari konteks halaman.
+
+Catatan penting:
+
+- page bridge harus konservatif (batch kecil, delay, concurrency rendah) untuk mengurangi risiko proteksi traffic marketplace (misalnya redirect ke `/verify/traffic/error`).
+- jika page bridge gagal, extension harus bisa fallback ke mode aman (background fetch) walau datanya mungkin lebih minim.
+
 ### Background Script
 
 Tugas:
@@ -72,6 +81,23 @@ Tugas:
 - menampilkan status user
 - menampilkan status shop atau page detection
 - trigger manual sync
+
+Catatan:
+
+- panel debug untuk page snapshot dapat disembunyikan untuk user (opsional), namun tetap berguna untuk development.
+
+### Public Product Overlay dan Kalkulator ROAS
+
+Pada halaman detail produk Shopee publik, extension dapat menampilkan modal `Kalkulator ROAS | LevelUP adsPRO` sebagai alat bantu estimasi cepat.
+
+Perilaku minimum:
+
+- `Jenis Toko` dan `Promo Xtra` dapat memakai default per shop dari dashboard
+- kategori produk dapat dipilih manual dari master fee kategori tenant-scoped
+- extension boleh mencoba auto-saran kategori dari breadcrumb kategori Shopee publik
+- jika auto-match tidak ditemukan, user tetap harus bisa override manual
+- rincian biaya marketplace (fee kategori, biaya proses pesanan, Promo Xtra) dijelaskan melalui tooltip / help UI agar layout tetap ringkas
+- nilai tier ROAS di modal harus dihitung realtime dari input user, bukan hard-coded statis
 
 ## 5. Page Detection Rules
 
@@ -199,6 +225,57 @@ Setiap result minimal berisi:
 }
 ```
 
+## 8A. Public Product Payload Spec
+
+### Tujuan
+
+Menyimpan snapshot detail produk publik (kompetitor) untuk kebutuhan riset produk.
+
+### Field Minimum
+
+- `capture_mode = public`
+- `page_type = shopee_public_product` atau setara
+- `marketplace`
+- `page_title`
+- `product` (ringkas)
+
+### Struktur `product` (ringkas)
+
+- `product_title`
+- `product_url`
+- `image_url` (opsional)
+- `shop_name` (opsional)
+- `price_min` / `price_max` (opsional)
+- `sales_hint` (opsional)
+- `monthly_sold_hint` (opsional)
+- `rating_hint` (opsional)
+- `review_count_hint` (opsional)
+
+### Contoh Struktur Ringkas
+
+```json
+{
+  "capture_mode": "public",
+  "page_type": "shopee_public_product",
+  "marketplace": "shopee",
+  "captured_at": "2026-06-14T11:30:00Z",
+  "payload_schema_version": "1.0",
+  "page_title": "Produk - Shopee",
+  "product": {
+    "product_title": "Parfum Pria ...",
+    "product_url": "https://shopee.co.id/...",
+    "shop_name": "Brand Official",
+    "price_min": 119000,
+    "price_max": 119000,
+    "sales_hint": "4RB+ Terjual",
+    "monthly_sold_hint": "587 Terjual/Bln",
+    "rating_hint": "4.9",
+    "review_count_hint": "12RB Ulasan"
+  },
+  "highlights": []
+}
+```
+
 ## 9. Sync Triggers
 
 ### Manual Sync
@@ -236,6 +313,11 @@ Untuk mencegah spam:
 - payload yang hash-nya identik tidak perlu dikirim ulang
 - public search capture sebaiknya hanya dikirim saat keyword atau hasil berubah
 
+Catatan khusus marketplace publik:
+
+- enrichment data publik (contoh: `monthly_sold_hint`) sebaiknya menggunakan batch kecil + delay.
+- terlalu agresif dapat memicu proteksi traffic marketplace (contoh Shopee redirect ke `/verify/traffic/error`).
+
 ## 11. Queue and Retry Rules
 
 Background script sebaiknya memiliki queue lokal dengan metadata:
@@ -258,6 +340,12 @@ Aturan:
 - token tidak boleh ditulis sembarang ke local storage tanpa proteksi minimum
 - payload harus dikirim lewat HTTPS
 - data sensitif toko sendiri harus dibatasi hanya untuk backend tenant yang benar
+
+Catatan non-goals:
+
+- Kalkulator ROAS di overlay detail produk adalah alat bantu UI (client-side) dan tidak wajib dikirim sebagai ingestion payload.
+- Fee kategori marketplace dikelola di dashboard (Settings) agar mudah diupdate ketika marketplace mengubah persentase fee; extension hanya membaca lewat API saat user login.
+- Kalkulator ROAS di extension adalah estimator cepat berbasis input user + master fee dashboard, bukan pengganti analytics historis dashboard.
 
 ## 13. UX Minimum
 

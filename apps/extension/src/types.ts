@@ -29,6 +29,10 @@ export type ShopSummary = {
   status: string;
   externalId: string;
   createdAt?: string;
+  roasDefaults?: {
+    storeType: 'non_star' | 'star' | 'mall' | null;
+    promoXtraEnabled: boolean;
+  } | null;
   marketplace: {
     id: string;
     code: string;

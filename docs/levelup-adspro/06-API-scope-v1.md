@@ -194,6 +194,13 @@ Tujuan:
 
 - ubah metadata shop
 
+Catatan implementasi saat ini:
+
+- dipakai juga untuk menyimpan default ROAS per shop, misalnya:
+  - `defaultStoreType`
+  - `promoXtraEnabled`
+- metadata ini dapat dibaca kembali oleh extension untuk mengisi nilai awal modal `Kalkulator ROAS`
+
 ### `GET /api/v1/shops/{shopId}/connection`
 
 Tujuan:
@@ -213,6 +220,12 @@ Tujuan:
 Tujuan:
 
 - login extension ke akun SaaS
+
+Catatan implementasi saat ini:
+
+- Popup extension menggunakan endpoint session login umum:
+  - `POST /api/v1/auth/login`
+- Endpoint `extension/login` dapat dipakai jika di masa depan perlu flow login khusus extension, namun saat ini tidak wajib.
 
 ### `POST /api/v1/extension/session`
 
@@ -250,6 +263,36 @@ Catatan:
 - pemisahan batch dan object disarankan untuk observability
 
 ## 9. Dashboard API
+
+### `GET /api/v1/marketplaces`
+
+Tujuan:
+
+- mengambil daftar marketplace untuk keperluan pengaturan dan form
+
+### `GET /api/v1/marketplace-category-fees`
+
+Tujuan:
+
+- mengambil master fee kategori marketplace (tenant-scoped) dari dashboard Settings
+
+### `POST /api/v1/marketplace-category-fees`
+
+Tujuan:
+
+- membuat master fee kategori marketplace
+
+### `PATCH /api/v1/marketplace-category-fees/{id}`
+
+Tujuan:
+
+- mengubah master fee kategori marketplace (aktif/nonaktif, persen, catatan, dll)
+
+### `DELETE /api/v1/marketplace-category-fees/{id}`
+
+Tujuan:
+
+- menghapus master fee kategori marketplace
 
 ### `GET /api/v1/dashboard/overview`
 
