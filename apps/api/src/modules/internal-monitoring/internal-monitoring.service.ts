@@ -17,11 +17,17 @@ const MONITORING_ALLOWED_ROLES = new Set<MembershipRole>([
 type MonitoringAlert = {
   code: 'api_failure' | 'ingestion_failure_spike' | 'worker_stopped_risk';
   severity: 'critical' | 'warning';
+  severityLevel: 'sev_1' | 'sev_2' | 'sev_3';
   title: string;
   message: string;
   metric: {
     value: number | string;
     unit: 'count' | 'ratio' | 'status' | 'minutes';
+  };
+  operatorGuidance: {
+    summary: string;
+    firstChecks: string[];
+    runbookRefs: string[];
   };
 };
 
@@ -202,6 +208,8 @@ export class InternalMonitoringService {
       generatedAt: new Date().toISOString(),
       readiness,
       alerts,
+      severityMapping: this.getSeverityMapping(),
+      operatorGuidance: this.getOperatorGuidance(alerts),
       queue: {
         backlog: {
           accepted: backlogAcceptedCount,
@@ -271,12 +279,25 @@ export class InternalMonitoringService {
       alerts.push({
         code: 'api_failure',
         severity: 'critical',
+        severityLevel: 'sev_1',
         title: 'API readiness degraded',
         message:
           'Satu atau lebih dependency inti API tidak ready. Periksa koneksi database dan Redis.',
         metric: {
           value: input.readinessStatus,
           unit: 'status',
+        },
+        operatorGuidance: {
+          summary: 'Tangani sebagai gangguan sistem inti karena API atau dependency utama sedang tidak sehat.',
+          firstChecks: [
+            'Cek endpoint /health dan /health/ready dari host internal API.',
+            'Periksa log container api untuk error startup, Prisma, atau koneksi Redis.',
+            'Pastikan container postgres dan redis statusnya healthy di docker compose.',
+          ],
+          runbookRefs: [
+            'docs/DEPLOYMEN.md#troubleshooting',
+            'docs/levelup-adspro/27-Observability-metrics-and-incident-response-v1.md#incident-severity-levels',
+          ],
         },
       });
     }
@@ -288,12 +309,25 @@ export class InternalMonitoringService {
       alerts.push({
         code: 'ingestion_failure_spike',
         severity: 'warning',
+        severityLevel: 'sev_2',
         title: 'Lonjakan ingestion gagal',
         message:
           'Jumlah ingestion gagal dalam 24 jam terakhir melewati threshold. Periksa error code dominan dan payload yang masuk.',
         metric: {
           value: Number(input.failureRate.toFixed(4)),
           unit: 'ratio',
+        },
+        operatorGuidance: {
+          summary: 'Prioritaskan investigasi payload dan error dominan sebelum kegagalan meluas ke tenant lain.',
+          firstChecks: [
+            'Periksa top error code pada summary monitoring dan cocokkan dengan batch ingestion terbaru.',
+            'Cek log api dan worker untuk request atau job yang gagal di tenant terdampak.',
+            'Jika error terkait raw payload, verifikasi konfigurasi MinIO dan storage internal.',
+          ],
+          runbookRefs: [
+            'docs/DEPLOYMEN.md#ingestion-gagal-simpan-raw-payload',
+            'docs/levelup-adspro/27-Observability-metrics-and-incident-response-v1.md#recommended-operational-alerts',
+          ],
         },
       });
     }
@@ -309,6 +343,7 @@ export class InternalMonitoringService {
       alerts.push({
         code: 'worker_stopped_risk',
         severity: input.queueStatus !== 'ready' ? 'critical' : 'warning',
+        severityLevel: input.queueStatus !== 'ready' ? 'sev_1' : 'sev_2',
         title: 'Risiko worker berhenti atau macet',
         message:
           'Queue menunjukkan backlog atau indikator stale. Periksa proses worker dan jalur Redis sebelum backlog bertambah.',
@@ -322,9 +357,70 @@ export class InternalMonitoringService {
               ? 'minutes'
               : 'count',
         },
+        operatorGuidance: {
+          summary:
+            input.queueStatus !== 'ready'
+              ? 'Tangani sebagai insiden kritis karena worker atau Redis tidak siap.'
+              : 'Tangani sebagai gangguan tinggi karena backlog atau stale ingestion mulai menumpuk.',
+          firstChecks: [
+            'Cek status container worker dan redis di docker compose.',
+            'Periksa log worker untuk job failed, queue event error, atau reconnect Redis.',
+            'Bandingkan backlog queue dengan latest processed batch untuk melihat apakah worker benar-benar macet.',
+          ],
+          runbookRefs: [
+            'docs/DEPLOYMEN.md#troubleshooting',
+            'docs/levelup-adspro/27-Observability-metrics-and-incident-response-v1.md#alert-routing',
+          ],
+        },
       });
     }
 
     return alerts;
+  }
+
+  private getSeverityMapping() {
+    return {
+      sev_1: {
+        label: 'Sev 1',
+        description: 'Sistem inti tidak bisa dipakai atau dependency utama down.',
+        responseExpectation: 'Tangani segera, verifikasi health API dan dependency inti.',
+      },
+      sev_2: {
+        label: 'Sev 2',
+        description: 'Fungsi penting terganggu untuk sebagian tenant atau data pipeline kritis.',
+        responseExpectation: 'Investigasi dalam prioritas tinggi dan siapkan mitigasi operasional.',
+      },
+      sev_3: {
+        label: 'Sev 3',
+        description: 'Gangguan fitur sekunder dengan workaround yang masih tersedia.',
+        responseExpectation: 'Catat, monitor tren, dan masukkan ke backlog operasional.',
+      },
+    } as const;
+  }
+
+  private getOperatorGuidance(alerts: MonitoringAlert[]) {
+    if (alerts.length === 0) {
+      return {
+        summary: 'Tidak ada alert aktif. Lanjutkan pemantauan berkala health, queue, dan ingestion.',
+        nextActions: [
+          'Pantau health endpoint dan monitoring summary secara berkala.',
+          'Gunakan alert summary ini sebagai pemeriksaan pasca deploy manual.',
+        ],
+      } as const;
+    }
+
+    const criticalCount = alerts.filter((alert) => alert.severity === 'critical').length;
+
+    return {
+      summary:
+        criticalCount > 0
+          ? 'Ada alert kritis aktif. Dahulukan stabilisasi API atau worker sebelum investigasi lanjutan.'
+          : 'Ada alert peringatan aktif. Lakukan pengecekan backlog, error dominan, dan tenant terdampak.',
+      nextActions: [
+        'Urutkan penanganan berdasarkan severityLevel dari tertinggi ke terendah.',
+        'Selesaikan firstChecks pada setiap alert aktif sebelum melakukan redeploy tambahan.',
+        'Catat hasil investigasi agar bisa dipakai untuk incident review atau runbook berikutnya.',
+      ],
+    } as const;
   }
 }

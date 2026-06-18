@@ -299,6 +299,12 @@ Prioritas:
 - critical alert harus segera terlihat
 - medium alert boleh cukup masuk dashboard internal
 
+Implementasi baseline saat ini:
+
+- endpoint internal monitoring summary mengembalikan `alerts`
+- setiap alert membawa `severity`, `severityLevel`, `operatorGuidance`, dan `runbookRefs`
+- summary juga mengembalikan `severityMapping` dan `operatorGuidance` global untuk membantu operator saat incident review awal
+
 ## 14. Incident Severity Levels
 
 ### Sev 1
