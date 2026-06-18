@@ -10,8 +10,6 @@ const { randomUUID } = require('crypto');
 const prisma = new PrismaClient();
 
 const SHOPEE_CATEGORY_FEE_ARTICLE_ID = 15965;
-const SHOPEE_CATEGORY_FEE_SOURCE_NOTE =
-  'Sumber: Shopee artikel 15965, berlaku 2025-01-01.';
 const SHOPEE_CATEGORY_FEE_TABLE_LAYOUT = [
   { storeTypes: ['NON_STAR', 'STAR'], primaryCategory: 'Fashion' },
   { storeTypes: ['NON_STAR', 'STAR'], primaryCategory: 'FMCG' },
@@ -236,13 +234,10 @@ function summarizeProductBucket(value) {
 function buildSeedNote(productTypes) {
   const normalized = normalizeText(productTypes);
   if (!normalized) {
-    return SHOPEE_CATEGORY_FEE_SOURCE_NOTE;
+    return null;
   }
 
-  return truncateText(
-    `${SHOPEE_CATEGORY_FEE_SOURCE_NOTE} Cakupan: ${normalized}`,
-    300,
-  );
+  return truncateText(`Cakupan produk: ${normalized}`, 300);
 }
 
 async function fetchShopeeCategoryFeeArticleContent() {

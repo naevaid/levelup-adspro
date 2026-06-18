@@ -51,6 +51,8 @@ const EMPTY_FORM: FeeFormState = {
 };
 
 const PAGE_SIZE = 20;
+const SHOPEE_SEED_NOTE_PREFIX =
+  /^Sumber:\s*Shopee artikel 15965,\s*berlaku 2025-01-01\.\s*/i;
 
 function getStoreTypeLabel(storeType: StoreType) {
   switch (storeType) {
@@ -75,6 +77,20 @@ function getPreferredMarketplaceId(marketplaces: MarketplaceSummary[]) {
 
 function formatPercent(value: number) {
   return `${value.toFixed(2)}%`;
+}
+
+function formatFeeNotes(notes: string | null) {
+  const normalized = notes?.trim() ?? "";
+  if (!normalized) {
+    return null;
+  }
+
+  const cleaned = normalized.replace(SHOPEE_SEED_NOTE_PREFIX, "").trim();
+  if (!cleaned) {
+    return null;
+  }
+
+  return cleaned.replace(/^Cakupan:\s*/i, "Cakupan produk: ");
 }
 
 export default function SettingsPage() {
@@ -565,7 +581,11 @@ export default function SettingsPage() {
                       </span>
                     </td>
                     <td className="px-5 py-4 text-sm text-slate-100">
-                      {fee.notes ? fee.notes : <span className="muted-text">-</span>}
+                      {formatFeeNotes(fee.notes) ? (
+                        formatFeeNotes(fee.notes)
+                      ) : (
+                        <span className="muted-text">-</span>
+                      )}
                     </td>
                     <td className="px-5 py-4">
                       <div className="flex flex-wrap justify-end gap-2">

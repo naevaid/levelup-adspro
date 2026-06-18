@@ -2713,6 +2713,65 @@ function normalizeComparableLabel(value: string) {
   return normalizeText(value).toLowerCase();
 }
 
+const SHOPEE_SEED_NOTE_PREFIX =
+  /^Sumber:\s*Shopee artikel 15965,\s*berlaku 2025-01-01\.\s*/i;
+
+function formatCategoryPickerNote(notes: string | null) {
+  const normalized = normalizeText(notes);
+  if (!normalized) {
+    return null;
+  }
+
+  const cleaned = normalized.replace(SHOPEE_SEED_NOTE_PREFIX, '').trim();
+  if (!cleaned) {
+    return null;
+  }
+
+  return cleaned.replace(/^Cakupan:\s*/i, 'Cakupan produk: ');
+}
+
+type CategoryPickerSearchResult = {
+  groupIndex: number;
+  subIndex: number;
+  groupName: string;
+  subName: string;
+  item: CategoryPickerItem;
+};
+
+function findCategoryPickerSearchResults(
+  groups: CategoryPickerGroup[],
+  query: string,
+): CategoryPickerSearchResult[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) {
+    return [];
+  }
+
+  return groups.flatMap((group, groupIndex) =>
+    group.subs.flatMap((sub, subIndex) =>
+      sub.items
+        .filter((item) =>
+          [
+            normalizeText(group.name),
+            normalizeText(sub.name),
+            normalizeText(item.name),
+            normalizeText(formatCategoryPickerNote(item.notes)),
+          ]
+            .join(' ')
+            .toLowerCase()
+            .includes(normalizedQuery),
+        )
+        .map((item) => ({
+          groupIndex,
+          subIndex,
+          groupName: group.name,
+          subName: sub.name,
+          item,
+        })),
+    ),
+  );
+}
+
 function extractShopeeBreadcrumbCategory(): ShopeeBreadcrumbCategory | null {
   const selectors = [
     '.page-product__breadcrumb a',
@@ -3052,7 +3111,7 @@ async function openRoasCategoryPicker() {
             <div class="levelup-category-list" data-role="sub-list"></div>
           </div>
           <div class="levelup-category-column" data-role="item-column">
-            <div class="levelup-category-search"><input type="search" placeholder="Cari kategori..." data-role="search-input" /></div>
+            <div class="levelup-category-search"><input type="search" placeholder="Cari di semua kategori..." data-role="search-input" /></div>
             <div class="levelup-category-cards" data-role="item-list"></div>
           </div>
         </div>
@@ -3166,33 +3225,52 @@ async function openRoasCategoryPicker() {
     }
 
     const items = activeSub?.items ?? [];
-    const filtered = query
-      ? items.filter((item) =>
-          `${normalizeText(item.name)} ${normalizeText(item.notes)}`
-            .toLowerCase()
-            .includes(query.toLowerCase()),
-        )
-      : items;
+    const searchResults = query
+      ? findCategoryPickerSearchResults(groups, query)
+      : [];
 
     if (itemList) {
       itemList.innerHTML =
-        filtered.length === 0
-          ? `<div class="levelup-product-insight">Kategori belum ditemukan untuk pencarian ini. Anda tetap bisa isi persen manual di field kategori.</div>`
-          : filtered
-              .map(
-                (item) => `
+        (query ? searchResults.length === 0 : items.length === 0)
+          ? `<div class="levelup-product-insight">${
+              query
+                ? 'Kategori belum ditemukan untuk pencarian ini. Anda tetap bisa isi persen manual di field kategori.'
+                : 'Belum ada kategori aktif di sub kategori ini.'
+            }</div>`
+          : (query ? searchResults : items)
+              .map((entry) => {
+                const item = 'item' in entry ? entry.item : entry;
+                const primaryCategory = 'groupName' in entry ? entry.groupName : activeGroup?.name ?? '';
+                const secondaryCategory = 'subName' in entry ? entry.subName : activeSub?.name ?? '';
+                const note = formatCategoryPickerNote(item.notes);
+                const pathLabel = [primaryCategory, secondaryCategory, item.name]
+                  .filter((part) => Boolean(normalizeText(part)))
+                  .join(' > ');
+
+                return `
                   <div class="levelup-category-card">
                     <div class="levelup-category-card-header">
-                      <div class="levelup-category-card-title">${item.name}</div>
+                      <div>
+                        <div class="levelup-category-card-title">${item.name}</div>
+                        ${
+                          query
+                            ? `<div class="levelup-product-insight">${pathLabel}</div>`
+                            : ''
+                        }
+                      </div>
                       <div class="levelup-category-card-meta">
                         <div class="levelup-category-card-fee">${item.pct.toFixed(2)}%</div>
-                        <button type="button" class="levelup-button levelup-button-primary" data-action="roas-pick-item" data-id="${item.id}" data-name="${encodeURIComponent(item.name)}" data-pct="${item.pct}">Pilih</button>
+                        <button type="button" class="levelup-button levelup-button-primary" data-action="roas-pick-item" data-id="${item.id}" data-name="${encodeURIComponent(item.name)}" data-pct="${item.pct}" data-group-index="${
+                          'groupIndex' in entry ? entry.groupIndex : activeGroupIndex
+                        }" data-sub-index="${
+                          'subIndex' in entry ? entry.subIndex : activeSubIndex
+                        }" data-primary="${encodeURIComponent(primaryCategory)}">Pilih</button>
                       </div>
                     </div>
-                    ${item.notes ? `<div class="levelup-product-insight">${item.notes}</div>` : ''}
+                    ${note ? `<div class="levelup-product-insight">${note}</div>` : ''}
                   </div>
-                `,
-              )
+                `;
+              })
               .join('');
     }
   };
@@ -3269,13 +3347,26 @@ async function openRoasCategoryPicker() {
     if (target.matches('[data-action="roas-pick-item"]')) {
       const name = target.getAttribute('data-name');
       const pctRaw = target.getAttribute('data-pct');
+      const groupIndexRaw = target.getAttribute('data-group-index');
+      const subIndexRaw = target.getAttribute('data-sub-index');
+      const primaryCategory = decodeURIComponent(target.getAttribute('data-primary') ?? '');
       const pct = pctRaw ? Number.parseFloat(pctRaw) : null;
       if (!name || pct === null || !Number.isFinite(pct)) {
         return;
       }
 
+      if (groupIndexRaw) {
+        activeGroupIndex = Number.parseInt(groupIndexRaw, 10);
+      }
+
+      if (subIndexRaw) {
+        activeSubIndex = Number.parseInt(subIndexRaw, 10);
+      }
+
       roasCalculatorState.categoryLabel =
-        normalizeText(activePrimaryCategoryLabel) || decodeURIComponent(name);
+        normalizeText(primaryCategory) ||
+        normalizeText(activePrimaryCategoryLabel) ||
+        decodeURIComponent(name);
       roasCalculatorState.kategoriFeePct = pct;
       lastRoasCategorySelectionSource = 'manual';
       modal.remove();
