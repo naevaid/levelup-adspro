@@ -72,14 +72,23 @@ type RoasCalculatorState = {
   storeType: 'non_star' | 'star' | 'mall';
   promoXtraEnabled: boolean;
   gratisOngkirXtraEnabled: boolean;
+  gratisOngkirProductSize: 'regular' | 'special';
   categoryLabel: string | null;
   kategoriFeePct: number | null;
+  gratisOngkirPctRegular: number | null;
+  gratisOngkirCapRegular: number | null;
+  gratisOngkirPctSpecial: number | null;
+  gratisOngkirCapSpecial: number | null;
 };
 
 type RoasCategorySelection = {
   primary: string;
   secondary: string | null;
   name: string | null;
+  gratisOngkirPctRegular?: number | null;
+  gratisOngkirCapRegular?: number | null;
+  gratisOngkirPctSpecial?: number | null;
+  gratisOngkirCapSpecial?: number | null;
 };
 
 const roasCalculatorState: RoasCalculatorState = {
@@ -89,8 +98,13 @@ const roasCalculatorState: RoasCalculatorState = {
   storeType: 'non_star',
   promoXtraEnabled: false,
   gratisOngkirXtraEnabled: false,
+  gratisOngkirProductSize: 'regular',
   categoryLabel: null,
   kategoriFeePct: 0,
+  gratisOngkirPctRegular: 0,
+  gratisOngkirCapRegular: 0,
+  gratisOngkirPctSpecial: 0,
+  gratisOngkirCapSpecial: 0,
 };
 
 let lastSelectedRoasCategory: RoasCategorySelection | null = null;
@@ -98,7 +112,6 @@ let lastSelectedRoasCategory: RoasCategorySelection | null = null;
 const SHOPEE_ORDER_PROCESSING_FEE_IDR = 1250;
 const SHOPEE_PROMO_XTRA_FEE_PCT = 4.5;
 const SHOPEE_PROMO_XTRA_FEE_CAP_IDR = 60000;
-const SHOPEE_GRATIS_ONGKIR_XTRA_FEE_PCT = 0.5;
 
 type CategoryPickerCatalog = Record<
   RoasCalculatorState['storeType'],
@@ -1586,6 +1599,13 @@ function ensureOverlayStyle() {
       gap: 8px;
     }
 
+    #${OVERLAY_ID} .levelup-roas-size-group {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
     #${OVERLAY_ID} .levelup-roas-program-card {
       display: flex;
       align-items: center;
@@ -2450,6 +2470,14 @@ function computeRoasMetrics() {
   const hpp = roasCalculatorState.hpp ?? 0;
   const operasional = roasCalculatorState.operasional ?? 0;
   const kategoriPct = roasCalculatorState.kategoriFeePct ?? 0;
+  const gratisOngkirPct =
+    roasCalculatorState.gratisOngkirProductSize === 'special'
+      ? roasCalculatorState.gratisOngkirPctSpecial ?? 0
+      : roasCalculatorState.gratisOngkirPctRegular ?? 0;
+  const gratisOngkirCap =
+    roasCalculatorState.gratisOngkirProductSize === 'special'
+      ? roasCalculatorState.gratisOngkirCapSpecial ?? 0
+      : roasCalculatorState.gratisOngkirCapRegular ?? 0;
 
   const feeKategori = price * (kategoriPct / 100);
   const feePromoXtra = roasCalculatorState.promoXtraEnabled
@@ -2459,7 +2487,10 @@ function computeRoasMetrics() {
       )
     : 0;
   const feeGratisOngkirXtra = roasCalculatorState.gratisOngkirXtraEnabled
-    ? price * (SHOPEE_GRATIS_ONGKIR_XTRA_FEE_PCT / 100)
+    ? Math.min(
+        price * (gratisOngkirPct / 100),
+        gratisOngkirCap > 0 ? gratisOngkirCap : Number.POSITIVE_INFINITY,
+      )
     : 0;
   const feeProsesPesanan = SHOPEE_ORDER_PROCESSING_FEE_IDR;
   const totalBiayaShopee =
@@ -2485,19 +2516,19 @@ function computeRoasMetrics() {
       key: 'kompetitif',
       label: 'Kompetitif',
       tone: 'warning',
-      resolveRoas: (base: number) => Math.max(base * 1.32, base + 0.8),
+      resolveRoas: (base: number) => Math.max(base * 1.64, base + 1.6),
     },
     {
       key: 'konservatif',
       label: 'Konservatif',
       tone: 'safe',
-      resolveRoas: (base: number) => Math.max(base * 1.75, base + 1.8),
+      resolveRoas: (base: number) => Math.max(base * 2.5, base + 3.6),
     },
     {
       key: 'prospektif',
       label: 'Prospektif',
       tone: 'prospect',
-      resolveRoas: (base: number) => Math.max(base * 2.5, base + 3.5),
+      resolveRoas: (base: number) => Math.max(base * 4, base + 7),
     },
   ].map((tier) => {
     if (
@@ -2533,6 +2564,8 @@ function computeRoasMetrics() {
     feeKategori,
     feePromoXtra,
     feeGratisOngkirXtra,
+    gratisOngkirPct,
+    gratisOngkirCap,
     feeProsesPesanan,
   };
 }
@@ -2584,6 +2617,10 @@ type CategoryPickerItem = {
   id: string;
   name: string;
   pct: number;
+  gratisOngkirPctRegular: number;
+  gratisOngkirCapRegular: number;
+  gratisOngkirPctSpecial: number;
+  gratisOngkirCapSpecial: number;
   notes: string | null;
 };
 
@@ -2654,6 +2691,10 @@ function buildCategoryPickerCatalog(
       id: fee.id,
       name: categoryName,
       pct: fee.feePercent,
+      gratisOngkirPctRegular: fee.gratisOngkirPctRegular,
+      gratisOngkirCapRegular: fee.gratisOngkirCapRegular,
+      gratisOngkirPctSpecial: fee.gratisOngkirPctSpecial,
+      gratisOngkirCapSpecial: fee.gratisOngkirCapSpecial,
       notes: normalizeText(fee.notes) || null,
     });
   }
@@ -2683,6 +2724,10 @@ function buildCategoryPickerCatalog(
 function clearRoasCategorySelection() {
   roasCalculatorState.categoryLabel = null;
   roasCalculatorState.kategoriFeePct = 0;
+  roasCalculatorState.gratisOngkirPctRegular = 0;
+  roasCalculatorState.gratisOngkirCapRegular = 0;
+  roasCalculatorState.gratisOngkirPctSpecial = 0;
+  roasCalculatorState.gratisOngkirCapSpecial = 0;
   lastRoasCategorySelectionSource = null;
   lastSelectedRoasCategory = null;
 }
@@ -2693,6 +2738,10 @@ function applyRoasCategorySelection(
     secondary: string | null;
     name: string | null;
     pct: number | null;
+    gratisOngkirPctRegular?: number | null;
+    gratisOngkirCapRegular?: number | null;
+    gratisOngkirPctSpecial?: number | null;
+    gratisOngkirCapSpecial?: number | null;
   },
   source: 'auto' | 'manual',
 ) {
@@ -2705,10 +2754,34 @@ function applyRoasCategorySelection(
     typeof selection.pct === 'number' && Number.isFinite(selection.pct)
       ? selection.pct
       : 0;
+  roasCalculatorState.gratisOngkirPctRegular =
+    typeof selection.gratisOngkirPctRegular === 'number' &&
+    Number.isFinite(selection.gratisOngkirPctRegular)
+      ? selection.gratisOngkirPctRegular
+      : 0;
+  roasCalculatorState.gratisOngkirCapRegular =
+    typeof selection.gratisOngkirCapRegular === 'number' &&
+    Number.isFinite(selection.gratisOngkirCapRegular)
+      ? selection.gratisOngkirCapRegular
+      : 0;
+  roasCalculatorState.gratisOngkirPctSpecial =
+    typeof selection.gratisOngkirPctSpecial === 'number' &&
+    Number.isFinite(selection.gratisOngkirPctSpecial)
+      ? selection.gratisOngkirPctSpecial
+      : 0;
+  roasCalculatorState.gratisOngkirCapSpecial =
+    typeof selection.gratisOngkirCapSpecial === 'number' &&
+    Number.isFinite(selection.gratisOngkirCapSpecial)
+      ? selection.gratisOngkirCapSpecial
+      : 0;
   lastSelectedRoasCategory = {
     primary: normalizeText(selection.primary),
     secondary: normalizeText(selection.secondary) || null,
     name: normalizeText(selection.name) || null,
+    gratisOngkirPctRegular: roasCalculatorState.gratisOngkirPctRegular,
+    gratisOngkirCapRegular: roasCalculatorState.gratisOngkirCapRegular,
+    gratisOngkirPctSpecial: roasCalculatorState.gratisOngkirPctSpecial,
+    gratisOngkirCapSpecial: roasCalculatorState.gratisOngkirCapSpecial,
   };
   lastRoasCategorySelectionSource = source;
 }
@@ -2732,6 +2805,10 @@ function findMatchingRoasCategoryForStoreType(
     secondary: string | null;
     name: string | null;
     pct: number;
+        gratisOngkirPctRegular: number;
+        gratisOngkirCapRegular: number;
+        gratisOngkirPctSpecial: number;
+        gratisOngkirCapSpecial: number;
   } | null = null;
 
   for (const group of groups) {
@@ -2750,6 +2827,10 @@ function findMatchingRoasCategoryForStoreType(
           secondary: sub.name,
           name: sub.items[0].name,
           pct: sub.items[0].pct,
+          gratisOngkirPctRegular: sub.items[0].gratisOngkirPctRegular,
+          gratisOngkirCapRegular: sub.items[0].gratisOngkirCapRegular,
+          gratisOngkirPctSpecial: sub.items[0].gratisOngkirPctSpecial,
+          gratisOngkirCapSpecial: sub.items[0].gratisOngkirCapSpecial,
         };
       }
 
@@ -2760,6 +2841,10 @@ function findMatchingRoasCategoryForStoreType(
             secondary: sub.name,
             name: item.name,
             pct: item.pct,
+            gratisOngkirPctRegular: item.gratisOngkirPctRegular,
+            gratisOngkirCapRegular: item.gratisOngkirCapRegular,
+            gratisOngkirPctSpecial: item.gratisOngkirPctSpecial,
+            gratisOngkirCapSpecial: item.gratisOngkirCapSpecial,
           };
         }
       }
@@ -2819,6 +2904,10 @@ type RoasCategorySuggestion = {
   secondary: string | null;
   name: string | null;
   pct: number | null;
+  gratisOngkirPctRegular?: number | null;
+  gratisOngkirCapRegular?: number | null;
+  gratisOngkirPctSpecial?: number | null;
+  gratisOngkirCapSpecial?: number | null;
 };
 
 let lastRoasCategorySuggestion: RoasCategorySuggestion | null = null;
@@ -3000,6 +3089,22 @@ function findBestRoasCatalogMatch(
     secondary: sub?.name ?? null,
     name: item?.name ?? null,
     pct: typeof item?.pct === 'number' ? item.pct : null,
+    gratisOngkirPctRegular:
+      typeof item?.gratisOngkirPctRegular === 'number'
+        ? item.gratisOngkirPctRegular
+        : null,
+    gratisOngkirCapRegular:
+      typeof item?.gratisOngkirCapRegular === 'number'
+        ? item.gratisOngkirCapRegular
+        : null,
+    gratisOngkirPctSpecial:
+      typeof item?.gratisOngkirPctSpecial === 'number'
+        ? item.gratisOngkirPctSpecial
+        : null,
+    gratisOngkirCapSpecial:
+      typeof item?.gratisOngkirCapSpecial === 'number'
+        ? item.gratisOngkirCapSpecial
+        : null,
   };
 }
 
@@ -3054,6 +3159,10 @@ async function maybeAutoSuggestRoasCategory(detail: ProductDetailSnapshot) {
     secondary: match.secondary,
     name: match.name,
     pct: match.pct,
+    gratisOngkirPctRegular: match.gratisOngkirPctRegular,
+    gratisOngkirCapRegular: match.gratisOngkirCapRegular,
+    gratisOngkirPctSpecial: match.gratisOngkirPctSpecial,
+    gratisOngkirCapSpecial: match.gratisOngkirCapSpecial,
   };
 
   const alreadyChosen =
@@ -3361,7 +3470,7 @@ async function openRoasCategoryPicker() {
                       </div>
                       <div class="levelup-category-card-meta">
                         <div class="levelup-category-card-fee">${item.pct.toFixed(2)}%</div>
-                        <button type="button" class="levelup-button levelup-button-primary" data-action="roas-pick-item" data-id="${item.id}" data-name="${encodeURIComponent(item.name)}" data-pct="${item.pct}" data-group-index="${
+                        <button type="button" class="levelup-button levelup-button-primary" data-action="roas-pick-item" data-id="${item.id}" data-name="${encodeURIComponent(item.name)}" data-pct="${item.pct}" data-gratis-ongkir-pct-regular="${item.gratisOngkirPctRegular}" data-gratis-ongkir-cap-regular="${item.gratisOngkirCapRegular}" data-gratis-ongkir-pct-special="${item.gratisOngkirPctSpecial}" data-gratis-ongkir-cap-special="${item.gratisOngkirCapSpecial}" data-group-index="${
                           'groupIndex' in entry ? entry.groupIndex : activeGroupIndex
                         }" data-sub-index="${
                           'subIndex' in entry ? entry.subIndex : activeSubIndex
@@ -3369,6 +3478,7 @@ async function openRoasCategoryPicker() {
                       </div>
                     </div>
                     ${note ? `<div class="levelup-product-insight">${note}</div>` : ''}
+                    <div class="levelup-product-insight">Ongkir Extra Biasa ${item.gratisOngkirPctRegular.toFixed(2)}% maks ${formatCompactCurrency(Math.round(item.gratisOngkirCapRegular))} | Khusus ${item.gratisOngkirPctSpecial.toFixed(2)}% maks ${formatCompactCurrency(Math.round(item.gratisOngkirCapSpecial))}</div>
                   </div>
                 `;
               })
@@ -3448,11 +3558,27 @@ async function openRoasCategoryPicker() {
     if (target.matches('[data-action="roas-pick-item"]')) {
       const name = target.getAttribute('data-name');
       const pctRaw = target.getAttribute('data-pct');
+      const gratisOngkirPctRegularRaw = target.getAttribute('data-gratis-ongkir-pct-regular');
+      const gratisOngkirCapRegularRaw = target.getAttribute('data-gratis-ongkir-cap-regular');
+      const gratisOngkirPctSpecialRaw = target.getAttribute('data-gratis-ongkir-pct-special');
+      const gratisOngkirCapSpecialRaw = target.getAttribute('data-gratis-ongkir-cap-special');
       const groupIndexRaw = target.getAttribute('data-group-index');
       const subIndexRaw = target.getAttribute('data-sub-index');
       const primaryCategory = decodeURIComponent(target.getAttribute('data-primary') ?? '');
       const secondaryCategory = decodeURIComponent(target.getAttribute('data-secondary') ?? '');
       const pct = pctRaw ? Number.parseFloat(pctRaw) : null;
+      const gratisOngkirPctRegular = gratisOngkirPctRegularRaw
+        ? Number.parseFloat(gratisOngkirPctRegularRaw)
+        : 0;
+      const gratisOngkirCapRegular = gratisOngkirCapRegularRaw
+        ? Number.parseFloat(gratisOngkirCapRegularRaw)
+        : 0;
+      const gratisOngkirPctSpecial = gratisOngkirPctSpecialRaw
+        ? Number.parseFloat(gratisOngkirPctSpecialRaw)
+        : 0;
+      const gratisOngkirCapSpecial = gratisOngkirCapSpecialRaw
+        ? Number.parseFloat(gratisOngkirCapSpecialRaw)
+        : 0;
       if (!name || pct === null || !Number.isFinite(pct)) {
         return;
       }
@@ -3472,6 +3598,10 @@ async function openRoasCategoryPicker() {
           secondary: normalizeText(secondaryCategory) || null,
           name: decodeURIComponent(name),
           pct,
+          gratisOngkirPctRegular,
+          gratisOngkirCapRegular,
+          gratisOngkirPctSpecial,
+          gratisOngkirCapSpecial,
         },
         'manual',
       );
@@ -3658,8 +3788,8 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
                     >
                       Ongkir Extra
                     </button>
-                    <span class="levelup-tooltip-panel">
-                      Gratis Ongkir XTRA ${SHOPEE_GRATIS_ONGKIR_XTRA_FEE_PCT.toFixed(1)}%
+                    <span class="levelup-tooltip-panel" data-role="gratis-ongkir-tooltip">
+                      Pilih kategori produk untuk memuat persen dan cap Ongkir Extra.
                     </span>
                   </span>
                 </div>
@@ -3668,6 +3798,16 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
                   <span class="levelup-toggle-track"></span>
                 </label>
               </div>
+            </div>
+            <div class="levelup-roas-size-group" data-role="gratis-ongkir-size-field" ${roasCalculatorState.gratisOngkirXtraEnabled ? '' : 'hidden'}>
+              <label class="levelup-roas-radio">
+                <input type="radio" name="levelup-gratis-ongkir-size" value="regular" ${roasCalculatorState.gratisOngkirProductSize === 'regular' ? 'checked' : ''} />
+                <span class="levelup-roas-radio-label">Ukuran Biasa</span>
+              </label>
+              <label class="levelup-roas-radio">
+                <input type="radio" name="levelup-gratis-ongkir-size" value="special" ${roasCalculatorState.gratisOngkirProductSize === 'special' ? 'checked' : ''} />
+                <span class="levelup-roas-radio-label">Ukuran Khusus</span>
+              </label>
             </div>
           </div>
         </div>
@@ -3709,6 +3849,13 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
   const gratisOngkirToggle = modal.querySelector<HTMLInputElement>(
     '[data-field="gratisOngkirXtraEnabled"]',
   );
+  const gratisOngkirSizeField = modal.querySelector<HTMLElement>(
+    '[data-role="gratis-ongkir-size-field"]',
+  );
+  const gratisOngkirSizeRadios = Array.from(
+    modal.querySelectorAll<HTMLInputElement>('input[name="levelup-gratis-ongkir-size"]'),
+  );
+  const gratisOngkirTooltip = modal.querySelector<HTMLElement>('[data-role="gratis-ongkir-tooltip"]');
   const profitLabel = modal.querySelector<HTMLElement>('[data-role="roas-profit-label"]');
   const profitPct = modal.querySelector<HTMLElement>('[data-role="roas-profit-pct"]');
   const shopeeFeeLabel = modal.querySelector<HTMLElement>('[data-role="roas-shopee-fee"]');
@@ -3738,6 +3885,27 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
         ? `${formatCompactCurrency(Math.round(computed.totalBiayaShopee))} (${formatPercent(computed.totalBiayaShopeePct)})`
         : '-';
     }
+    if (gratisOngkirSizeField) {
+      gratisOngkirSizeField.hidden = !roasCalculatorState.gratisOngkirXtraEnabled;
+    }
+    if (gratisOngkirTooltip) {
+      const activePct =
+        roasCalculatorState.gratisOngkirProductSize === 'special'
+          ? roasCalculatorState.gratisOngkirPctSpecial ?? 0
+          : roasCalculatorState.gratisOngkirPctRegular ?? 0;
+      const activeCap =
+        roasCalculatorState.gratisOngkirProductSize === 'special'
+          ? roasCalculatorState.gratisOngkirCapSpecial ?? 0
+          : roasCalculatorState.gratisOngkirCapRegular ?? 0;
+      const activeSizeLabel =
+        roasCalculatorState.gratisOngkirProductSize === 'special'
+          ? 'Ukuran Khusus'
+          : 'Ukuran Biasa';
+      gratisOngkirTooltip.textContent =
+        activePct > 0
+          ? `${activeSizeLabel}: ${activePct.toFixed(2)}%${activeCap > 0 ? ` maks ${formatCompactCurrency(Math.round(activeCap))}` : ''}`
+          : 'Pilih kategori produk untuk memuat persen dan cap Ongkir Extra.';
+    }
     if (shopeeFeeTooltipContent) {
       if (!computed) {
         shopeeFeeTooltipContent.innerHTML = '';
@@ -3753,7 +3921,7 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
         }
         if (roasCalculatorState.gratisOngkirXtraEnabled) {
           parts.push(
-            `Gratis Ongkir XTRA: ${formatCompactCurrency(Math.round(computed.feeGratisOngkirXtra))} (${SHOPEE_GRATIS_ONGKIR_XTRA_FEE_PCT.toFixed(1)}%)`,
+            `Gratis Ongkir XTRA ${roasCalculatorState.gratisOngkirProductSize === 'special' ? 'Ukuran Khusus' : 'Ukuran Biasa'}: ${formatCompactCurrency(Math.round(computed.feeGratisOngkirXtra))} (${formatPercent(computed.gratisOngkirPct)}${computed.gratisOngkirCap > 0 ? `, maks ${formatCompactCurrency(Math.round(computed.gratisOngkirCap))}` : ''})`,
           );
         }
         shopeeFeeTooltipContent.innerHTML = parts
@@ -3805,6 +3973,7 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
     roasCalculatorState.storeType = resetDefaults?.storeType ?? 'non_star';
     roasCalculatorState.promoXtraEnabled = resetDefaults?.promoXtraEnabled ?? false;
     roasCalculatorState.gratisOngkirXtraEnabled = false;
+    roasCalculatorState.gratisOngkirProductSize = 'regular';
     clearRoasCategorySelection();
     roasCalculatorState.price = getRepresentativeProductPrice(detail);
 
@@ -3888,6 +4057,18 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
     roasCalculatorState.gratisOngkirXtraEnabled = Boolean(gratisOngkirToggle.checked);
     refreshComputed();
   });
+
+  for (const radio of gratisOngkirSizeRadios) {
+    radio.addEventListener('change', () => {
+      const nextValue = normalizeText(radio.value);
+      if (!(nextValue === 'regular' || nextValue === 'special')) {
+        return;
+      }
+
+      roasCalculatorState.gratisOngkirProductSize = nextValue;
+      refreshComputed();
+    });
+  }
 
   modal.addEventListener('click', (event) => {
     if (event.target === modal) {

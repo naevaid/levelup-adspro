@@ -21,6 +21,10 @@ type MarketplaceCategoryFee = {
   secondaryCategory: string | null;
   categoryName: string;
   feePercent: number;
+  gratisOngkirPctRegular: number;
+  gratisOngkirCapRegular: number;
+  gratisOngkirPctSpecial: number;
+  gratisOngkirCapSpecial: number;
   isActive: boolean;
   notes: string | null;
   createdAt: string;
@@ -35,6 +39,10 @@ type FeeFormState = {
   secondaryCategory: string;
   categoryName: string;
   feePercent: string;
+  gratisOngkirPctRegular: string;
+  gratisOngkirCapRegular: string;
+  gratisOngkirPctSpecial: string;
+  gratisOngkirCapSpecial: string;
   notes: string;
   isActive: boolean;
 };
@@ -46,6 +54,10 @@ const EMPTY_FORM: FeeFormState = {
   secondaryCategory: "",
   categoryName: "",
   feePercent: "",
+  gratisOngkirPctRegular: "",
+  gratisOngkirCapRegular: "",
+  gratisOngkirPctSpecial: "",
+  gratisOngkirCapSpecial: "",
   notes: "",
   isActive: true,
 };
@@ -77,6 +89,19 @@ function getPreferredMarketplaceId(marketplaces: MarketplaceSummary[]) {
 
 function formatPercent(value: number) {
   return `${value.toFixed(2)}%`;
+}
+
+function formatCurrency(value: number) {
+  return `Rp${Math.round(value).toLocaleString("id-ID")}`;
+}
+
+function formatShippingFee(valuePct: number, capValue: number) {
+  if (valuePct <= 0) {
+    return "-";
+  }
+
+  const capText = capValue > 0 ? ` maks ${formatCurrency(capValue)}` : "";
+  return `${formatPercent(valuePct)}${capText}`;
 }
 
 function formatFeeNotes(notes: string | null) {
@@ -252,6 +277,18 @@ export default function SettingsPage() {
         secondaryCategory: form.secondaryCategory || undefined,
         categoryName: form.categoryName,
         feePercent: Number.parseFloat(form.feePercent),
+        gratisOngkirPctRegular: form.gratisOngkirPctRegular
+          ? Number.parseFloat(form.gratisOngkirPctRegular)
+          : 0,
+        gratisOngkirCapRegular: form.gratisOngkirCapRegular
+          ? Number.parseFloat(form.gratisOngkirCapRegular)
+          : 0,
+        gratisOngkirPctSpecial: form.gratisOngkirPctSpecial
+          ? Number.parseFloat(form.gratisOngkirPctSpecial)
+          : 0,
+        gratisOngkirCapSpecial: form.gratisOngkirCapSpecial
+          ? Number.parseFloat(form.gratisOngkirCapSpecial)
+          : 0,
         notes: form.notes || undefined,
         isActive: form.isActive,
       };
@@ -297,6 +334,10 @@ export default function SettingsPage() {
       secondaryCategory: fee.secondaryCategory ?? "",
       categoryName: fee.categoryName,
       feePercent: fee.feePercent.toString(),
+      gratisOngkirPctRegular: fee.gratisOngkirPctRegular.toString(),
+      gratisOngkirCapRegular: fee.gratisOngkirCapRegular.toString(),
+      gratisOngkirPctSpecial: fee.gratisOngkirPctSpecial.toString(),
+      gratisOngkirCapSpecial: fee.gratisOngkirCapSpecial.toString(),
       notes: fee.notes ?? "",
       isActive: fee.isActive,
     });
@@ -544,7 +585,8 @@ export default function SettingsPage() {
                   <th className="px-5 py-4 font-medium">Marketplace</th>
                   <th className="px-5 py-4 font-medium">Jenis Toko</th>
                   <th className="px-5 py-4 font-medium">Kategori</th>
-                  <th className="px-5 py-4 font-medium">Fee</th>
+                  <th className="px-5 py-4 font-medium">Fee Kategori</th>
+                  <th className="px-5 py-4 font-medium">Ongkir Extra</th>
                   <th className="px-5 py-4 font-medium">Status</th>
                   <th className="px-5 py-4 font-medium">Catatan</th>
                   <th className="px-5 py-4 font-medium text-right">Aksi</th>
@@ -568,6 +610,16 @@ export default function SettingsPage() {
                       <span className="rounded-full border border-sky-300/20 bg-sky-400/10 px-3 py-1.5 text-xs font-semibold tracking-wide text-sky-100">
                         {formatPercent(fee.feePercent)}
                       </span>
+                    </td>
+                    <td className="px-5 py-4 text-sm text-slate-100">
+                      <p>Biasa: {formatShippingFee(fee.gratisOngkirPctRegular, fee.gratisOngkirCapRegular)}</p>
+                      <p className="mt-1 muted-text">
+                        Khusus:{" "}
+                        {formatShippingFee(
+                          fee.gratisOngkirPctSpecial,
+                          fee.gratisOngkirCapSpecial,
+                        )}
+                      </p>
                     </td>
                     <td className="px-5 py-4">
                       <span
@@ -732,6 +784,43 @@ export default function SettingsPage() {
               </label>
 
               <label className="block">
+                <span className="text-sm text-slate-200">Ongkir Extra Biasa (%)</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={form.gratisOngkirPctRegular}
+                  onChange={(event) =>
+                    setForm((previous) => ({
+                      ...previous,
+                      gratisOngkirPctRegular: event.target.value,
+                    }))
+                  }
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
+                  placeholder="Contoh: 5.50"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm text-slate-200">Cap Biasa (Rp)</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={form.gratisOngkirCapRegular}
+                  onChange={(event) =>
+                    setForm((previous) => ({
+                      ...previous,
+                      gratisOngkirCapRegular: event.target.value,
+                    }))
+                  }
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
+                  placeholder="Contoh: 40000"
+                />
+              </label>
+
+              <label className="block">
                 <span className="text-sm text-slate-200">Kategori utama</span>
                 <input
                   type="text"
@@ -778,6 +867,43 @@ export default function SettingsPage() {
                   }
                   className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
                   placeholder="Contoh: Aksesoris & Perawatan Sepatu"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm text-slate-200">Ongkir Extra Khusus (%)</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={form.gratisOngkirPctSpecial}
+                  onChange={(event) =>
+                    setForm((previous) => ({
+                      ...previous,
+                      gratisOngkirPctSpecial: event.target.value,
+                    }))
+                  }
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
+                  placeholder="Contoh: 7.00"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm text-slate-200">Cap Khusus (Rp)</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={form.gratisOngkirCapSpecial}
+                  onChange={(event) =>
+                    setForm((previous) => ({
+                      ...previous,
+                      gratisOngkirCapSpecial: event.target.value,
+                    }))
+                  }
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
+                  placeholder="Contoh: 60000"
                 />
               </label>
 

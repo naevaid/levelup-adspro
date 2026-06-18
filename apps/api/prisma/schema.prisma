@@ -226,6 +226,10 @@ model MarketplaceCategoryFee {
   secondaryCategory String?              @map("secondary_category")
   categoryName      String               @map("category_name")
   feePercent        Float                @map("fee_percent")
+  gratisOngkirPctRegular Float           @default(0) @map("gratis_ongkir_pct_regular")
+  gratisOngkirCapRegular Float           @default(0) @map("gratis_ongkir_cap_regular")
+  gratisOngkirPctSpecial Float           @default(0) @map("gratis_ongkir_pct_special")
+  gratisOngkirCapSpecial Float           @default(0) @map("gratis_ongkir_cap_special")
   isActive          Boolean              @default(true) @map("is_active")
   notes             String?
   createdAt         DateTime             @default(now()) @map("created_at")

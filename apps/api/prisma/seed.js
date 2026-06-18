@@ -10,6 +10,7 @@ const { randomUUID } = require('crypto');
 const prisma = new PrismaClient();
 
 const SHOPEE_CATEGORY_FEE_ARTICLE_ID = 15965;
+const SHOPEE_GRATIS_ONGKIR_ARTICLE_ID = 24877;
 const SHOPEE_CATEGORY_FEE_TABLE_LAYOUT = [
   { storeTypes: ['NON_STAR', 'STAR'], primaryCategory: 'Fashion' },
   { storeTypes: ['NON_STAR', 'STAR'], primaryCategory: 'FMCG' },
@@ -22,6 +23,7 @@ const SHOPEE_CATEGORY_FEE_TABLE_LAYOUT = [
   { storeTypes: ['MALL'], primaryCategory: 'Lifestyle' },
   { storeTypes: ['MALL'], primaryCategory: 'Lainnya' },
 ];
+const SHOPEE_GRATIS_ONGKIR_TABLE_COUNT = 5;
 
 const plans = [
   {
@@ -207,6 +209,55 @@ function parseFeePercent(value) {
   return parsed;
 }
 
+function parseFeeCap(value) {
+  const normalized = normalizeText(value);
+  const amountMatch = normalized.match(/Rp\s*([\d.,]+)/i);
+  if (!amountMatch) {
+    return 0;
+  }
+
+  const numericPortion = amountMatch[1].replace(/,/g, '.').trim();
+  const parts = numericPortion.split('.');
+  const joinedDigits = parts.join('');
+  let parsed = Number.parseInt(joinedDigits, 10);
+
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`Tidak bisa membaca cap fee dari nilai "${value}".`);
+  }
+
+  if (parts.length === 2 && /^0{4,}$/.test(parts[1] ?? '') && parsed >= 100000) {
+    parsed = Math.round(parsed / 10);
+  }
+
+  return parsed;
+}
+
+function parseCappedFeeCell(value) {
+  return {
+    pct: parseFeePercent(value),
+    cap: parseFeeCap(value),
+  };
+}
+
+function normalizeSeedLookupPart(value) {
+  return normalizeText(value).toLowerCase();
+}
+
+function buildShopeeFeeLookupKey(category, subCategory, productTypes) {
+  return [
+    normalizeSeedLookupPart(category),
+    normalizeSeedLookupPart(subCategory),
+    normalizeSeedLookupPart(productTypes),
+  ].join('|||');
+}
+
+function buildShopeeFeeSubCategoryKey(category, subCategory) {
+  return [
+    normalizeSeedLookupPart(category),
+    normalizeSeedLookupPart(subCategory),
+  ].join('|||');
+}
+
 function summarizeProductBucket(value) {
   const normalized = normalizeText(value).replace(/^&\s+/, '');
 
@@ -240,14 +291,14 @@ function buildSeedNote(productTypes) {
   return truncateText(normalized, 300);
 }
 
-async function fetchShopeeCategoryFeeArticleContent() {
+async function fetchShopeeArticleContent(articleId, articleLabel) {
   const spcCds = randomUUID();
-  const articleUrl = `https://seller.shopee.co.id/help/api/v3/article/detail/?SPC_CDS=${spcCds}&SPC_CDS_VER=2&lang=default&article_id=${SHOPEE_CATEGORY_FEE_ARTICLE_ID}`;
+  const articleUrl = `https://seller.shopee.co.id/help/api/v3/article/detail/?SPC_CDS=${spcCds}&SPC_CDS_VER=2&lang=default&article_id=${articleId}`;
 
   const response = await fetch(articleUrl, {
     headers: {
       accept: 'application/json, text/plain, */*',
-      referer: `https://seller.shopee.co.id/edu/article/${SHOPEE_CATEGORY_FEE_ARTICLE_ID}`,
+      referer: `https://seller.shopee.co.id/edu/article/${articleId}`,
       'shopee-language': 'default',
       cookie: `SPC_CDS=${spcCds}`,
     },
@@ -255,7 +306,7 @@ async function fetchShopeeCategoryFeeArticleContent() {
 
   if (!response.ok) {
     throw new Error(
-      `Gagal mengambil artikel Shopee fee kategori. Status: ${response.status}.`,
+      `Gagal mengambil artikel Shopee ${articleLabel}. Status: ${response.status}.`,
     );
   }
 
@@ -263,14 +314,99 @@ async function fetchShopeeCategoryFeeArticleContent() {
   const content = payload?.data?.content;
 
   if (typeof content !== 'string' || !content.includes('<table')) {
-    throw new Error('Konten artikel Shopee tidak berisi tabel fee kategori.');
+    throw new Error(`Konten artikel Shopee ${articleLabel} tidak berisi tabel.`);
   }
 
   return content;
 }
 
+async function buildShopeeGratisOngkirFeeLookup() {
+  const content = await fetchShopeeArticleContent(
+    SHOPEE_GRATIS_ONGKIR_ARTICLE_ID,
+    'Gratis Ongkir XTRA',
+  );
+  const tables = [...content.matchAll(/<table\b[\s\S]*?<\/table>/gi)].map(
+    (match) => match[0],
+  );
+
+  if (tables.length < SHOPEE_GRATIS_ONGKIR_TABLE_COUNT) {
+    throw new Error(
+      `Jumlah tabel Gratis Ongkir XTRA Shopee tidak sesuai. Ditemukan ${tables.length} tabel.`,
+    );
+  }
+
+  const exactMatches = new Map();
+  const fallbackMatches = new Map();
+  const fallbackCounts = new Map();
+
+  for (let tableIndex = 0; tableIndex < SHOPEE_GRATIS_ONGKIR_TABLE_COUNT; tableIndex += 1) {
+    const rows = parseHtmlTable(tables[tableIndex])
+      .slice(1)
+      .filter((row) => (row[4] || '').includes('%') && (row[5] || '').includes('%'))
+      .map((row) => {
+        const regularFee = parseCappedFeeCell(row[4] || '');
+        const specialFee = parseCappedFeeCell(row[5] || '');
+        return {
+          secondaryCategory: row[0],
+          subCategory: row[2],
+          productTypes: row[3],
+          gratisOngkirPctRegular: regularFee.pct,
+          gratisOngkirCapRegular: regularFee.cap,
+          gratisOngkirPctSpecial: specialFee.pct,
+          gratisOngkirCapSpecial: specialFee.cap,
+        };
+      })
+      .filter(
+        (row) =>
+          row.secondaryCategory &&
+          row.subCategory &&
+          row.productTypes &&
+          Number.isFinite(row.gratisOngkirPctRegular) &&
+          Number.isFinite(row.gratisOngkirPctSpecial),
+      );
+
+    for (const row of rows) {
+      const exactKey = buildShopeeFeeLookupKey(
+        row.secondaryCategory,
+        row.subCategory,
+        row.productTypes,
+      );
+      exactMatches.set(exactKey, row);
+
+      const fallbackKey = buildShopeeFeeSubCategoryKey(
+        row.secondaryCategory,
+        row.subCategory,
+      );
+      fallbackCounts.set(fallbackKey, (fallbackCounts.get(fallbackKey) || 0) + 1);
+      if (!fallbackMatches.has(fallbackKey)) {
+        fallbackMatches.set(fallbackKey, row);
+      }
+    }
+  }
+
+  return { exactMatches, fallbackMatches, fallbackCounts };
+}
+
+function findShopeeGratisOngkirMatch(lookup, secondaryCategory, subCategory, productTypes) {
+  const exactKey = buildShopeeFeeLookupKey(secondaryCategory, subCategory, productTypes);
+  const exactMatch = lookup.exactMatches.get(exactKey);
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  const fallbackKey = buildShopeeFeeSubCategoryKey(secondaryCategory, subCategory);
+  if ((lookup.fallbackCounts.get(fallbackKey) || 0) === 1) {
+    return lookup.fallbackMatches.get(fallbackKey) || null;
+  }
+
+  return null;
+}
+
 async function buildShopeeCategoryFeeSeedEntries() {
-  const content = await fetchShopeeCategoryFeeArticleContent();
+  const [content, gratisOngkirLookup] = await Promise.all([
+    fetchShopeeArticleContent(SHOPEE_CATEGORY_FEE_ARTICLE_ID, 'fee kategori'),
+    buildShopeeGratisOngkirFeeLookup(),
+  ]);
   const tables = [...content.matchAll(/<table\b[\s\S]*?<\/table>/gi)].map(
     (match) => match[0],
   );
@@ -345,6 +481,13 @@ async function buildShopeeCategoryFeeSeedEntries() {
 
       usedLabels.add(`${row.secondaryCategory}|||${uniqueCategoryName}`);
 
+      const gratisOngkirMatch = findShopeeGratisOngkirMatch(
+        gratisOngkirLookup,
+        row.secondaryCategory,
+        row.subCategory,
+        row.productTypes,
+      );
+
       for (const storeType of layout.storeTypes) {
         entries.push({
           storeType,
@@ -352,6 +495,10 @@ async function buildShopeeCategoryFeeSeedEntries() {
           secondaryCategory: row.secondaryCategory,
           categoryName: uniqueCategoryName,
           feePercent: row.feePercent,
+          gratisOngkirPctRegular: gratisOngkirMatch?.gratisOngkirPctRegular ?? 0,
+          gratisOngkirCapRegular: gratisOngkirMatch?.gratisOngkirCapRegular ?? 0,
+          gratisOngkirPctSpecial: gratisOngkirMatch?.gratisOngkirPctSpecial ?? 0,
+          gratisOngkirCapSpecial: gratisOngkirMatch?.gratisOngkirCapSpecial ?? 0,
           notes: buildSeedNote(row.productTypes),
         });
       }
@@ -369,6 +516,10 @@ async function upsertMarketplaceCategoryFee({
   secondaryCategory,
   categoryName,
   feePercent,
+  gratisOngkirPctRegular,
+  gratisOngkirCapRegular,
+  gratisOngkirPctSpecial,
+  gratisOngkirCapSpecial,
   isActive,
   notes,
 }) {
@@ -382,6 +533,10 @@ async function upsertMarketplaceCategoryFee({
         secondaryCategory,
         categoryName,
         feePercent,
+        gratisOngkirPctRegular,
+        gratisOngkirCapRegular,
+        gratisOngkirPctSpecial,
+        gratisOngkirCapSpecial,
         isActive,
         notes,
       },
@@ -402,6 +557,10 @@ async function upsertMarketplaceCategoryFee({
         },
         data: {
           feePercent,
+          gratisOngkirPctRegular,
+          gratisOngkirCapRegular,
+          gratisOngkirPctSpecial,
+          gratisOngkirCapSpecial,
           isActive,
           notes,
         },
@@ -446,11 +605,28 @@ async function seedShopeeCategoryFees() {
         marketplaceId: shopeeMarketplace.id,
       },
       select: {
+        id: true,
         storeType: true,
         primaryCategory: true,
         secondaryCategory: true,
+        categoryName: true,
+        gratisOngkirPctRegular: true,
+        gratisOngkirCapRegular: true,
+        gratisOngkirPctSpecial: true,
+        gratisOngkirCapSpecial: true,
       },
     });
+    const existingFeeMap = new Map(
+      existingFees.map((fee) => [
+        [
+          fee.storeType,
+          fee.primaryCategory.trim().toLowerCase(),
+          (fee.secondaryCategory || '').trim().toLowerCase(),
+          fee.categoryName.trim().toLowerCase(),
+        ].join('|||'),
+        fee,
+      ]),
+    );
     const existingBucketKeys = new Set(
       existingFees.map((fee) =>
         [
@@ -467,6 +643,33 @@ async function seedShopeeCategoryFees() {
         entry.primaryCategory.trim().toLowerCase(),
         (entry.secondaryCategory || '').trim().toLowerCase(),
       ].join('|||');
+      const existingFee = existingFeeMap.get(
+        [
+          entry.storeType,
+          entry.primaryCategory.trim().toLowerCase(),
+          (entry.secondaryCategory || '').trim().toLowerCase(),
+          entry.categoryName.trim().toLowerCase(),
+        ].join('|||'),
+      );
+
+      if (
+        existingFee &&
+        existingFee.gratisOngkirPctRegular === 0 &&
+        existingFee.gratisOngkirCapRegular === 0 &&
+        existingFee.gratisOngkirPctSpecial === 0 &&
+        existingFee.gratisOngkirCapSpecial === 0 &&
+        (entry.gratisOngkirPctRegular > 0 || entry.gratisOngkirPctSpecial > 0)
+      ) {
+        await prisma.marketplaceCategoryFee.update({
+          where: { id: existingFee.id },
+          data: {
+            gratisOngkirPctRegular: entry.gratisOngkirPctRegular,
+            gratisOngkirCapRegular: entry.gratisOngkirCapRegular,
+            gratisOngkirPctSpecial: entry.gratisOngkirPctSpecial,
+            gratisOngkirCapSpecial: entry.gratisOngkirCapSpecial,
+          },
+        });
+      }
 
       if (existingBucketKeys.has(bucketKey)) {
         continue;
@@ -480,6 +683,10 @@ async function seedShopeeCategoryFees() {
         secondaryCategory: entry.secondaryCategory,
         categoryName: entry.categoryName,
         feePercent: entry.feePercent,
+        gratisOngkirPctRegular: entry.gratisOngkirPctRegular,
+        gratisOngkirCapRegular: entry.gratisOngkirCapRegular,
+        gratisOngkirPctSpecial: entry.gratisOngkirPctSpecial,
+        gratisOngkirCapSpecial: entry.gratisOngkirCapSpecial,
         isActive: true,
         notes: entry.notes,
       });

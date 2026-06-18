@@ -32,6 +32,30 @@ export class UpdateMarketplaceCategoryFeeDto {
   feePercent?: number;
 
   @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100)
+  gratisOngkirPctRegular?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(1000000)
+  gratisOngkirCapRegular?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100)
+  gratisOngkirPctSpecial?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(1000000)
+  gratisOngkirCapSpecial?: number;
+
+  @IsOptional()
   @IsBoolean()
   isActive?: boolean;
 

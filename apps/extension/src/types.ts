@@ -70,6 +70,10 @@ export type MarketplaceCategoryFeeSummary = {
   secondaryCategory: string | null;
   categoryName: string;
   feePercent: number;
+  gratisOngkirPctRegular: number;
+  gratisOngkirCapRegular: number;
+  gratisOngkirPctSpecial: number;
+  gratisOngkirCapSpecial: number;
   isActive: boolean;
   notes: string | null;
   createdAt: string;

@@ -40,6 +40,10 @@ export class MarketplaceCategoryFeesService {
           secondaryCategory: dto.secondaryCategory?.trim() || null,
           categoryName: dto.categoryName.trim(),
           feePercent: dto.feePercent,
+          gratisOngkirPctRegular: dto.gratisOngkirPctRegular ?? 0,
+          gratisOngkirCapRegular: dto.gratisOngkirCapRegular ?? 0,
+          gratisOngkirPctSpecial: dto.gratisOngkirPctSpecial ?? 0,
+          gratisOngkirCapSpecial: dto.gratisOngkirCapSpecial ?? 0,
           isActive: dto.isActive ?? true,
           notes: dto.notes?.trim() || null,
         },
@@ -85,6 +89,10 @@ export class MarketplaceCategoryFeesService {
           categoryName:
             typeof dto.categoryName === 'string' ? dto.categoryName.trim() : undefined,
           feePercent: dto.feePercent,
+          gratisOngkirPctRegular: dto.gratisOngkirPctRegular,
+          gratisOngkirCapRegular: dto.gratisOngkirCapRegular,
+          gratisOngkirPctSpecial: dto.gratisOngkirPctSpecial,
+          gratisOngkirCapSpecial: dto.gratisOngkirCapSpecial,
           isActive: dto.isActive,
           notes:
             typeof dto.notes === 'string'
@@ -147,6 +155,10 @@ export class MarketplaceCategoryFeesService {
     secondaryCategory: string | null;
     categoryName: string;
     feePercent: number;
+    gratisOngkirPctRegular: number;
+    gratisOngkirCapRegular: number;
+    gratisOngkirPctSpecial: number;
+    gratisOngkirCapSpecial: number;
     isActive: boolean;
     notes: string | null;
     createdAt: Date;
@@ -164,6 +176,10 @@ export class MarketplaceCategoryFeesService {
       secondaryCategory: fee.secondaryCategory,
       categoryName: fee.categoryName,
       feePercent: fee.feePercent,
+      gratisOngkirPctRegular: fee.gratisOngkirPctRegular,
+      gratisOngkirCapRegular: fee.gratisOngkirCapRegular,
+      gratisOngkirPctSpecial: fee.gratisOngkirPctSpecial,
+      gratisOngkirCapSpecial: fee.gratisOngkirCapSpecial,
       isActive: fee.isActive,
       notes: fee.notes,
       createdAt: fee.createdAt,
