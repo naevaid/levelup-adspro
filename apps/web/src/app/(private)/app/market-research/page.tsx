@@ -168,11 +168,60 @@ function countPreviewItemsWithPrice(
   ).length;
 }
 
+const PAGE_SIZE = 5;
+
+function formatCaptureMode(captureMode: string) {
+  switch (captureMode.toLowerCase()) {
+    case "public":
+      return "Public Research";
+    case "seller":
+      return "Seller Center";
+    default:
+      return captureMode
+        .replaceAll("_", " ")
+        .replace(/\b\w/g, (character) => character.toUpperCase());
+  }
+}
+
+function formatPageType(pageType: string) {
+  switch (pageType.toLowerCase()) {
+    case "shopee_public_product":
+      return "Detail Produk Publik Shopee";
+    case "shopee_public_search":
+      return "Pencarian Publik Shopee";
+    case "seller_product_detail":
+      return "Detail Produk Seller";
+    default:
+      return pageType
+        .replaceAll("_", " ")
+        .replace(/\b\w/g, (character) => character.toUpperCase());
+  }
+}
+
+function formatBatchStatus(status: string) {
+  switch (status.toUpperCase()) {
+    case "ACCEPTED":
+      return "Diterima";
+    case "PROCESSING":
+      return "Diproses";
+    case "COMPLETED":
+      return "Selesai";
+    case "FAILED":
+      return "Gagal";
+    default:
+      return status
+        .replaceAll("_", " ")
+        .replace(/\b\w/g, (character) => character.toUpperCase());
+  }
+}
+
 export default function MarketResearchPage() {
   const { isReady, session } = useAuth();
   const [batches, setBatches] = useState<IngestionBatchSummary[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expandedBatchId, setExpandedBatchId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const authorization = useMemo(() => {
     if (!session) {
@@ -221,6 +270,25 @@ export default function MarketResearchPage() {
     return () => window.clearTimeout(timeoutId);
   }, [authorization, isReady, refresh]);
 
+  const totalPages = Math.max(1, Math.ceil(batches.length / PAGE_SIZE));
+  const paginatedBatches = useMemo(() => {
+    const startIndex = (currentPage - 1) * PAGE_SIZE;
+    return batches.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [batches, currentPage]);
+
+  useEffect(() => {
+    setCurrentPage((previous) => Math.min(previous, totalPages));
+  }, [totalPages]);
+
+  useEffect(() => {
+    if (
+      expandedBatchId &&
+      !paginatedBatches.some((batch) => batch.id === expandedBatchId)
+    ) {
+      setExpandedBatchId(null);
+    }
+  }, [expandedBatchId, paginatedBatches]);
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -246,7 +314,8 @@ export default function MarketResearchPage() {
             {batches.length}
           </p>
           <p className="mt-2 text-sm muted-text">
-            Menampilkan maksimal 20 batch ingestion terbaru untuk organization aktif.
+            Menampilkan maksimal 20 batch ingestion terbaru untuk organization aktif,
+            dengan pagination per {PAGE_SIZE} batch.
           </p>
         </div>
         <div className="glass-card rounded-[1.75rem] border border-white/10 p-6 sm:p-7">
@@ -282,8 +351,46 @@ export default function MarketResearchPage() {
           secondaryAction={{ label: "Kembali ke dashboard", href: "/app/dashboard" }}
         />
       ) : (
-        <section className="grid gap-4">
-          {batches.map((batch) => (
+        <section className="space-y-4">
+          <div className="glass-card rounded-[1.75rem] border border-white/10 p-4 sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm text-sky-200/75">Navigasi batch</p>
+                <p className="mt-2 text-sm muted-text">
+                  Buka satu batch untuk melihat detail. Saat batch lain dibuka, batch
+                  sebelumnya otomatis ditutup.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((previous) => Math.max(1, previous - 1))}
+                  disabled={currentPage === 1}
+                  className="rounded-full border border-white/12 px-4 py-2 text-sm font-medium text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Sebelumnya
+                </button>
+                <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-100">
+                  Halaman {currentPage} / {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCurrentPage((previous) => Math.min(totalPages, previous + 1))
+                  }
+                  disabled={currentPage === totalPages}
+                  className="rounded-full border border-white/12 px-4 py-2 text-sm font-medium text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Berikutnya
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {paginatedBatches.map((batch) => {
+            const isExpanded = expandedBatchId === batch.id;
+
+            return (
             <article
               key={batch.id}
               className="glass-card rounded-[1.75rem] border border-white/10 p-6 sm:p-7"
@@ -291,20 +398,76 @@ export default function MarketResearchPage() {
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-xs uppercase tracking-[0.28em] text-sky-200/65">
-                    {batch.marketplace} • {batch.captureMode}
+                    {batch.marketplace} • {formatCaptureMode(batch.captureMode)}
                   </p>
                   <h2 className="mt-2 text-xl font-semibold text-white">
-                    {batch.pageType}
+                    {formatPageType(batch.pageType)}
                   </h2>
-                  <p className="mt-2 text-sm muted-text">
-                    Batch ID: {batch.id}
-                  </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className="rounded-full border border-white/12 px-3 py-1.5 text-xs text-slate-200">
+                      Batch ID: {batch.id}
+                    </span>
+                    <span className="rounded-full border border-white/12 px-3 py-1.5 text-xs text-slate-200">
+                      Captured: {formatDateTime(batch.capturedAt)}
+                    </span>
+                    <span className="rounded-full border border-white/12 px-3 py-1.5 text-xs text-slate-200">
+                      Session: {batch.extensionSession.deviceLabel}
+                    </span>
+                  </div>
                 </div>
-                <span className="rounded-full border border-white/12 px-4 py-2 text-xs font-semibold tracking-wide text-slate-100">
-                  {batch.status}
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full border border-white/12 px-4 py-2 text-xs font-semibold tracking-wide text-slate-100">
+                    {formatBatchStatus(batch.status)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpandedBatchId((previous) =>
+                        previous === batch.id ? null : batch.id,
+                      )
+                    }
+                    className="rounded-full border border-sky-300/20 bg-sky-400/10 px-4 py-2 text-sm font-medium text-sky-100 transition hover:border-sky-300/35 hover:bg-sky-400/15"
+                  >
+                    {isExpanded ? "Tutup" : "Buka"}
+                  </button>
+                </div>
               </div>
 
+              <div className="mt-5 grid gap-3 md:grid-cols-4">
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
+                  Preview
+                  <div className="mt-2 text-base font-semibold text-white">
+                    {batch.preview?.type === "public_search"
+                      ? "Riset Pencarian"
+                      : batch.preview?.type === "public_product"
+                        ? "Detail Produk"
+                        : "Belum ada preview"}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
+                  Shop Context
+                  <div className="mt-2 text-base font-semibold text-white">
+                    {batch.captureMode === "public"
+                      ? "Public Capture"
+                      : batch.shop?.name || batch.shop?.externalId || "-"}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
+                  Raw Payload
+                  <div className="mt-2 text-base font-semibold text-white">
+                    {formatSize(batch.rawPayloadObject?.sizeBytes)}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
+                  Storage
+                  <div className="mt-2 line-clamp-1 text-sm font-semibold text-white">
+                    {batch.rawPayloadObject?.storageKey ?? "-"}
+                  </div>
+                </div>
+              </div>
+
+              {isExpanded ? (
+                <>
               <div className="mt-6 grid gap-4 lg:grid-cols-2">
                 <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
                   <p className="text-sm text-sky-200/75">Waktu</p>
@@ -588,8 +751,36 @@ export default function MarketResearchPage() {
                   Storage key: {batch.rawPayloadObject?.storageKey ?? "-"}
                 </p>
               </div>
+                </>
+              ) : (
+                <p className="mt-4 text-sm muted-text">
+                  Klik <span className="text-slate-100">Buka</span> untuk melihat waktu
+                  capture, extension session, shop context, raw payload, preview hasil,
+                  dan detail error batch ini.
+                </p>
+              )}
             </article>
-          ))}
+            );
+          })}
+
+          {totalPages > 1 ? (
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                <button
+                  key={page}
+                  type="button"
+                  onClick={() => setCurrentPage(page)}
+                  className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                    page === currentPage
+                      ? "bg-sky-400 text-slate-950"
+                      : "border border-white/12 text-slate-100 hover:border-sky-300/35 hover:text-sky-100"
+                  }`}
+                >
+                  {page}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </section>
       )}
     </div>

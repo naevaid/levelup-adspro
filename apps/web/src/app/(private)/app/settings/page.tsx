@@ -84,6 +84,7 @@ export default function SettingsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [form, setForm] = useState<FeeFormState>(EMPTY_FORM);
   const [marketplaceFilter, setMarketplaceFilter] = useState<string>("ALL");
   const [storeTypeFilter, setStoreTypeFilter] = useState<StoreType | "ALL">("ALL");
@@ -108,6 +109,16 @@ export default function SettingsPage() {
     },
     [marketplaces],
   );
+
+  const closeModal = useCallback(() => {
+    resetForm();
+    setIsModalOpen(false);
+  }, [resetForm]);
+
+  const openCreateModal = useCallback(() => {
+    resetForm();
+    setIsModalOpen(true);
+  }, [resetForm]);
 
   const refresh = useCallback(async () => {
     if (!authorization) {
@@ -214,7 +225,7 @@ export default function SettingsPage() {
       }
 
       await refresh();
-      resetForm();
+      closeModal();
     } catch (submitError) {
       setSubmitError(
         submitError instanceof Error
@@ -229,6 +240,7 @@ export default function SettingsPage() {
   const handleEdit = (fee: MarketplaceCategoryFee) => {
     setEditingId(fee.id);
     setSubmitError(null);
+    setIsModalOpen(true);
     setForm({
       marketplaceId: fee.marketplace.id,
       storeType: fee.storeType,
@@ -289,7 +301,7 @@ export default function SettingsPage() {
       );
       await refresh();
       if (editingId === fee.id) {
-        resetForm();
+        closeModal();
       }
     } catch (deleteError) {
       setSubmitError(
@@ -345,188 +357,45 @@ export default function SettingsPage() {
       </section>
 
       <section className="glass-card rounded-[1.75rem] border border-white/10 p-6 sm:p-7">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold text-white">
-              {editingId ? "Edit fee kategori" : "Tambah fee kategori"}
-            </h2>
+            <h2 className="text-lg font-semibold text-white">Data fee kategori</h2>
             <p className="mt-2 text-sm leading-7 muted-text">
-              Simpan kombinasi marketplace, jenis toko, kategori, dan persentase fee yang
-              ingin digunakan sebagai referensi ROAS.
+              Gunakan tabel untuk meninjau semua master fee kategori. Tambah dan edit
+              dilakukan lewat popup agar halaman tetap ringkas dan mudah dipindai.
             </p>
           </div>
-          {editingId ? (
-            <button
-              type="button"
-              onClick={() => resetForm()}
-              className="rounded-full border border-white/12 px-4 py-2.5 text-sm font-medium text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100"
-            >
-              Batal Edit
-            </button>
-          ) : null}
+          <button
+            type="button"
+            onClick={openCreateModal}
+            disabled={!authorization}
+            className="rounded-full bg-sky-400 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-sky-300 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            Tambah Fee Kategori
+          </button>
         </div>
-
-        <form onSubmit={handleSubmit} className="mt-6 grid gap-4 lg:grid-cols-3">
-          <label className="block">
-            <span className="text-sm text-slate-200">Marketplace</span>
-            <select
-              required
-              value={form.marketplaceId}
-              onChange={(event) =>
-                setForm((previous) => ({
-                  ...previous,
-                  marketplaceId: event.target.value,
-                }))
-              }
-              className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
-            >
-              {marketplaces.map((marketplace) => (
-                <option key={marketplace.id} value={marketplace.id}>
-                  {marketplace.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="block">
-            <span className="text-sm text-slate-200">Jenis toko</span>
-            <select
-              required
-              value={form.storeType}
-              onChange={(event) =>
-                setForm((previous) => ({
-                  ...previous,
-                  storeType: event.target.value as StoreType,
-                }))
-              }
-              className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
-            >
-              <option value="NON_STAR">Non-Star</option>
-              <option value="STAR">Star/Star+</option>
-              <option value="MALL">Mall</option>
-            </select>
-          </label>
-
-          <label className="block">
-            <span className="text-sm text-slate-200">Fee (%)</span>
-            <input
-              type="number"
-              min="0"
-              max="100"
-              step="0.01"
-              required
-              value={form.feePercent}
-              onChange={(event) =>
-                setForm((previous) => ({
-                  ...previous,
-                  feePercent: event.target.value,
-                }))
-              }
-              className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
-              placeholder="Contoh: 10.20"
-            />
-          </label>
-
-          <label className="block">
-            <span className="text-sm text-slate-200">Kategori utama</span>
-            <input
-              type="text"
-              required
-              value={form.primaryCategory}
-              onChange={(event) =>
-                setForm((previous) => ({
-                  ...previous,
-                  primaryCategory: event.target.value,
-                }))
-              }
-              className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
-              placeholder="Contoh: Fashion"
-            />
-          </label>
-
-          <label className="block">
-            <span className="text-sm text-slate-200">Sub kategori</span>
-            <input
-              type="text"
-              value={form.secondaryCategory}
-              onChange={(event) =>
-                setForm((previous) => ({
-                  ...previous,
-                  secondaryCategory: event.target.value,
-                }))
-              }
-              className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
-              placeholder="Contoh: Sepatu Pria"
-            />
-          </label>
-
-          <label className="block">
-            <span className="text-sm text-slate-200">Nama kategori</span>
-            <input
-              type="text"
-              required
-              value={form.categoryName}
-              onChange={(event) =>
-                setForm((previous) => ({
-                  ...previous,
-                  categoryName: event.target.value,
-                }))
-              }
-              className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
-              placeholder="Contoh: Aksesoris & Perawatan Sepatu"
-            />
-          </label>
-
-          <label className="block lg:col-span-2">
-            <span className="text-sm text-slate-200">Catatan</span>
-            <input
-              type="text"
-              value={form.notes}
-              onChange={(event) =>
-                setForm((previous) => ({
-                  ...previous,
-                  notes: event.target.value,
-                }))
-              }
-              className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
-              placeholder="Opsional: sumber, catatan perubahan, atau konteks biaya"
-            />
-          </label>
-
-          <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-3 lg:self-end">
-            <input
-              type="checkbox"
-              checked={form.isActive}
-              onChange={(event) =>
-                setForm((previous) => ({
-                  ...previous,
-                  isActive: event.target.checked,
-                }))
-              }
-            />
-            <span className="text-sm text-slate-200">Aktifkan fee ini</span>
-          </label>
-
-          {submitError ? (
-            <p className="rounded-2xl border border-rose-300/15 bg-rose-400/10 px-4 py-3 text-sm text-rose-100 lg:col-span-3">
-              {submitError}
+        <div className="mt-6 grid gap-4 md:grid-cols-3">
+          <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4">
+            <p className="text-sm text-sky-200/75">Tampilan utama</p>
+            <p className="mt-2 text-sm text-slate-100">
+              Tabel fee kategori memudahkan scan cepat antar marketplace, jenis toko,
+              fee, dan status aktif.
             </p>
-          ) : null}
-
-          <div className="lg:col-span-3">
-            <button
-              type="submit"
-              disabled={!authorization || isSubmitting || !form.marketplaceId}
-              className="rounded-full bg-sky-400 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-sky-300 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {isSubmitting
-                ? "Menyimpan..."
-                : editingId
-                  ? "Update Fee Kategori"
-                  : "Simpan Fee Kategori"}
-            </button>
           </div>
-        </form>
+          <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4">
+            <p className="text-sm text-sky-200/75">Tambah & edit</p>
+            <p className="mt-2 text-sm text-slate-100">
+              Form tambah dan edit dibuka melalui modal popup agar fokus pengisian lebih
+              nyaman tanpa membuat halaman panjang.
+            </p>
+          </div>
+          <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4">
+            <p className="text-sm text-sky-200/75">Aksi cepat</p>
+            <p className="mt-2 text-sm text-slate-100">
+              Aktivasi, nonaktifkan, dan hapus tetap tersedia langsung dari tabel.
+            </p>
+          </div>
+        </div>
       </section>
 
       <section className="glass-card rounded-[1.75rem] border border-white/10 p-6 sm:p-7">
@@ -572,78 +441,316 @@ export default function SettingsPage() {
       ) : null}
 
       {filteredFees.length === 0 ? (
-        <EmptyStatePanel
-          title="Belum ada master fee kategori"
-          description="Tambahkan data fee kategori Shopee terlebih dulu agar dashboard siap menjadi sumber konfigurasi untuk Kalkulator ROAS di extension."
-          secondaryAction={{ label: "Kembali ke dashboard", href: "/app/dashboard" }}
-        />
+        <section className="glass-card rounded-[1.75rem] border border-white/10 p-6 sm:p-7">
+          <div className="max-w-2xl">
+            <p className="text-xs uppercase tracking-[0.28em] text-sky-200/65">
+              Empty State
+            </p>
+            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-white">
+              Belum ada master fee kategori
+            </h2>
+            <p className="mt-3 text-sm leading-7 muted-text sm:text-base">
+              Tambahkan data fee kategori Shopee terlebih dulu agar dashboard siap
+              menjadi sumber konfigurasi untuk Kalkulator ROAS di extension.
+            </p>
+          </div>
+
+          <div className="mt-6 flex flex-wrap gap-3">
+            {authorization ? (
+              <button
+                type="button"
+                onClick={openCreateModal}
+                className="rounded-full bg-sky-400 px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-sky-300"
+              >
+                Tambah Fee Kategori
+              </button>
+            ) : (
+              <a
+                href="/app/dashboard"
+                className="rounded-full border border-white/12 px-5 py-3 text-sm font-medium text-slate-100 transition hover:border-sky-300/45 hover:text-sky-100"
+              >
+                Kembali ke dashboard
+              </a>
+            )}
+          </div>
+        </section>
       ) : (
-        <section className="grid gap-4">
-          {filteredFees.map((fee) => (
-            <div
-              key={fee.id}
-              className="glass-card rounded-[1.75rem] border border-white/10 p-6 sm:p-7"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.28em] text-sky-200/65">
-                    {fee.marketplace.name} · {getStoreTypeLabel(fee.storeType)}
-                  </p>
-                  <h3 className="mt-2 text-xl font-semibold text-white">
-                    {fee.categoryName}
-                  </h3>
-                  <p className="mt-2 text-sm muted-text">
-                    {fee.primaryCategory}
-                    {fee.secondaryCategory ? ` / ${fee.secondaryCategory}` : ""}
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    className={`rounded-full px-4 py-2 text-xs font-semibold tracking-wide ${
-                      fee.isActive
-                        ? "border border-emerald-300/20 bg-emerald-400/10 text-emerald-100"
-                        : "border border-white/12 text-slate-200"
-                    }`}
-                  >
-                    {fee.isActive ? "Aktif" : "Nonaktif"}
-                  </span>
-                  <span className="rounded-full border border-sky-300/20 bg-sky-400/10 px-4 py-2 text-xs font-semibold tracking-wide text-sky-100">
-                    {formatPercent(fee.feePercent)}
-                  </span>
-                </div>
-              </div>
-
-              {fee.notes ? (
-                <p className="mt-4 text-sm leading-7 muted-text">{fee.notes}</p>
-              ) : null}
-
-              <div className="mt-5 flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={() => handleEdit(fee)}
-                  className="rounded-full border border-white/12 px-4 py-2.5 text-sm font-medium text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100"
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleToggleStatus(fee)}
-                  className="rounded-full border border-white/12 px-4 py-2.5 text-sm font-medium text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100"
-                >
-                  {fee.isActive ? "Nonaktifkan" : "Aktifkan"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleDelete(fee)}
-                  className="rounded-full border border-rose-300/20 px-4 py-2.5 text-sm font-medium text-rose-100 transition hover:bg-rose-400/10"
-                >
-                  Hapus
-                </button>
-              </div>
-            </div>
-          ))}
+        <section className="glass-card overflow-hidden rounded-[1.75rem] border border-white/10">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-white/10">
+              <thead className="bg-white/5">
+                <tr className="text-left text-xs uppercase tracking-[0.24em] text-sky-200/70">
+                  <th className="px-5 py-4 font-medium">Marketplace</th>
+                  <th className="px-5 py-4 font-medium">Jenis Toko</th>
+                  <th className="px-5 py-4 font-medium">Kategori</th>
+                  <th className="px-5 py-4 font-medium">Fee</th>
+                  <th className="px-5 py-4 font-medium">Status</th>
+                  <th className="px-5 py-4 font-medium">Catatan</th>
+                  <th className="px-5 py-4 font-medium text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/6">
+                {filteredFees.map((fee) => (
+                  <tr key={fee.id} className="align-top">
+                    <td className="px-5 py-4 text-sm text-white">{fee.marketplace.name}</td>
+                    <td className="px-5 py-4 text-sm text-slate-100">
+                      {getStoreTypeLabel(fee.storeType)}
+                    </td>
+                    <td className="px-5 py-4">
+                      <p className="text-sm font-medium text-white">{fee.categoryName}</p>
+                      <p className="mt-1 text-sm muted-text">
+                        {fee.primaryCategory}
+                        {fee.secondaryCategory ? ` / ${fee.secondaryCategory}` : ""}
+                      </p>
+                    </td>
+                    <td className="px-5 py-4">
+                      <span className="rounded-full border border-sky-300/20 bg-sky-400/10 px-3 py-1.5 text-xs font-semibold tracking-wide text-sky-100">
+                        {formatPercent(fee.feePercent)}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4">
+                      <span
+                        className={`inline-flex rounded-full px-3 py-1.5 text-xs font-semibold tracking-wide ${
+                          fee.isActive
+                            ? "border border-emerald-300/20 bg-emerald-400/10 text-emerald-100"
+                            : "border border-white/12 text-slate-200"
+                        }`}
+                      >
+                        {fee.isActive ? "Aktif" : "Nonaktif"}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4 text-sm text-slate-100">
+                      {fee.notes ? fee.notes : <span className="muted-text">-</span>}
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleEdit(fee)}
+                          className="rounded-full border border-white/12 px-3 py-2 text-sm font-medium text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleToggleStatus(fee)}
+                          className="rounded-full border border-white/12 px-3 py-2 text-sm font-medium text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100"
+                        >
+                          {fee.isActive ? "Nonaktifkan" : "Aktifkan"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleDelete(fee)}
+                          className="rounded-full border border-rose-300/20 px-3 py-2 text-sm font-medium text-rose-100 transition hover:bg-rose-400/10"
+                        >
+                          Hapus
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       )}
+
+      {isModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-8 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-[2rem] border border-white/10 bg-slate-950/95 p-6 shadow-2xl shadow-slate-950/40 sm:p-7">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.28em] text-sky-200/65">
+                  {editingId ? "Edit Fee Kategori" : "Tambah Fee Kategori"}
+                </p>
+                <h2 className="mt-3 text-2xl font-semibold text-white">
+                  {editingId ? "Perbarui master fee kategori" : "Tambah master fee kategori baru"}
+                </h2>
+                <p className="mt-2 text-sm leading-7 muted-text">
+                  Simpan kombinasi marketplace, jenis toko, kategori, dan persentase fee
+                  untuk dipakai sebagai referensi ROAS.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeModal}
+                className="rounded-full border border-white/12 px-4 py-2.5 text-sm font-medium text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100"
+              >
+                Tutup
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="mt-6 grid gap-4 lg:grid-cols-3">
+              <label className="block">
+                <span className="text-sm text-slate-200">Marketplace</span>
+                <select
+                  required
+                  value={form.marketplaceId}
+                  onChange={(event) =>
+                    setForm((previous) => ({
+                      ...previous,
+                      marketplaceId: event.target.value,
+                    }))
+                  }
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
+                >
+                  {marketplaces.map((marketplace) => (
+                    <option key={marketplace.id} value={marketplace.id}>
+                      {marketplace.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="text-sm text-slate-200">Jenis toko</span>
+                <select
+                  required
+                  value={form.storeType}
+                  onChange={(event) =>
+                    setForm((previous) => ({
+                      ...previous,
+                      storeType: event.target.value as StoreType,
+                    }))
+                  }
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
+                >
+                  <option value="NON_STAR">Non-Star</option>
+                  <option value="STAR">Star/Star+</option>
+                  <option value="MALL">Mall</option>
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="text-sm text-slate-200">Fee (%)</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  required
+                  value={form.feePercent}
+                  onChange={(event) =>
+                    setForm((previous) => ({
+                      ...previous,
+                      feePercent: event.target.value,
+                    }))
+                  }
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
+                  placeholder="Contoh: 10.20"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm text-slate-200">Kategori utama</span>
+                <input
+                  type="text"
+                  required
+                  value={form.primaryCategory}
+                  onChange={(event) =>
+                    setForm((previous) => ({
+                      ...previous,
+                      primaryCategory: event.target.value,
+                    }))
+                  }
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
+                  placeholder="Contoh: Fashion"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm text-slate-200">Sub kategori</span>
+                <input
+                  type="text"
+                  value={form.secondaryCategory}
+                  onChange={(event) =>
+                    setForm((previous) => ({
+                      ...previous,
+                      secondaryCategory: event.target.value,
+                    }))
+                  }
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
+                  placeholder="Contoh: Sepatu Pria"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm text-slate-200">Nama kategori</span>
+                <input
+                  type="text"
+                  required
+                  value={form.categoryName}
+                  onChange={(event) =>
+                    setForm((previous) => ({
+                      ...previous,
+                      categoryName: event.target.value,
+                    }))
+                  }
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
+                  placeholder="Contoh: Aksesoris & Perawatan Sepatu"
+                />
+              </label>
+
+              <label className="block lg:col-span-2">
+                <span className="text-sm text-slate-200">Catatan</span>
+                <input
+                  type="text"
+                  value={form.notes}
+                  onChange={(event) =>
+                    setForm((previous) => ({
+                      ...previous,
+                      notes: event.target.value,
+                    }))
+                  }
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
+                  placeholder="Opsional: sumber, catatan perubahan, atau konteks biaya"
+                />
+              </label>
+
+              <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-3 lg:self-end">
+                <input
+                  type="checkbox"
+                  checked={form.isActive}
+                  onChange={(event) =>
+                    setForm((previous) => ({
+                      ...previous,
+                      isActive: event.target.checked,
+                    }))
+                  }
+                />
+                <span className="text-sm text-slate-200">Aktifkan fee ini</span>
+              </label>
+
+              {submitError ? (
+                <p className="rounded-2xl border border-rose-300/15 bg-rose-400/10 px-4 py-3 text-sm text-rose-100 lg:col-span-3">
+                  {submitError}
+                </p>
+              ) : null}
+
+              <div className="flex flex-wrap gap-3 lg:col-span-3">
+                <button
+                  type="submit"
+                  disabled={!authorization || isSubmitting || !form.marketplaceId}
+                  className="rounded-full bg-sky-400 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-sky-300 disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {isSubmitting
+                    ? "Menyimpan..."
+                    : editingId
+                      ? "Update Fee Kategori"
+                      : "Simpan Fee Kategori"}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="rounded-full border border-white/12 px-6 py-3 text-sm font-medium text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100"
+                >
+                  Batal
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
