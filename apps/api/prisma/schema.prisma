@@ -233,10 +233,10 @@ model MarketplaceCategoryFee {
   organization      Organization         @relation(fields: [organizationId], references: [id])
   marketplace       Marketplace          @relation(fields: [marketplaceId], references: [id])
 
-  @@unique([organizationId, marketplaceId, storeType, primaryCategory, secondaryCategory, categoryName])
-  @@index([organizationId, marketplaceId, storeType, isActive])
-  @@index([organizationId])
-  @@index([marketplaceId])
+  @@unique([organizationId, marketplaceId, storeType, primaryCategory, secondaryCategory, categoryName], map: "mcf_org_market_store_cat_unique")
+  @@index([organizationId, marketplaceId, storeType, isActive], map: "mcf_org_market_store_active_idx")
+  @@index([organizationId], map: "mcf_org_idx")
+  @@index([marketplaceId], map: "mcf_market_idx")
   @@map("marketplace_category_fees")
 }
 

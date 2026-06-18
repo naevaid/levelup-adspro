@@ -16,7 +16,7 @@ CREATE TABLE "marketplace_category_fees" (
   CONSTRAINT "marketplace_category_fees_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "marketplace_category_fees_organization_id_marketplace_id_store_key"
+CREATE UNIQUE INDEX "mcf_org_market_store_cat_unique"
   ON "marketplace_category_fees"(
     "organization_id",
     "marketplace_id",
@@ -26,13 +26,13 @@ CREATE UNIQUE INDEX "marketplace_category_fees_organization_id_marketplace_id_st
     "category_name"
   );
 
-CREATE INDEX "marketplace_category_fees_organization_id_marketplace_id_store_idx"
+CREATE INDEX "mcf_org_market_store_active_idx"
   ON "marketplace_category_fees"("organization_id", "marketplace_id", "store_type", "is_active");
 
-CREATE INDEX "marketplace_category_fees_organization_id_idx"
+CREATE INDEX "mcf_org_idx"
   ON "marketplace_category_fees"("organization_id");
 
-CREATE INDEX "marketplace_category_fees_marketplace_id_idx"
+CREATE INDEX "mcf_market_idx"
   ON "marketplace_category_fees"("marketplace_id");
 
 ALTER TABLE "marketplace_category_fees"
