@@ -76,6 +76,12 @@ type RoasCalculatorState = {
   kategoriFeePct: number | null;
 };
 
+type RoasCategorySelection = {
+  primary: string;
+  secondary: string | null;
+  name: string | null;
+};
+
 const roasCalculatorState: RoasCalculatorState = {
   hpp: null,
   price: null,
@@ -86,6 +92,8 @@ const roasCalculatorState: RoasCalculatorState = {
   categoryLabel: null,
   kategoriFeePct: 0,
 };
+
+let lastSelectedRoasCategory: RoasCategorySelection | null = null;
 
 const SHOPEE_ORDER_PROCESSING_FEE_IDR = 1250;
 const SHOPEE_PROMO_XTRA_FEE_PCT = 4.5;
@@ -1583,11 +1591,15 @@ function ensureOverlayStyle() {
       align-items: center;
       justify-content: space-between;
       gap: 10px;
-      min-height: 52px;
-      padding: 10px 12px;
-      border-radius: 12px;
-      border: 1px solid rgba(203, 213, 225, 0.85);
-      background: rgba(255, 255, 255, 0.92);
+      min-height: 40px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+    }
+
+    #${OVERLAY_ID} .levelup-roas-program-card + .levelup-roas-program-card {
+      border-left: 1px solid rgba(203, 213, 225, 0.85);
+      padding-left: 12px;
     }
 
     #${OVERLAY_ID} .levelup-roas-program-card[data-align="right"] {
@@ -1617,7 +1629,7 @@ function ensureOverlayStyle() {
       font-size: 12px;
       font-weight: 600;
       color: #111827;
-      line-height: 1.35;
+      line-height: 1.25;
     }
 
     #${OVERLAY_ID} .levelup-roas-program-title-button {
@@ -1951,6 +1963,13 @@ function ensureOverlayStyle() {
       #${OVERLAY_ID} .levelup-roas-store-type-group,
       #${OVERLAY_ID} .levelup-roas-summary-grid {
         grid-template-columns: 1fr;
+      }
+
+      #${OVERLAY_ID} .levelup-roas-program-card + .levelup-roas-program-card {
+        border-left: 0;
+        border-top: 1px solid rgba(203, 213, 225, 0.85);
+        padding-left: 0;
+        padding-top: 10px;
       }
     }
 
@@ -2466,19 +2485,19 @@ function computeRoasMetrics() {
       key: 'kompetitif',
       label: 'Kompetitif',
       tone: 'warning',
-      resolveRoas: (base: number) => Math.max(base * 1.15, base + 0.3),
+      resolveRoas: (base: number) => Math.max(base * 1.32, base + 0.8),
     },
     {
       key: 'konservatif',
       label: 'Konservatif',
       tone: 'safe',
-      resolveRoas: (base: number) => Math.max(base * 1.35, base + 0.8),
+      resolveRoas: (base: number) => Math.max(base * 1.75, base + 1.8),
     },
     {
       key: 'prospektif',
       label: 'Prospektif',
       tone: 'prospect',
-      resolveRoas: (base: number) => Math.max(base * 1.75, base + 1.8),
+      resolveRoas: (base: number) => Math.max(base * 2.5, base + 3.5),
     },
   ].map((tier) => {
     if (
@@ -2521,25 +2540,31 @@ function computeRoasMetrics() {
 function getRoasTierTooltipText(
   key: 'rugi' | 'kompetitif' | 'konservatif' | 'prospektif',
   roasValue: number | null,
+  profitValue: number | null,
   breakEvenRoas?: number | null,
 ) {
   if (typeof roasValue !== 'number' || !Number.isFinite(roasValue) || roasValue <= 0) {
     return 'Nilai ROAS belum bisa dihitung karena profit sebelum iklan <= 0.';
   }
 
+  const profitHint =
+    typeof profitValue === 'number' && Number.isFinite(profitValue)
+      ? ` ${formatCompactCurrency(Math.round(profitValue))} adalah estimasi profit setelah biaya iklan pada target ROAS ini.`
+      : '';
+
   if (key === 'rugi') {
-    return `Jika ROAS anda di bawah ${roasValue.toFixed(1)}, maka iklan anda boncos.`;
+    return `Jika ROAS anda di bawah ${roasValue.toFixed(1)}, maka iklan anda boncos.${profitHint}`;
   }
 
   if (key === 'kompetitif') {
-    return `Pakai target ROAS sekitar ${roasValue.toFixed(1)} untuk iklan dengan tujuan traffic, sedikit di atas break-even${typeof breakEvenRoas === 'number' ? ` ${breakEvenRoas.toFixed(1)}` : ''}.`;
+    return `Pakai target ROAS sekitar ${roasValue.toFixed(1)} untuk iklan dengan tujuan traffic, dengan jarak lebih tinggi di atas break-even${typeof breakEvenRoas === 'number' ? ` ${breakEvenRoas.toFixed(1)}` : ''}.${profitHint}`;
   }
 
   if (key === 'konservatif') {
-    return `Pakai target ROAS sekitar ${roasValue.toFixed(1)} untuk iklan dengan tujuan profit, dengan jarak aman di atas break-even${typeof breakEvenRoas === 'number' ? ` ${breakEvenRoas.toFixed(1)}` : ''}.`;
+    return `Pakai target ROAS sekitar ${roasValue.toFixed(1)} untuk iklan dengan tujuan profit, dengan jarak aman yang lebih lebar di atas break-even${typeof breakEvenRoas === 'number' ? ` ${breakEvenRoas.toFixed(1)}` : ''}.${profitHint}`;
   }
 
-  return `Gunakan target ROAS sekitar ${roasValue.toFixed(1)} untuk tes pasar atau produk baru, bukan hero product.`;
+  return `Gunakan target ROAS sekitar ${roasValue.toFixed(1)} untuk tes pasar atau produk baru, dengan buffer yang lebih tinggi dari tier lain.${profitHint}`;
 }
 
 function closeRoasCalculator() {
@@ -2653,6 +2678,95 @@ function buildCategoryPickerCatalog(
     star: toGroups(grouped.star),
     mall: toGroups(grouped.mall),
   };
+}
+
+function clearRoasCategorySelection() {
+  roasCalculatorState.categoryLabel = null;
+  roasCalculatorState.kategoriFeePct = 0;
+  lastRoasCategorySelectionSource = null;
+  lastSelectedRoasCategory = null;
+}
+
+function applyRoasCategorySelection(
+  selection: {
+    primary: string;
+    secondary: string | null;
+    name: string | null;
+    pct: number | null;
+  },
+  source: 'auto' | 'manual',
+) {
+  roasCalculatorState.categoryLabel =
+    normalizeText(selection.secondary) ||
+    normalizeText(selection.primary) ||
+    normalizeText(selection.name) ||
+    null;
+  roasCalculatorState.kategoriFeePct =
+    typeof selection.pct === 'number' && Number.isFinite(selection.pct)
+      ? selection.pct
+      : 0;
+  lastSelectedRoasCategory = {
+    primary: normalizeText(selection.primary),
+    secondary: normalizeText(selection.secondary) || null,
+    name: normalizeText(selection.name) || null,
+  };
+  lastRoasCategorySelectionSource = source;
+}
+
+function findMatchingRoasCategoryForStoreType(
+  catalog: CategoryPickerCatalog,
+  storeType: RoasCalculatorState['storeType'],
+  selection: RoasCategorySelection | null,
+) {
+  if (!selection) {
+    return null;
+  }
+
+  const groups = catalog[storeType] ?? [];
+  const primaryLabel = normalizeComparableLabel(selection.primary);
+  const secondaryLabel = normalizeComparableLabel(selection.secondary ?? '');
+  const itemLabel = normalizeComparableLabel(selection.name ?? '');
+
+  let fallbackBySecondary: {
+    primary: string;
+    secondary: string | null;
+    name: string | null;
+    pct: number;
+  } | null = null;
+
+  for (const group of groups) {
+    if (normalizeComparableLabel(group.name) !== primaryLabel) {
+      continue;
+    }
+
+    for (const sub of group.subs) {
+      if (normalizeComparableLabel(sub.name) !== secondaryLabel) {
+        continue;
+      }
+
+      if (!fallbackBySecondary && sub.items[0]) {
+        fallbackBySecondary = {
+          primary: group.name,
+          secondary: sub.name,
+          name: sub.items[0].name,
+          pct: sub.items[0].pct,
+        };
+      }
+
+      for (const item of sub.items) {
+        if (itemLabel && normalizeComparableLabel(item.name) === itemLabel) {
+          return {
+            primary: group.name,
+            secondary: sub.name,
+            name: item.name,
+            pct: item.pct,
+          };
+        }
+      }
+    }
+  }
+
+  return fallbackBySecondary;
 }
 
 async function loadRoasCategoryCatalog(force = false) {
@@ -2953,9 +3067,7 @@ async function maybeAutoSuggestRoasCategory(detail: ProductDetailSnapshot) {
 
   if (typeof match.pct === 'number' && Number.isFinite(match.pct)) {
     const previousPct = roasCalculatorState.kategoriFeePct;
-    roasCalculatorState.categoryLabel = match.secondary ?? match.primary;
-    roasCalculatorState.kategoriFeePct = match.pct;
-    lastRoasCategorySelectionSource = 'auto';
+    applyRoasCategorySelection(match, 'auto');
     return previousPct !== match.pct;
   }
 
@@ -3353,13 +3465,16 @@ async function openRoasCategoryPicker() {
         activeSubIndex = Number.parseInt(subIndexRaw, 10);
       }
 
-      roasCalculatorState.categoryLabel =
-        normalizeText(secondaryCategory) ||
-        normalizeText(primaryCategory) ||
-        normalizeText(activePrimaryCategoryLabel) ||
-        decodeURIComponent(name);
-      roasCalculatorState.kategoriFeePct = pct;
-      lastRoasCategorySelectionSource = 'manual';
+      applyRoasCategorySelection(
+        {
+          primary:
+            normalizeText(primaryCategory) || normalizeText(activePrimaryCategoryLabel) || '',
+          secondary: normalizeText(secondaryCategory) || null,
+          name: decodeURIComponent(name),
+          pct,
+        },
+        'manual',
+      );
       modal.remove();
       openRoasCalculator(lastRoasProductDetail);
     }
@@ -3408,11 +3523,9 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
       lastAppliedRoasDefaultsShopId = defaults.shopId;
 
       if (roasCalculatorState.storeType !== previousStoreType) {
-        roasCalculatorState.categoryLabel = null;
-        roasCalculatorState.kategoriFeePct = 0;
+        clearRoasCategorySelection();
         lastRoasCategorySuggestion = null;
         lastRoasCategorySuggestionKey = null;
-        lastRoasCategorySelectionSource = null;
       }
     }
   } else {
@@ -3468,7 +3581,7 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
                   <span class="levelup-roas-tier-label" data-role="roas-tier-label">${tier.label} ROAS ${typeof tier.roas === 'number' ? tier.roas.toFixed(1) : '-'}</span>
                 </div>
                 <span data-role="roas-tier-profit">${formatCompactCurrency(Math.round(tier.profit))}</span>
-                <span class="levelup-tooltip-panel" data-role="roas-tier-tooltip">${getRoasTierTooltipText(tier.key, tier.roas, metrics?.breakEvenRoas ?? null)}</span>
+                <span class="levelup-tooltip-panel" data-role="roas-tier-tooltip">${getRoasTierTooltipText(tier.key, tier.roas, tier.profit, metrics?.breakEvenRoas ?? null)}</span>
               </div>
             `,
           )
@@ -3674,6 +3787,7 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
         tooltipNode.textContent = getRoasTierTooltipText(
           key,
           tier?.roas ?? null,
+          tier?.profit ?? null,
           computed?.breakEvenRoas ?? null,
         );
       }
@@ -3691,9 +3805,7 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
     roasCalculatorState.storeType = resetDefaults?.storeType ?? 'non_star';
     roasCalculatorState.promoXtraEnabled = resetDefaults?.promoXtraEnabled ?? false;
     roasCalculatorState.gratisOngkirXtraEnabled = false;
-    roasCalculatorState.categoryLabel = null;
-    roasCalculatorState.kategoriFeePct = 0;
-    lastRoasCategorySelectionSource = null;
+    clearRoasCategorySelection();
     roasCalculatorState.price = getRepresentativeProductPrice(detail);
 
     for (const input of inputs) {
@@ -3737,14 +3849,33 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
   for (const radio of storeTypeRadios) {
     radio.addEventListener('change', () => {
       const nextValue = normalizeText(radio.value) as RoasCalculatorState['storeType'];
-      if (nextValue === 'non_star' || nextValue === 'star' || nextValue === 'mall') {
-        roasCalculatorState.storeType = nextValue;
-        roasCalculatorState.categoryLabel = null;
-        roasCalculatorState.kategoriFeePct = 0;
-        lastRoasCategorySelectionSource = null;
+      if (!(nextValue === 'non_star' || nextValue === 'star' || nextValue === 'mall')) {
+        return;
       }
-      refreshComputed();
-      openRoasCalculator(detail);
+
+      roasCalculatorState.storeType = nextValue;
+
+      void loadRoasCategoryCatalog()
+        .then((catalog) => {
+          const nextMatch = findMatchingRoasCategoryForStoreType(
+            catalog,
+            nextValue,
+            lastSelectedRoasCategory,
+          );
+
+          if (nextMatch) {
+            applyRoasCategorySelection(nextMatch, 'manual');
+          } else {
+            clearRoasCategorySelection();
+          }
+        })
+        .catch(() => {
+          clearRoasCategorySelection();
+        })
+        .finally(() => {
+          refreshComputed();
+          openRoasCalculator(detail);
+        });
     });
   }
 
