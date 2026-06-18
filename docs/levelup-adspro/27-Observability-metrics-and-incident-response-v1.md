@@ -304,6 +304,8 @@ Implementasi baseline saat ini:
 - endpoint internal monitoring summary mengembalikan `alerts`
 - setiap alert membawa `severity`, `severityLevel`, `operatorGuidance`, dan `runbookRefs`
 - summary juga mengembalikan `severityMapping` dan `operatorGuidance` global untuk membantu operator saat incident review awal
+- dashboard private app menyediakan halaman `/app/internal-monitoring`
+- halaman internal monitoring memakai session dashboard biasa, tetapi hanya ditampilkan untuk role `OWNER`, `MANAGER`, dan `AGENCY_ADMIN`
 
 ## 14. Incident Severity Levels
 

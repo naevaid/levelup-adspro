@@ -35,6 +35,11 @@ const navigationItems: NavigationItem[] = [
     roles: ["OWNER", "MANAGER", "STAFF", "AGENCY_ADMIN"],
   },
   {
+    label: "Internal Monitoring",
+    href: "/app/internal-monitoring",
+    roles: ["OWNER", "MANAGER", "AGENCY_ADMIN"],
+  },
+  {
     label: "Team",
     href: "/app/team",
     roles: ["OWNER", "MANAGER", "AGENCY_ADMIN"],
