@@ -4184,7 +4184,7 @@ function renderOverlay(snapshot: PageSnapshot) {
                         data-action="sync-result-product"
                         data-product-url="${encodeURIComponent(result.productUrl)}"
                       >
-                        Sinkronkan Produk
+                        Simpan Produk
                       </button>
                     </div>
                   </div>
@@ -4534,7 +4534,7 @@ function renderOverlay(snapshot: PageSnapshot) {
         }
       } finally {
         button.disabled = false;
-        button.textContent = previousLabel ?? 'Sinkronkan Produk';
+        button.textContent = previousLabel ?? 'Simpan Produk';
       }
     });
   }
