@@ -1606,12 +1606,57 @@ function ensureOverlayStyle() {
       margin-top: 10px;
     }
 
-    #${OVERLAY_ID} .levelup-roas-program-card {
+    #${OVERLAY_ID} .levelup-roas-submodal-trigger-row[hidden],
+    #${OVERLAY_ID} .levelup-roas-popup-backdrop[hidden] {
+      display: none !important;
+    }
+
+    #${OVERLAY_ID} .levelup-roas-popup-backdrop {
+      position: absolute;
+      inset: 0;
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: center;
+      padding: 16px;
+      background: rgba(17, 24, 39, 0.18);
+      z-index: 3;
+    }
+
+    #${OVERLAY_ID} .levelup-roas-popup-card {
+      width: min(360px, 100%);
+      padding: 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(251, 191, 36, 0.28);
+      background:
+        linear-gradient(180deg, rgba(255, 247, 237, 0.98), rgba(255, 255, 255, 0.98));
+      box-shadow: 0 18px 48px rgba(15, 23, 42, 0.16);
+    }
+
+    #${OVERLAY_ID} .levelup-roas-popup-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #9a3412;
+      line-height: 1.35;
+    }
+
+    #${OVERLAY_ID} .levelup-roas-popup-note {
+      margin-top: 4px;
+      font-size: 11px;
+      line-height: 1.45;
+      color: #7c2d12;
+    }
+
+    #${OVERLAY_ID} .levelup-roas-popup-actions {
+      margin-top: 12px;
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    #${OVERLAY_ID} .levelup-roas-program-card {
+      display: grid;
       gap: 10px;
-      min-height: 40px;
+      align-content: start;
+      min-height: 72px;
       padding: 0;
       border: 0;
       background: transparent;
@@ -1623,12 +1668,12 @@ function ensureOverlayStyle() {
     }
 
     #${OVERLAY_ID} .levelup-roas-program-card[data-align="right"] {
-      text-align: right;
+      text-align: left;
     }
 
     #${OVERLAY_ID} .levelup-roas-program-card[data-align="right"] .levelup-roas-program-copy {
-      justify-items: end;
-      text-align: right;
+      justify-items: start;
+      text-align: left;
     }
 
     #${OVERLAY_ID} .levelup-roas-program-card[data-align="left"] {
@@ -1643,6 +1688,14 @@ function ensureOverlayStyle() {
     #${OVERLAY_ID} .levelup-roas-program-copy {
       display: grid;
       min-width: 0;
+    }
+
+    #${OVERLAY_ID} .levelup-roas-program-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 8px;
+      flex-wrap: wrap;
     }
 
     #${OVERLAY_ID} .levelup-roas-program-title {
@@ -3760,54 +3813,63 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
             <div class="levelup-roas-program-grid">
               <div class="levelup-roas-program-card" data-align="right">
                 <div class="levelup-roas-program-copy">
-                  <span class="levelup-tooltip">
-                    <button
-                      type="button"
-                      class="levelup-roas-program-title levelup-roas-program-title-button"
-                      aria-label="Info Promo Extra"
-                    >
-                      Promo Extra
-                    </button>
-                    <span class="levelup-tooltip-panel">
-                      ${SHOPEE_PROMO_XTRA_FEE_PCT.toFixed(1)}% maks Rp${SHOPEE_PROMO_XTRA_FEE_CAP_IDR.toLocaleString('id-ID')}
+                  <div class="levelup-roas-field-label levelup-field-label-row">
+                    <span>Promo Extra</span>
+                    <span class="levelup-tooltip">
+                      <button
+                        type="button"
+                        class="levelup-roas-program-title levelup-roas-program-title-button"
+                        aria-label="Info Promo Extra"
+                      >
+                        ⓘ
+                      </button>
+                      <span class="levelup-tooltip-panel">
+                        ${SHOPEE_PROMO_XTRA_FEE_PCT.toFixed(1)}% maks Rp${SHOPEE_PROMO_XTRA_FEE_CAP_IDR.toLocaleString('id-ID')}
+                      </span>
                     </span>
-                  </span>
+                  </div>
                 </div>
-                <label class="levelup-toggle">
-                  <input type="checkbox" data-field="promoXtraEnabled" ${roasCalculatorState.promoXtraEnabled ? 'checked' : ''} />
-                  <span class="levelup-toggle-track"></span>
-                </label>
+                <div class="levelup-roas-program-actions">
+                  <label class="levelup-toggle">
+                    <input type="checkbox" data-field="promoXtraEnabled" ${roasCalculatorState.promoXtraEnabled ? 'checked' : ''} />
+                    <span class="levelup-toggle-track"></span>
+                  </label>
+                </div>
               </div>
               <div class="levelup-roas-program-card" data-align="left">
                 <div class="levelup-roas-program-copy">
-                  <span class="levelup-tooltip">
-                    <button
-                      type="button"
-                      class="levelup-roas-program-title levelup-roas-program-title-button"
-                      aria-label="Info Ongkir Extra"
-                    >
-                      Ongkir Extra
-                    </button>
-                    <span class="levelup-tooltip-panel" data-role="gratis-ongkir-tooltip">
-                      Pilih kategori produk untuk memuat persen dan cap Ongkir Extra.
+                  <div class="levelup-roas-field-label levelup-field-label-row">
+                    <span>Ongkir Extra</span>
+                    <span class="levelup-tooltip">
+                      <button
+                        type="button"
+                        class="levelup-roas-program-title levelup-roas-program-title-button"
+                        aria-label="Info Ongkir Extra"
+                      >
+                        ⓘ
+                      </button>
+                      <span class="levelup-tooltip-panel" data-role="gratis-ongkir-tooltip">
+                        Pilih kategori produk untuk memuat persen dan cap Ongkir Extra.
+                      </span>
                     </span>
-                  </span>
+                  </div>
                 </div>
-                <label class="levelup-toggle">
-                  <input type="checkbox" data-field="gratisOngkirXtraEnabled" ${roasCalculatorState.gratisOngkirXtraEnabled ? 'checked' : ''} />
-                  <span class="levelup-toggle-track"></span>
-                </label>
+                <div class="levelup-roas-program-actions">
+                  <label class="levelup-toggle">
+                    <input type="checkbox" data-field="gratisOngkirXtraEnabled" ${roasCalculatorState.gratisOngkirXtraEnabled ? 'checked' : ''} />
+                    <span class="levelup-toggle-track"></span>
+                  </label>
+                  <button
+                    type="button"
+                    class="levelup-button levelup-button-secondary"
+                    data-action="gratis-ongkir-open-popup"
+                    data-role="gratis-ongkir-size-field"
+                    ${roasCalculatorState.gratisOngkirXtraEnabled ? '' : 'hidden'}
+                  >
+                    Ukuran
+                  </button>
+                </div>
               </div>
-            </div>
-            <div class="levelup-roas-size-group" data-role="gratis-ongkir-size-field" ${roasCalculatorState.gratisOngkirXtraEnabled ? '' : 'hidden'}>
-              <label class="levelup-roas-radio">
-                <input type="radio" name="levelup-gratis-ongkir-size" value="regular" ${roasCalculatorState.gratisOngkirProductSize === 'regular' ? 'checked' : ''} />
-                <span class="levelup-roas-radio-label">Ukuran Biasa</span>
-              </label>
-              <label class="levelup-roas-radio">
-                <input type="radio" name="levelup-gratis-ongkir-size" value="special" ${roasCalculatorState.gratisOngkirProductSize === 'special' ? 'checked' : ''} />
-                <span class="levelup-roas-radio-label">Ukuran Khusus</span>
-              </label>
             </div>
           </div>
         </div>
@@ -3835,6 +3897,27 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
           </div>
         </div>
       </div>
+      <div class="levelup-roas-popup-backdrop" data-role="gratis-ongkir-size-popup" hidden>
+        <div class="levelup-roas-popup-card" role="dialog" aria-modal="false" aria-label="Pilih ukuran Ongkir Extra">
+          <div class="levelup-roas-popup-title">Pilih Ukuran Ongkir Extra</div>
+          <div class="levelup-roas-popup-note">
+            Pilih ukuran produk agar persen dan cap Ongkir Extra mengikuti kategori yang sesuai.
+          </div>
+          <div class="levelup-roas-size-group" role="group" aria-label="Pilih ukuran produk untuk Ongkir Extra">
+            <label class="levelup-roas-radio">
+              <input type="radio" name="levelup-gratis-ongkir-size" value="regular" ${roasCalculatorState.gratisOngkirProductSize === 'regular' ? 'checked' : ''} />
+              <span class="levelup-roas-radio-label">Ukuran Biasa</span>
+            </label>
+            <label class="levelup-roas-radio">
+              <input type="radio" name="levelup-gratis-ongkir-size" value="special" ${roasCalculatorState.gratisOngkirProductSize === 'special' ? 'checked' : ''} />
+              <span class="levelup-roas-radio-label">Ukuran Khusus</span>
+            </label>
+          </div>
+          <div class="levelup-roas-popup-actions">
+            <button type="button" class="levelup-button levelup-button-secondary" data-action="gratis-ongkir-close-popup">Tutup</button>
+          </div>
+        </div>
+      </div>
     </div>
   `;
 
@@ -3849,9 +3932,19 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
   const gratisOngkirToggle = modal.querySelector<HTMLInputElement>(
     '[data-field="gratisOngkirXtraEnabled"]',
   );
+  const gratisOngkirOpenPopupButton = modal.querySelector<HTMLButtonElement>(
+    '[data-action="gratis-ongkir-open-popup"]',
+  );
+  const gratisOngkirClosePopupButton = modal.querySelector<HTMLButtonElement>(
+    '[data-action="gratis-ongkir-close-popup"]',
+  );
   const gratisOngkirSizeField = modal.querySelector<HTMLElement>(
     '[data-role="gratis-ongkir-size-field"]',
   );
+  const gratisOngkirSizePopup = modal.querySelector<HTMLElement>(
+    '[data-role="gratis-ongkir-size-popup"]',
+  );
+  const gratisOngkirSizePopupCard = modal.querySelector<HTMLElement>('.levelup-roas-popup-card');
   const gratisOngkirSizeRadios = Array.from(
     modal.querySelectorAll<HTMLInputElement>('input[name="levelup-gratis-ongkir-size"]'),
   );
@@ -3862,6 +3955,7 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
   const shopeeFeeTooltipContent = modal.querySelector<HTMLElement>(
     '[data-role="roas-shopee-tooltip-content"]',
   );
+  let isGratisOngkirPopupOpen = false;
 
   const refreshComputed = () => {
     const computed = computeRoasMetrics();
@@ -3885,22 +3979,32 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
         ? `${formatCompactCurrency(Math.round(computed.totalBiayaShopee))} (${formatPercent(computed.totalBiayaShopeePct)})`
         : '-';
     }
+    const activePct =
+      roasCalculatorState.gratisOngkirProductSize === 'special'
+        ? roasCalculatorState.gratisOngkirPctSpecial ?? 0
+        : roasCalculatorState.gratisOngkirPctRegular ?? 0;
+    const activeCap =
+      roasCalculatorState.gratisOngkirProductSize === 'special'
+        ? roasCalculatorState.gratisOngkirCapSpecial ?? 0
+        : roasCalculatorState.gratisOngkirCapRegular ?? 0;
+    const activeSizeLabel =
+      roasCalculatorState.gratisOngkirProductSize === 'special'
+        ? 'Ukuran Khusus'
+        : 'Ukuran Biasa';
     if (gratisOngkirSizeField) {
       gratisOngkirSizeField.hidden = !roasCalculatorState.gratisOngkirXtraEnabled;
     }
+    if (gratisOngkirOpenPopupButton) {
+      gratisOngkirOpenPopupButton.disabled = !roasCalculatorState.gratisOngkirXtraEnabled;
+    }
+    if (gratisOngkirSizePopup) {
+      gratisOngkirSizePopup.hidden =
+        !roasCalculatorState.gratisOngkirXtraEnabled || !isGratisOngkirPopupOpen;
+    }
+    for (const radio of gratisOngkirSizeRadios) {
+      radio.checked = radio.value === roasCalculatorState.gratisOngkirProductSize;
+    }
     if (gratisOngkirTooltip) {
-      const activePct =
-        roasCalculatorState.gratisOngkirProductSize === 'special'
-          ? roasCalculatorState.gratisOngkirPctSpecial ?? 0
-          : roasCalculatorState.gratisOngkirPctRegular ?? 0;
-      const activeCap =
-        roasCalculatorState.gratisOngkirProductSize === 'special'
-          ? roasCalculatorState.gratisOngkirCapSpecial ?? 0
-          : roasCalculatorState.gratisOngkirCapRegular ?? 0;
-      const activeSizeLabel =
-        roasCalculatorState.gratisOngkirProductSize === 'special'
-          ? 'Ukuran Khusus'
-          : 'Ukuran Biasa';
       gratisOngkirTooltip.textContent =
         activePct > 0
           ? `${activeSizeLabel}: ${activePct.toFixed(2)}%${activeCap > 0 ? ` maks ${formatCompactCurrency(Math.round(activeCap))}` : ''}`
@@ -3974,6 +4078,7 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
     roasCalculatorState.promoXtraEnabled = resetDefaults?.promoXtraEnabled ?? false;
     roasCalculatorState.gratisOngkirXtraEnabled = false;
     roasCalculatorState.gratisOngkirProductSize = 'regular';
+    isGratisOngkirPopupOpen = false;
     clearRoasCategorySelection();
     roasCalculatorState.price = getRepresentativeProductPrice(detail);
 
@@ -4054,8 +4159,29 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
   });
 
   gratisOngkirToggle?.addEventListener('change', () => {
-    roasCalculatorState.gratisOngkirXtraEnabled = Boolean(gratisOngkirToggle.checked);
+    const previousEnabled = roasCalculatorState.gratisOngkirXtraEnabled;
+    const nextEnabled = Boolean(gratisOngkirToggle.checked);
+    roasCalculatorState.gratisOngkirXtraEnabled = nextEnabled;
+    isGratisOngkirPopupOpen = !previousEnabled && nextEnabled;
     refreshComputed();
+  });
+
+  gratisOngkirOpenPopupButton?.addEventListener('click', () => {
+    if (!roasCalculatorState.gratisOngkirXtraEnabled) {
+      return;
+    }
+
+    isGratisOngkirPopupOpen = true;
+    refreshComputed();
+  });
+
+  gratisOngkirClosePopupButton?.addEventListener('click', () => {
+    isGratisOngkirPopupOpen = false;
+    refreshComputed();
+  });
+
+  gratisOngkirSizePopupCard?.addEventListener('click', (event) => {
+    event.stopPropagation();
   });
 
   for (const radio of gratisOngkirSizeRadios) {
@@ -4066,11 +4192,17 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
       }
 
       roasCalculatorState.gratisOngkirProductSize = nextValue;
+      isGratisOngkirPopupOpen = false;
       refreshComputed();
     });
   }
 
   modal.addEventListener('click', (event) => {
+    if (event.target === gratisOngkirSizePopup) {
+      isGratisOngkirPopupOpen = false;
+      refreshComputed();
+      return;
+    }
     if (event.target === modal) {
       closeRoasCalculator();
     }
