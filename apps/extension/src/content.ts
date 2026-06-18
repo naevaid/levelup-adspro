@@ -109,6 +109,10 @@ const roasCategoryCatalogState: {
   promise: null,
 };
 
+function hasExtensionLogin(state?: ExtensionState | null) {
+  return Boolean(state?.authSession && state?.extensionSession);
+}
+
 function normalizeText(rawValue?: string | null) {
   return rawValue?.replace(/\s+/g, ' ').trim() ?? '';
 }
@@ -1471,8 +1475,8 @@ function ensureOverlayStyle() {
 
     #${OVERLAY_ID} .levelup-category-modal-layout {
       display: grid;
-      grid-template-columns: 200px 220px minmax(0, 1fr);
-      gap: 12px;
+      grid-template-columns: 176px 196px minmax(0, 1fr);
+      gap: 10px;
       align-items: start;
     }
 
@@ -1481,7 +1485,7 @@ function ensureOverlayStyle() {
       background: rgba(255, 255, 255, 0.94);
       border-radius: 16px;
       overflow: hidden;
-      min-height: 420px;
+      min-height: 404px;
       display: grid;
       grid-template-rows: auto 1fr;
     }
@@ -1499,7 +1503,10 @@ function ensureOverlayStyle() {
       overflow: auto;
       max-height: 520px;
       padding: 8px;
-      display: grid;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      align-content: flex-start;
       gap: 6px;
     }
 
@@ -1564,6 +1571,14 @@ function ensureOverlayStyle() {
       gap: 10px;
     }
 
+    #${OVERLAY_ID} .levelup-category-card-meta {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
     #${OVERLAY_ID} .levelup-category-card-title {
       font-size: 13px;
       font-weight: 700;
@@ -1576,6 +1591,49 @@ function ensureOverlayStyle() {
       font-weight: 800;
       color: #c2410c;
       white-space: nowrap;
+    }
+
+    #${OVERLAY_ID} .levelup-category-card-meta .levelup-button {
+      min-width: 72px;
+    }
+
+    #${OVERLAY_ID} .levelup-auth-gate {
+      display: grid;
+      place-items: center;
+      min-height: 280px;
+      padding: 8px 0;
+    }
+
+    #${OVERLAY_ID} .levelup-auth-gate-card {
+      width: min(100%, 440px);
+      border: 1px solid rgba(251, 106, 53, 0.16);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.94);
+      padding: 20px;
+      display: grid;
+      gap: 12px;
+      text-align: center;
+      box-shadow: 0 16px 38px rgba(15, 23, 42, 0.08);
+    }
+
+    #${OVERLAY_ID} .levelup-auth-gate-title {
+      font-size: 18px;
+      line-height: 1.3;
+      font-weight: 800;
+      color: #111827;
+    }
+
+    #${OVERLAY_ID} .levelup-auth-gate-text {
+      font-size: 13px;
+      line-height: 1.6;
+      color: #4b5563;
+    }
+
+    #${OVERLAY_ID} .levelup-auth-gate-actions {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
     }
 
     #${OVERLAY_ID} .levelup-category-card-tags {
@@ -2276,6 +2334,73 @@ async function loadRoasCategoryCatalog(force = false) {
   return request;
 }
 
+function openRoasCategoryLoginGate(storeTypeLabel: string) {
+  const overlay = document.getElementById(OVERLAY_ID);
+  if (!overlay) {
+    return;
+  }
+
+  const existing = overlay.querySelector<HTMLElement>('[data-role="roas-category-modal"]');
+  if (existing) {
+    existing.remove();
+  }
+
+  const modal = document.createElement('div');
+  modal.className = 'levelup-modal-backdrop';
+  modal.dataset.role = 'roas-category-modal';
+  modal.innerHTML = `
+    <div class="levelup-modal" role="dialog" aria-modal="true">
+      <div class="levelup-modal-header">
+        <div class="levelup-modal-title">Pilih Fee Kategori Produk ${storeTypeLabel}</div>
+        <div class="levelup-modal-actions">
+          <button type="button" class="levelup-button levelup-button-primary" data-action="roas-category-close">Tutup</button>
+        </div>
+      </div>
+      <div class="levelup-modal-body">
+        <div class="levelup-auth-gate">
+          <div class="levelup-auth-gate-card">
+            <div class="levelup-auth-gate-title">Login diperlukan</div>
+            <div class="levelup-auth-gate-text">Master fee kategori diambil dari dashboard LevelUP adsPRO. Untuk membuka daftar kategori Shopee, silakan login extension terlebih dahulu.</div>
+            <div class="levelup-product-insight">Setelah login selesai, kembali ke halaman produk lalu klik tombol <strong>Pilih</strong> sekali lagi.</div>
+            <div class="levelup-auth-gate-actions">
+              <button type="button" class="levelup-button levelup-button-secondary" data-action="roas-category-close">Nanti Saja</button>
+              <button type="button" class="levelup-button levelup-button-primary" data-action="roas-open-login">Login Sekarang</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  modal.addEventListener('click', (event) => {
+    if (event.target === modal) {
+      modal.remove();
+    }
+  });
+
+  modal.addEventListener('click', (event) => {
+    const target = event.target as HTMLElement | null;
+    if (!target) {
+      return;
+    }
+
+    if (target.matches('[data-action="roas-category-close"]')) {
+      modal.remove();
+      return;
+    }
+
+    if (target.matches('[data-action="roas-open-login"]')) {
+      void sendBackgroundMessage<{ success: true }>({
+        type: 'OPEN_EXTENSION_LOGIN',
+      }).finally(() => {
+        modal.remove();
+      });
+    }
+  });
+
+  overlay.appendChild(modal);
+}
+
 async function openRoasCategoryPicker() {
   const overlay = document.getElementById(OVERLAY_ID);
   if (!overlay || !lastRoasProductDetail) {
@@ -2297,6 +2422,18 @@ async function openRoasCategoryPicker() {
       : roasCalculatorState.storeType === 'star'
         ? 'Star/Star+'
         : 'Non-Star';
+
+  const currentState = await sendBackgroundMessage<ExtensionState>({
+    type: 'GET_STATE',
+  }).catch(() => null);
+  if (currentState) {
+    lastKnownState = currentState;
+  }
+
+  if (!hasExtensionLogin(currentState ?? lastKnownState)) {
+    openRoasCategoryLoginGate(storeTypeLabel);
+    return;
+  }
 
   modal.innerHTML = `
     <div class="levelup-modal" role="dialog" aria-modal="true">
@@ -2331,6 +2468,7 @@ async function openRoasCategoryPicker() {
   let catalog = roasCategoryCatalogState.catalog;
   let isLoading = true;
   let loadError: string | null = null;
+  let activePrimaryCategoryLabel = '';
 
   const groupList = modal.querySelector<HTMLElement>('[data-role="group-list"]');
   const subList = modal.querySelector<HTMLElement>('[data-role="sub-list"]');
@@ -2343,6 +2481,7 @@ async function openRoasCategoryPicker() {
     const activeGroup = groups[activeGroupIndex] ?? groups[0] ?? null;
     const subs = activeGroup?.subs ?? [];
     const activeSub = subs[activeSubIndex] ?? subs[0] ?? null;
+    activePrimaryCategoryLabel = activeGroup?.name ?? '';
 
     if (groupList) {
       groupList.innerHTML = '';
@@ -2419,12 +2558,12 @@ async function openRoasCategoryPicker() {
                   <div class="levelup-category-card">
                     <div class="levelup-category-card-header">
                       <div class="levelup-category-card-title">${item.name}</div>
-                      <div class="levelup-category-card-fee">${item.pct.toFixed(2)}%</div>
+                      <div class="levelup-category-card-meta">
+                        <div class="levelup-category-card-fee">${item.pct.toFixed(2)}%</div>
+                        <button type="button" class="levelup-button levelup-button-primary" data-action="roas-pick-item" data-id="${item.id}" data-name="${encodeURIComponent(item.name)}" data-pct="${item.pct}">Pilih</button>
+                      </div>
                     </div>
                     ${item.notes ? `<div class="levelup-product-insight">${item.notes}</div>` : ''}
-                    <div>
-                      <button type="button" class="levelup-button levelup-button-primary" data-action="roas-pick-item" data-id="${item.id}" data-name="${encodeURIComponent(item.name)}" data-pct="${item.pct}">Pilih</button>
-                    </div>
                   </div>
                 `,
               )
@@ -2509,7 +2648,8 @@ async function openRoasCategoryPicker() {
         return;
       }
 
-      roasCalculatorState.categoryLabel = decodeURIComponent(name);
+      roasCalculatorState.categoryLabel =
+        normalizeText(activePrimaryCategoryLabel) || decodeURIComponent(name);
       roasCalculatorState.kategoriFeePct = pct;
       modal.remove();
       openRoasCalculator(lastRoasProductDetail);

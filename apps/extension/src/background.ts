@@ -719,6 +719,15 @@ async function handleGetMarketplaceCategoryFees() {
   );
 }
 
+async function handleOpenExtensionLogin() {
+  await chrome.tabs.create({
+    url: chrome.runtime.getURL('popup.html'),
+    active: true,
+  });
+
+  return { success: true };
+}
+
 async function handleHeartbeat() {
   const state = await getExtensionState();
   if (!state.extensionSession) {
@@ -813,6 +822,8 @@ chrome.runtime.onMessage.addListener((message: BackgroundMessage, _sender, sendR
     switch (message.type) {
       case 'GET_STATE':
         return getExtensionState();
+      case 'OPEN_EXTENSION_LOGIN':
+        return handleOpenExtensionLogin();
       case 'GET_MARKETPLACE_CATEGORY_FEES':
         return handleGetMarketplaceCategoryFees();
       case 'LOGIN':

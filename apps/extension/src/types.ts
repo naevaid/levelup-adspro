@@ -159,6 +159,7 @@ export type DetectionMessage =
 
 export type BackgroundMessage =
   | { type: 'GET_STATE' }
+  | { type: 'OPEN_EXTENSION_LOGIN' }
   | { type: 'GET_MARKETPLACE_CATEGORY_FEES' }
   | {
       type: 'LOGIN';
