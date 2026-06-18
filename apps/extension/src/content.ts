@@ -2707,6 +2707,7 @@ type RoasCategorySuggestion = {
 
 let lastRoasCategorySuggestion: RoasCategorySuggestion | null = null;
 let lastRoasCategorySuggestionKey: string | null = null;
+let lastRoasCategorySelectionSource: 'auto' | 'manual' | null = null;
 
 function normalizeComparableLabel(value: string) {
   return normalizeText(value).toLowerCase();
@@ -2893,10 +2894,42 @@ async function maybeAutoSuggestRoasCategory(detail: ProductDetailSnapshot) {
     const previousPct = roasCalculatorState.kategoriFeePct;
     roasCalculatorState.categoryLabel = match.primary;
     roasCalculatorState.kategoriFeePct = match.pct;
+    lastRoasCategorySelectionSource = 'auto';
     return previousPct !== match.pct;
   }
 
   return false;
+}
+
+function getRoasCategoryHelperText() {
+  if (
+    lastRoasCategorySelectionSource === 'auto' &&
+    lastRoasCategorySuggestion &&
+    lastRoasCategorySuggestion.storeType === roasCalculatorState.storeType &&
+    typeof lastRoasCategorySuggestion.pct === 'number'
+  ) {
+    const parts = [
+      lastRoasCategorySuggestion.primary,
+      lastRoasCategorySuggestion.secondary,
+      lastRoasCategorySuggestion.name,
+    ].filter((part) => Boolean(normalizeText(part)));
+    return `Fee kategori terisi otomatis dari kategori Shopee: ${parts.join(' > ')}.`;
+  }
+
+  if (
+    lastRoasCategorySuggestion &&
+    lastRoasCategorySuggestion.storeType === roasCalculatorState.storeType &&
+    lastRoasCategorySuggestion.pct === null
+  ) {
+    const parts = [
+      lastRoasCategorySuggestion.primary,
+      lastRoasCategorySuggestion.secondary,
+      lastRoasCategorySuggestion.name,
+    ].filter((part) => Boolean(normalizeText(part)));
+    return `Kategori Shopee terdeteksi: ${parts.join(' > ')}. Fee belum ditemukan di master, silakan pilih kategori atau isi persen manual.`;
+  }
+
+  return null;
 }
 
 function openRoasCategoryLoginGate(storeTypeLabel: string) {
@@ -3244,6 +3277,7 @@ async function openRoasCategoryPicker() {
       roasCalculatorState.categoryLabel =
         normalizeText(activePrimaryCategoryLabel) || decodeURIComponent(name);
       roasCalculatorState.kategoriFeePct = pct;
+      lastRoasCategorySelectionSource = 'manual';
       modal.remove();
       openRoasCalculator(lastRoasProductDetail);
     }
@@ -3296,6 +3330,7 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
         roasCalculatorState.kategoriFeePct = 0;
         lastRoasCategorySuggestion = null;
         lastRoasCategorySuggestionKey = null;
+        lastRoasCategorySelectionSource = null;
       }
     }
   } else {
@@ -3328,6 +3363,7 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
     metrics && typeof metrics.price === 'number' && metrics.price > 0
       ? (metrics.profitSebelumIklan / metrics.price) * 100
       : null;
+  const categoryHelperText = getRoasCategoryHelperText();
 
   const modal = document.createElement('div');
   modal.className = 'levelup-modal-backdrop';
@@ -3389,6 +3425,7 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
               <button type="button" class="levelup-button levelup-button-secondary levelup-roas-category-button" data-action="roas-pick-category">${roasCalculatorState.categoryLabel ? roasCalculatorState.categoryLabel : 'Pilih Kategori'}</button>
               <input class="levelup-roas-input" data-variant="pct" data-field="kategoriFeePct" inputmode="decimal" placeholder="0.00" value="${roasCalculatorState.kategoriFeePct ?? 0}" />
             </div>
+            ${categoryHelperText ? `<div class="levelup-note">${categoryHelperText}</div>` : ''}
           </div>
           <div class="levelup-roas-field">
             <div class="levelup-roas-field-label">Operasional</div>
@@ -3574,6 +3611,7 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
     roasCalculatorState.gratisOngkirXtraEnabled = false;
     roasCalculatorState.categoryLabel = null;
     roasCalculatorState.kategoriFeePct = 0;
+    lastRoasCategorySelectionSource = null;
     roasCalculatorState.price = getRepresentativeProductPrice(detail);
 
     for (const input of inputs) {
@@ -3621,6 +3659,7 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
         roasCalculatorState.storeType = nextValue;
         roasCalculatorState.categoryLabel = null;
         roasCalculatorState.kategoriFeePct = 0;
+        lastRoasCategorySelectionSource = null;
       }
       refreshComputed();
       openRoasCalculator(detail);
@@ -3654,6 +3693,9 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
         const normalized = normalizeText(input.value).replace(',', '.');
         const parsed = Number.parseFloat(normalized);
         roasCalculatorState[field] = Number.isFinite(parsed) ? parsed : 0;
+        if (field === 'kategoriFeePct') {
+          lastRoasCategorySelectionSource = Number.isFinite(parsed) && parsed > 0 ? 'manual' : null;
+        }
         refreshComputed();
         return;
       }

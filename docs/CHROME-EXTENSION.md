@@ -17,6 +17,7 @@ Extension sudah mencakup fondasi capture + riset Shopee, termasuk UI overlay di 
 - picker `Fee Kategori Produk` yang mengambil master data dari dashboard (settings)
 - auto-saran kategori ROAS dari breadcrumb kategori Shopee publik, dengan fallback ke picker manual jika tidak ada match
 - default `Jenis Toko` + `Promo Xtra` per shop yang dikelola di dashboard dan dipakai sebagai nilai awal modal ROAS
+- program Shopee di modal ROAS ditampilkan ringkas sebagai `Promo Extra` dan `Ongkir Extra`, dengan detail biaya melalui tooltip
 - gate `Login diperlukan` saat user membuka picker kategori tetapi belum login extension
 - page debug panel disembunyikan untuk user (tetap bisa dibuka untuk dev dengan menghapus class `hidden` di `popup.html`)
 
@@ -72,18 +73,31 @@ Uji kalkulator ROAS + fee kategori:
 3. Buka halaman detail produk Shopee publik
 4. Klik `Kalkulator ROAS`
 5. Verifikasi:
-   - `Jenis Toko` dan `Promo Xtra` mengikuti default shop aktif
+   - `Jenis Toko` mengikuti default shop aktif
+   - toggle `Promo Extra` mengikuti default `Promo Xtra` shop aktif
+   - toggle `Ongkir Extra` tersedia sebagai biaya tambahan `Gratis Ongkir XTRA (0.5%)`
    - kategori dapat terisi otomatis dari breadcrumb Shopee jika ditemukan di master fee
    - jika belum ada match, user tetap bisa memilih kategori manual
+   - area `Kategori Produk` menampilkan helper text jika fee terisi otomatis atau jika match belum ditemukan di master
 6. Hover kartu tier `Rugi / Kompetitif / Konservatif / Prospektif` untuk melihat penjelasan target ROAS
-7. Hover ikon `ⓘ` di `Biaya Shopee (Total)` untuk melihat rincian fee kategori, biaya proses pesanan, dan Promo Xtra
-8. Ubah `HPP Produk`, `Operasional`, atau `Harga Jual` dan pastikan:
-   - `Profit Kotor` berubah realtime
+7. Hover title `Promo Extra` dan `Ongkir Extra` untuk melihat detail biaya program Shopee
+8. Hover ikon `ⓘ` di `Biaya Shopee (Total)` untuk melihat rincian fee kategori, biaya proses pesanan, `Promo Extra`, dan `Ongkir Extra`
+9. Verifikasi bagian bawah modal menampilkan `Biaya Shopee (Total)` dan `Profit Sebelum Iklan` dalam 1 baris 2 bagian
+10. Ubah `HPP Produk`, `Operasional`, atau `Harga Jual` dan pastikan:
+   - `Profit Sebelum Iklan` berubah realtime
    - nilai ROAS pada tiap tier ikut berubah realtime
    - nominal profit per tier ikut berubah realtime
-9. Klik `Pilih` pada field `Kategori Produk`:
+11. Klik `Pilih Kategori` pada field `Kategori Produk`:
    - jika belum login, modal akan menampilkan `Login diperlukan` dan tombol `Login Sekarang`
    - jika sudah login, modal menampilkan daftar kategori sesuai jenis toko
+
+Jika flow tidak sesuai, ulangi validasi dengan build extension terbaru:
+
+```bash
+npm run build --workspace apps/extension
+```
+
+Deploy aplikasi server tetap mengikuti panduan manual di `docs/DEPLOYMEN.md`; auto deploy polling tidak dipakai.
 
 Jika berhasil, backend akan menerima `ingestion batch` dan menyimpan raw payload ke MinIO.
 

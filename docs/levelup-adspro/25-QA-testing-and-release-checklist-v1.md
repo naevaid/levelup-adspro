@@ -195,6 +195,10 @@ Setiap akhir sprint, minimal cek manual:
 6. cek recommendation list dan detail
 7. cek market research session list
 8. cek access denied saat membuka route yang tidak boleh
+9. cek extension login dan session heartbeat
+10. cek halaman produk Shopee publik dan buka `Kalkulator ROAS`
+11. cek auto-saran kategori dan fallback picker manual
+12. cek deploy release dilakukan manual dan operator melihat hasil verifikasi
 
 ## 8. Test Data Strategy
 
@@ -288,6 +292,8 @@ Sebelum release, pastikan:
 - permission guard bekerja
 - ingestion endpoint merespons benar
 - error logs tidak menunjukkan crash baru
+- deploy dilakukan manual, bukan lewat timer/polling
+- hasil `docker compose ... ps` dan endpoint publik dicek setelah deploy
 
 ## 13. Release Checklist untuk Backend
 
@@ -297,9 +303,26 @@ Sebelum release, pastikan:
 - cek queue worker aktif
 - cek storage credentials valid
 - cek billing webhook route jika ada perubahan
+
+## 14. Release Smoke Checklist untuk Extension dan Manual Deploy
+
+- build extension berhasil dari `apps/extension`
+- ZIP package terbaru terbentuk di `apps/extension/package`
+- popup login extension berhasil membuat `auth session` dan `extension session`
+- halaman Shopee search publik masih bisa `Refresh Page State` dan `Sync Now`
+- halaman detail produk Shopee publik masih bisa membuka `Kalkulator ROAS`
+- `Jenis Toko`, `Promo Extra`, dan `Ongkir Extra` tampil dan bisa diubah tanpa error
+- `Biaya Shopee (Total)` dan `Profit Sebelum Iklan` berubah realtime saat input diubah
+- picker `Fee Kategori Produk` tetap meminta login jika extension belum login
+- auto-saran kategori dari breadcrumb Shopee tetap bekerja bila master fee tersedia
+- fallback pilih kategori manual tetap bekerja bila tidak ada match
+- deploy server dijalankan manual dengan `FORCE_DEPLOY=1 bash infra/vps/deploy.sh`
+- sesudah deploy, operator wajib cek `docker compose -p levelup-adspro -f docker-compose.vps.yml --env-file .env.production ps`
+- sesudah deploy, operator wajib cek minimal `https://adspro.naeva.id/` dan `https://adspro.naeva.id/privacy-policy`
+- auto deploy berbasis `systemd timer` / polling harus tetap nonaktif
 - cek internal monitoring endpoint
 
-## 14. Release Checklist untuk Frontend
+## 15. Release Checklist untuk Frontend
 
 - build sukses
 - route private dan public berjalan
@@ -309,7 +332,7 @@ Sebelum release, pastikan:
 - empty state tidak rusak
 - recommendation panel render dengan data kosong dan data ada
 
-## 15. Post-Release Smoke Test
+## 16. Post-Release Smoke Test
 
 Setelah deploy:
 
@@ -322,7 +345,7 @@ Setelah deploy:
 7. cek 1 endpoint internal monitoring
 8. cek logs 5-10 menit pertama
 
-## 16. Incident and Rollback Triggers
+## 17. Incident and Rollback Triggers
 
 Rollback atau hotfix perlu dipertimbangkan jika:
 
@@ -332,7 +355,7 @@ Rollback atau hotfix perlu dipertimbangkan jika:
 - recommendation engine menghasilkan output rusak massal
 - dashboard overview crash untuk tenant aktif
 
-## 17. Non-Functional QA Checks
+## 18. Non-Functional QA Checks
 
 Selain correctness, cek juga:
 
@@ -343,7 +366,7 @@ Selain correctness, cek juga:
 - migration duration
 - memory usage worker
 
-## 18. Observability Checks Before Beta
+## 19. Observability Checks Before Beta
 
 Minimal sebelum beta:
 
