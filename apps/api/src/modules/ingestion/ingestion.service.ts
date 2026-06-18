@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { CaptureMode, IngestionBatchStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -234,6 +235,46 @@ export class IngestionService {
       });
       throw error;
     }
+  }
+
+  async removeForOrganization(organizationId: string, id: string) {
+    const existing = await this.prisma.ingestionBatch.findFirst({
+      where: { id, organizationId },
+      include: {
+        rawPayloadObjects: {
+          select: {
+            id: true,
+            storageKey: true,
+          },
+        },
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Batch market research tidak ditemukan.');
+    }
+
+    await Promise.all(
+      existing.rawPayloadObjects.map((rawPayloadObject) =>
+        this.rawDataService.deleteRawPayload(rawPayloadObject.storageKey),
+      ),
+    );
+
+    await this.prisma.$transaction(async (transaction) => {
+      await transaction.rawPayloadObject.deleteMany({
+        where: {
+          ingestionBatchId: existing.id,
+        },
+      });
+
+      await transaction.ingestionBatch.delete({
+        where: {
+          id: existing.id,
+        },
+      });
+    });
+
+    return { success: true };
   }
 
   private assertSessionMatchesRequest(

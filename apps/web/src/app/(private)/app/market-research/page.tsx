@@ -222,6 +222,8 @@ export default function MarketResearchPage() {
   const [error, setError] = useState<string | null>(null);
   const [expandedBatchId, setExpandedBatchId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [deleteTarget, setDeleteTarget] = useState<IngestionBatchSummary | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const authorization = useMemo(() => {
     if (!session) {
@@ -288,6 +290,41 @@ export default function MarketResearchPage() {
       setExpandedBatchId(null);
     }
   }, [expandedBatchId, paginatedBatches]);
+
+  const handleDelete = useCallback(async () => {
+    if (!authorization || !deleteTarget) {
+      return;
+    }
+
+    setIsDeleting(true);
+    setError(null);
+
+    try {
+      await apiFetch<{ success: boolean }>(
+        `/api/v1/ingestion/batches/${deleteTarget.id}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: authorization },
+        },
+      );
+
+      setBatches((previous) =>
+        previous.filter((batch) => batch.id !== deleteTarget.id),
+      );
+      setExpandedBatchId((previous) =>
+        previous === deleteTarget.id ? null : previous,
+      );
+      setDeleteTarget(null);
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : "Gagal menghapus data market research.",
+      );
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [authorization, deleteTarget]);
 
   return (
     <div className="space-y-6">
@@ -429,6 +466,13 @@ export default function MarketResearchPage() {
                     className="rounded-full border border-sky-300/20 bg-sky-400/10 px-4 py-2 text-sm font-medium text-sky-100 transition hover:border-sky-300/35 hover:bg-sky-400/15"
                   >
                     {isExpanded ? "Tutup" : "Buka"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteTarget(batch)}
+                    className="rounded-full border border-rose-300/20 px-4 py-2 text-sm font-medium text-rose-100 transition hover:bg-rose-400/10"
+                  >
+                    Hapus
                   </button>
                 </div>
               </div>
@@ -783,6 +827,54 @@ export default function MarketResearchPage() {
           ) : null}
         </section>
       )}
+
+      {deleteTarget ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-8 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-[2rem] border border-white/10 bg-slate-950/95 p-6 shadow-2xl shadow-slate-950/40 sm:p-7">
+            <p className="text-xs uppercase tracking-[0.28em] text-rose-200/70">
+              Hapus Market Research
+            </p>
+            <h2 className="mt-3 text-2xl font-semibold text-white">
+              Yakin ingin menghapus batch ini?
+            </h2>
+            <p className="mt-3 text-sm leading-7 muted-text">
+              Data market research yang dihapus tidak bisa dikembalikan. Raw payload
+              terkait batch ini juga akan ikut dibersihkan.
+            </p>
+            <div className="mt-5 rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-sm text-slate-100">
+              <p>
+                <span className="text-slate-400">Batch ID:</span> {deleteTarget.id}
+              </p>
+              <p className="mt-2">
+                <span className="text-slate-400">Tipe halaman:</span>{" "}
+                {formatPageType(deleteTarget.pageType)}
+              </p>
+              <p className="mt-2">
+                <span className="text-slate-400">Captured:</span>{" "}
+                {formatDateTime(deleteTarget.capturedAt)}
+              </p>
+            </div>
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                disabled={isDeleting}
+                className="rounded-full border border-white/12 px-4 py-2.5 text-sm font-medium text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDelete()}
+                disabled={isDeleting}
+                className="rounded-full border border-rose-300/20 bg-rose-400/10 px-5 py-2.5 text-sm font-semibold text-rose-100 transition hover:bg-rose-400/20 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isDeleting ? "Menghapus..." : "Ya, Hapus"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

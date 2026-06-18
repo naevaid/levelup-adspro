@@ -50,6 +50,8 @@ const EMPTY_FORM: FeeFormState = {
   isActive: true,
 };
 
+const PAGE_SIZE = 20;
+
 function getStoreTypeLabel(storeType: StoreType) {
   switch (storeType) {
     case "NON_STAR":
@@ -88,6 +90,7 @@ export default function SettingsPage() {
   const [form, setForm] = useState<FeeFormState>(EMPTY_FORM);
   const [marketplaceFilter, setMarketplaceFilter] = useState<string>("ALL");
   const [storeTypeFilter, setStoreTypeFilter] = useState<StoreType | "ALL">("ALL");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const authorization = useMemo(() => {
     if (!session) {
@@ -184,6 +187,36 @@ export default function SettingsPage() {
       return true;
     });
   }, [fees, marketplaceFilter, storeTypeFilter]);
+
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(filteredFees.length / PAGE_SIZE)),
+    [filteredFees.length],
+  );
+
+  const paginatedFees = useMemo(() => {
+    const startIndex = (currentPage - 1) * PAGE_SIZE;
+    return filteredFees.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [currentPage, filteredFees]);
+
+  const pageRange = useMemo(() => {
+    if (filteredFees.length === 0) {
+      return { start: 0, end: 0 };
+    }
+
+    const start = (currentPage - 1) * PAGE_SIZE + 1;
+    const end = Math.min(start + PAGE_SIZE - 1, filteredFees.length);
+    return { start, end };
+  }, [currentPage, filteredFees.length]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [marketplaceFilter, storeTypeFilter]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -432,6 +465,18 @@ export default function SettingsPage() {
             </select>
           </label>
         </div>
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-[1.5rem] border border-white/10 bg-white/5 px-4 py-3">
+          <p className="text-sm text-slate-100">
+            Menampilkan <span className="font-semibold text-white">{pageRange.start}</span>
+            {" - "}
+            <span className="font-semibold text-white">{pageRange.end}</span> dari{" "}
+            <span className="font-semibold text-white">{filteredFees.length}</span> data
+            fee kategori.
+          </p>
+          <p className="text-sm muted-text">
+            Halaman {currentPage} dari {totalPages}
+          </p>
+        </div>
       </section>
 
       {error ? (
@@ -490,7 +535,7 @@ export default function SettingsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/6">
-                {filteredFees.map((fee) => (
+                {paginatedFees.map((fee) => (
                   <tr key={fee.id} className="align-top">
                     <td className="px-5 py-4 text-sm text-white">{fee.marketplace.name}</td>
                     <td className="px-5 py-4 text-sm text-slate-100">
@@ -551,6 +596,31 @@ export default function SettingsPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 bg-white/5 px-5 py-4">
+            <p className="text-sm muted-text">
+              Menampilkan {pageRange.start}-{pageRange.end} dari {filteredFees.length} data.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((previous) => Math.max(1, previous - 1))}
+                disabled={currentPage === 1}
+                className="rounded-full border border-white/12 px-4 py-2 text-sm font-medium text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Sebelumnya
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setCurrentPage((previous) => Math.min(totalPages, previous + 1))
+                }
+                disabled={currentPage === totalPages}
+                className="rounded-full border border-white/12 px-4 py-2 text-sm font-medium text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Berikutnya
+              </button>
+            </div>
           </div>
         </section>
       )}

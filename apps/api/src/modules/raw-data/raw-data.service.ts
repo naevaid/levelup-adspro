@@ -1,5 +1,6 @@
 import {
   CreateBucketCommand,
+  DeleteObjectCommand,
   GetObjectCommand,
   HeadBucketCommand,
   PutObjectCommand,
@@ -119,6 +120,23 @@ export class RawDataService {
     } catch {
       return null;
     }
+  }
+
+  async deleteRawPayload(storageKey: string) {
+    await this.ensureBucketReady();
+
+    try {
+      await this.s3Client.send(
+        new DeleteObjectCommand({
+          Bucket: this.bucketName,
+          Key: storageKey,
+        }),
+      );
+    } catch {
+      return false;
+    }
+
+    return true;
   }
 
   private async ensureBucketReady() {

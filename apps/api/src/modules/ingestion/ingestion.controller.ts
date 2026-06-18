@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import type { AuthenticatedRequest } from '../auth/authenticated-request';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
 import type { ExtensionAuthenticatedRequest } from '../extension-sessions/extension-authenticated-request';
@@ -25,5 +34,14 @@ export class IngestionController {
     @Body() dto: CreateIngestionBatchDto,
   ) {
     return this.ingestionService.createBatch(request, dto);
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Delete('batches/:id')
+  remove(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
+    return this.ingestionService.removeForOrganization(
+      request.auth.organization.id,
+      id,
+    );
   }
 }
