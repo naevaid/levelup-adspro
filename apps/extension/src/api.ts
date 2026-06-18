@@ -1,4 +1,9 @@
-import type { AuthSession, ExtensionSession, ShopSummary } from './types';
+import type {
+  AuthSession,
+  ExtensionSession,
+  MarketplaceCategoryFeeSummary,
+  ShopSummary,
+} from './types';
 
 function normalizeBaseUrl(baseUrl: string) {
   return baseUrl.trim().replace(/\/+$/, '');
@@ -118,6 +123,15 @@ export async function createIngestionBatch(
       method: 'POST',
       body: JSON.stringify(payload),
     },
+    token,
+  );
+}
+
+export async function listMarketplaceCategoryFees(baseUrl: string, token: string) {
+  return apiRequest<MarketplaceCategoryFeeSummary[]>(
+    baseUrl,
+    '/api/v1/marketplace-category-fees',
+    undefined,
     token,
   );
 }

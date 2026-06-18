@@ -1,6 +1,7 @@
 import {
   createExtensionSession,
   createIngestionBatch,
+  listMarketplaceCategoryFees,
   listShops,
   login,
   sendHeartbeat,
@@ -702,6 +703,22 @@ async function handleSyncProductUrl(
   }
 }
 
+async function handleGetMarketplaceCategoryFees() {
+  const state = await getExtensionState();
+  if (!state.authSession) {
+    throw new Error('Login dashboard diperlukan untuk memuat master fee kategori.');
+  }
+
+  const fees = await listMarketplaceCategoryFees(
+    state.apiBaseUrl,
+    state.authSession.accessToken,
+  );
+
+  return fees.filter(
+    (fee) => fee.isActive && fee.marketplace.code.toUpperCase() === 'SHOPEE',
+  );
+}
+
 async function handleHeartbeat() {
   const state = await getExtensionState();
   if (!state.extensionSession) {
@@ -796,6 +813,8 @@ chrome.runtime.onMessage.addListener((message: BackgroundMessage, _sender, sendR
     switch (message.type) {
       case 'GET_STATE':
         return getExtensionState();
+      case 'GET_MARKETPLACE_CATEGORY_FEES':
+        return handleGetMarketplaceCategoryFees();
       case 'LOGIN':
         return handleLogin(message);
       case 'LOGOUT':

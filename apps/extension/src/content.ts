@@ -3,6 +3,7 @@ import type {
   BackgroundMessage,
   DetectionMessage,
   ExtensionState,
+  MarketplaceCategoryFeeSummary,
   PageSnapshot,
   ProductDetailSnapshot,
   SearchResultEnrichment,
@@ -83,6 +84,29 @@ const roasCalculatorState: RoasCalculatorState = {
   categoryLabel: null,
   kategoriFeePct: 0,
   pajakProdukPct: 0,
+};
+
+type CategoryPickerCatalog = Record<
+  RoasCalculatorState['storeType'],
+  CategoryPickerGroup[]
+>;
+
+const EMPTY_CATEGORY_PICKER_CATALOG: CategoryPickerCatalog = {
+  non_star: [],
+  star: [],
+  mall: [],
+};
+
+const roasCategoryCatalogState: {
+  status: 'idle' | 'loading' | 'ready' | 'error';
+  catalog: CategoryPickerCatalog;
+  error: string | null;
+  promise: Promise<CategoryPickerCatalog> | null;
+} = {
+  status: 'idle',
+  catalog: EMPTY_CATEGORY_PICKER_CATALOG,
+  error: null,
+  promise: null,
 };
 
 function normalizeText(rawValue?: string | null) {
@@ -2116,9 +2140,10 @@ function closeRoasCalculator() {
 }
 
 type CategoryPickerItem = {
+  id: string;
   name: string;
   pct: number;
-  tags: string[];
+  notes: string | null;
 };
 
 type CategoryPickerSub = {
@@ -2131,89 +2156,127 @@ type CategoryPickerGroup = {
   subs: CategoryPickerSub[];
 };
 
-const CATEGORY_PICKER_CATALOG: Record<
-  RoasCalculatorState['storeType'],
-  CategoryPickerGroup[]
-> = {
-  non_star: [
-    {
-      name: 'Fashion',
-      subs: [
-        {
-          name: 'Sepatu Pria',
-          items: [
-            {
-              name: 'Aksesoris & Perawatan Sepatu',
-              pct: 10.2,
-              tags: ['Parfum', 'Sepatu', 'Shoe Tree & Horns', 'Insole Sepatu'],
-            },
-            {
-              name: 'Sepatu Sneakers',
-              pct: 7.2,
-              tags: ['Sneakers', 'Casual'],
-            },
-          ],
-        },
-      ],
-    },
-  ],
-  star: [
-    {
-      name: 'Fashion',
-      subs: [
-        {
-          name: 'Sepatu Pria',
-          items: [
-            {
-              name: 'Aksesoris & Perawatan Sepatu',
-              pct: 10.2,
-              tags: ['Parfum', 'Sepatu'],
-            },
-          ],
-        },
-      ],
-    },
-  ],
-  mall: [
-    {
-      name: 'Fashion',
-      subs: [
-        {
-          name: 'Sepatu Pria',
-          items: [
-            {
-              name: 'Aksesoris & Perawatan Sepatu',
-              pct: 10.2,
-              tags: ['Parfum', 'Sepatu', 'Shoe Tree & Horns', 'Insole Sepatu'],
-            },
-            {
-              name: 'Perlengkapan Mandi',
-              pct: 7.2,
-              tags: ['Perawatan Rambut', 'Sabun Mandi'],
-            },
-          ],
-        },
-      ],
-    },
-    {
-      name: 'FMCG',
-      subs: [
-        {
-          name: 'Kebutuhan Harian',
-          items: [
-            {
-              name: 'Minuman Sachet',
-              pct: 5.5,
-              tags: ['Kopi', 'Teh'],
-            },
-          ],
-        },
-      ],
-    },
-  ],
-};
+function createEmptyCategoryPickerCatalog(): CategoryPickerCatalog {
+  return {
+    non_star: [],
+    star: [],
+    mall: [],
+  };
+}
 
-function openRoasCategoryPicker() {
+function mapCategoryFeeStoreType(
+  storeType: MarketplaceCategoryFeeSummary['storeType'],
+): RoasCalculatorState['storeType'] {
+  switch (storeType) {
+    case 'STAR':
+      return 'star';
+    case 'MALL':
+      return 'mall';
+    case 'NON_STAR':
+    default:
+      return 'non_star';
+  }
+}
+
+function buildCategoryPickerCatalog(
+  fees: MarketplaceCategoryFeeSummary[],
+): CategoryPickerCatalog {
+  const grouped = {
+    non_star: new Map<string, Map<string, CategoryPickerItem[]>>(),
+    star: new Map<string, Map<string, CategoryPickerItem[]>>(),
+    mall: new Map<string, Map<string, CategoryPickerItem[]>>(),
+  };
+
+  for (const fee of fees) {
+    const storeType = mapCategoryFeeStoreType(fee.storeType);
+    const primaryCategory = normalizeText(fee.primaryCategory) || 'Lainnya';
+    const secondaryCategory = normalizeText(fee.secondaryCategory) || 'Tanpa Subkategori';
+    const categoryName = normalizeText(fee.categoryName);
+
+    if (!categoryName) {
+      continue;
+    }
+
+    let secondaryMap = grouped[storeType].get(primaryCategory);
+    if (!secondaryMap) {
+      secondaryMap = new Map<string, CategoryPickerItem[]>();
+      grouped[storeType].set(primaryCategory, secondaryMap);
+    }
+
+    let items = secondaryMap.get(secondaryCategory);
+    if (!items) {
+      items = [];
+      secondaryMap.set(secondaryCategory, items);
+    }
+
+    items.push({
+      id: fee.id,
+      name: categoryName,
+      pct: fee.feePercent,
+      notes: normalizeText(fee.notes) || null,
+    });
+  }
+
+  const toGroups = (
+    groups: Map<string, Map<string, CategoryPickerItem[]>>,
+  ): CategoryPickerGroup[] =>
+    Array.from(groups.entries())
+      .sort(([left], [right]) => left.localeCompare(right, 'id-ID'))
+      .map(([groupName, subs]) => ({
+        name: groupName,
+        subs: Array.from(subs.entries())
+          .sort(([left], [right]) => left.localeCompare(right, 'id-ID'))
+          .map(([subName, items]) => ({
+            name: subName,
+            items: [...items].sort((left, right) => left.name.localeCompare(right.name, 'id-ID')),
+          })),
+      }));
+
+  return {
+    non_star: toGroups(grouped.non_star),
+    star: toGroups(grouped.star),
+    mall: toGroups(grouped.mall),
+  };
+}
+
+async function loadRoasCategoryCatalog(force = false) {
+  if (!force && roasCategoryCatalogState.status === 'ready') {
+    return roasCategoryCatalogState.catalog;
+  }
+
+  if (!force && roasCategoryCatalogState.promise) {
+    return roasCategoryCatalogState.promise;
+  }
+
+  roasCategoryCatalogState.status = 'loading';
+  roasCategoryCatalogState.error = null;
+
+  const request = sendBackgroundMessage<MarketplaceCategoryFeeSummary[]>({
+    type: 'GET_MARKETPLACE_CATEGORY_FEES',
+  })
+    .then((fees) => {
+      const catalog = buildCategoryPickerCatalog(fees);
+      roasCategoryCatalogState.catalog = catalog;
+      roasCategoryCatalogState.status = 'ready';
+      return catalog;
+    })
+    .catch((error: unknown) => {
+      roasCategoryCatalogState.status = 'error';
+      roasCategoryCatalogState.error =
+        error instanceof Error
+          ? error.message
+          : 'Master fee kategori belum berhasil dimuat.';
+      throw error;
+    })
+    .finally(() => {
+      roasCategoryCatalogState.promise = null;
+    });
+
+  roasCategoryCatalogState.promise = request;
+  return request;
+}
+
+async function openRoasCategoryPicker() {
   const overlay = document.getElementById(OVERLAY_ID);
   if (!overlay || !lastRoasProductDetail) {
     return;
@@ -2265,6 +2328,9 @@ function openRoasCategoryPicker() {
   let activeGroupIndex = 0;
   let activeSubIndex = 0;
   let query = '';
+  let catalog = roasCategoryCatalogState.catalog;
+  let isLoading = true;
+  let loadError: string | null = null;
 
   const groupList = modal.querySelector<HTMLElement>('[data-role="group-list"]');
   const subList = modal.querySelector<HTMLElement>('[data-role="sub-list"]');
@@ -2273,10 +2339,48 @@ function openRoasCategoryPicker() {
   const closeButton = modal.querySelector<HTMLButtonElement>('[data-action="roas-category-close"]');
 
   const render = () => {
-    const groups = CATEGORY_PICKER_CATALOG[roasCalculatorState.storeType] ?? [];
+    const groups = catalog[roasCalculatorState.storeType] ?? [];
     const activeGroup = groups[activeGroupIndex] ?? groups[0] ?? null;
     const subs = activeGroup?.subs ?? [];
     const activeSub = subs[activeSubIndex] ?? subs[0] ?? null;
+
+    if (groupList) {
+      groupList.innerHTML = '';
+    }
+
+    if (subList) {
+      subList.innerHTML = '';
+    }
+
+    if (searchInput) {
+      searchInput.disabled = isLoading || Boolean(loadError) || groups.length === 0;
+    }
+
+    if (isLoading) {
+      if (itemList) {
+        itemList.innerHTML =
+          '<div class="levelup-product-insight">Memuat master fee kategori dari dashboard...</div>';
+      }
+      return;
+    }
+
+    if (loadError) {
+      if (itemList) {
+        itemList.innerHTML = `
+          <div class="levelup-product-insight">${loadError}</div>
+          <div><button type="button" class="levelup-button levelup-button-primary" data-action="roas-category-retry">Coba Lagi</button></div>
+        `;
+      }
+      return;
+    }
+
+    if (groups.length === 0) {
+      if (itemList) {
+        itemList.innerHTML =
+          '<div class="levelup-product-insight">Belum ada master fee kategori Shopee aktif untuk jenis toko ini. Tambahkan dari dashboard Settings atau isi persen manual di field kategori.</div>';
+      }
+      return;
+    }
 
     if (groupList) {
       groupList.innerHTML = groups
@@ -2299,14 +2403,16 @@ function openRoasCategoryPicker() {
     const items = activeSub?.items ?? [];
     const filtered = query
       ? items.filter((item) =>
-          normalizeText(item.name).toLowerCase().includes(query.toLowerCase()),
+          `${normalizeText(item.name)} ${normalizeText(item.notes)}`
+            .toLowerCase()
+            .includes(query.toLowerCase()),
         )
       : items;
 
     if (itemList) {
       itemList.innerHTML =
         filtered.length === 0
-          ? `<div class="levelup-product-insight">Kategori belum tersedia untuk pilihan ini. Anda tetap bisa isi persen manual di field kategori.</div>`
+          ? `<div class="levelup-product-insight">Kategori belum ditemukan untuk pencarian ini. Anda tetap bisa isi persen manual di field kategori.</div>`
           : filtered
               .map(
                 (item) => `
@@ -2315,15 +2421,9 @@ function openRoasCategoryPicker() {
                       <div class="levelup-category-card-title">${item.name}</div>
                       <div class="levelup-category-card-fee">${item.pct.toFixed(2)}%</div>
                     </div>
-                    ${
-                      item.tags.length
-                        ? `<div class="levelup-category-card-tags">${item.tags
-                            .map((tag) => `<span class="levelup-category-tag">${tag}</span>`)
-                            .join('')}</div>`
-                        : ''
-                    }
+                    ${item.notes ? `<div class="levelup-product-insight">${item.notes}</div>` : ''}
                     <div>
-                      <button type="button" class="levelup-button levelup-button-primary" data-action="roas-pick-item" data-name="${encodeURIComponent(item.name)}" data-pct="${item.pct}">Pilih</button>
+                      <button type="button" class="levelup-button levelup-button-primary" data-action="roas-pick-item" data-id="${item.id}" data-name="${encodeURIComponent(item.name)}" data-pct="${item.pct}">Pilih</button>
                     </div>
                   </div>
                 `,
@@ -2350,6 +2450,39 @@ function openRoasCategoryPicker() {
   modal.addEventListener('click', (event) => {
     const target = event.target as HTMLElement | null;
     if (!target) {
+      return;
+    }
+
+    if (target.matches('[data-action="roas-category-retry"]')) {
+      isLoading = true;
+      loadError = null;
+      render();
+      void loadRoasCategoryCatalog(true)
+        .then((nextCatalog) => {
+          if (!modal.isConnected) {
+            return;
+          }
+          catalog = nextCatalog;
+          activeGroupIndex = 0;
+          activeSubIndex = 0;
+          query = '';
+          if (searchInput) {
+            searchInput.value = '';
+          }
+          isLoading = false;
+          render();
+        })
+        .catch((error: unknown) => {
+          if (!modal.isConnected) {
+            return;
+          }
+          isLoading = false;
+          loadError =
+            error instanceof Error
+              ? error.message
+              : 'Master fee kategori belum berhasil dimuat.';
+          render();
+        });
       return;
     }
 
@@ -2385,6 +2518,24 @@ function openRoasCategoryPicker() {
 
   overlay.appendChild(modal);
   render();
+
+  try {
+    catalog = await loadRoasCategoryCatalog();
+    if (!modal.isConnected) {
+      return;
+    }
+    isLoading = false;
+    loadError = null;
+    render();
+  } catch (error) {
+    if (!modal.isConnected) {
+      return;
+    }
+    isLoading = false;
+    loadError =
+      error instanceof Error ? error.message : 'Master fee kategori belum berhasil dimuat.';
+    render();
+  }
 }
 
 function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
@@ -2559,7 +2710,7 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
   });
 
   pickCategoryButton?.addEventListener('click', () => {
-    openRoasCategoryPicker();
+    void openRoasCategoryPicker();
   });
 
   storeTypeSelect?.addEventListener('change', () => {
@@ -2567,6 +2718,7 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
     if (nextValue === 'non_star' || nextValue === 'star' || nextValue === 'mall') {
       roasCalculatorState.storeType = nextValue;
       roasCalculatorState.categoryLabel = null;
+      roasCalculatorState.kategoriFeePct = 0;
     }
     refreshComputed();
     openRoasCalculator(detail);

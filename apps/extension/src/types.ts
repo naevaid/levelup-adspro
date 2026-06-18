@@ -51,6 +51,28 @@ export type ExtensionSession = {
   } | null;
 };
 
+export type MarketplaceSummary = {
+  id: string;
+  code: string;
+  name: string;
+};
+
+export type CategoryFeeStoreType = 'NON_STAR' | 'STAR' | 'MALL';
+
+export type MarketplaceCategoryFeeSummary = {
+  id: string;
+  storeType: CategoryFeeStoreType;
+  primaryCategory: string;
+  secondaryCategory: string | null;
+  categoryName: string;
+  feePercent: number;
+  isActive: boolean;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  marketplace: MarketplaceSummary;
+};
+
 export type CaptureMode = 'owned' | 'public';
 
 export type PageType =
@@ -137,6 +159,7 @@ export type DetectionMessage =
 
 export type BackgroundMessage =
   | { type: 'GET_STATE' }
+  | { type: 'GET_MARKETPLACE_CATEGORY_FEES' }
   | {
       type: 'LOGIN';
       payload: { apiBaseUrl: string; email: string; password: string };
