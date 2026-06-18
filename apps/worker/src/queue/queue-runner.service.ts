@@ -1,11 +1,11 @@
 import {
   Injectable,
-  Logger,
   OnApplicationBootstrap,
   OnApplicationShutdown,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job, Queue, QueueEvents, Worker } from 'bullmq';
+import { writeWorkerLog } from '../observability/worker-log';
 import { BOOTSTRAP_JOB_NAME, WORKER_QUEUE_NAME } from './queue.constants';
 
 type BootstrapJobData = {
@@ -23,8 +23,6 @@ type BootstrapJobResult = {
 export class QueueRunnerService
   implements OnApplicationBootstrap, OnApplicationShutdown
 {
-  private readonly logger = new Logger(QueueRunnerService.name);
-
   private readonly queueName: string;
 
   private connectionState: 'idle' | 'connected' | 'degraded' = 'idle';
@@ -47,6 +45,7 @@ export class QueueRunnerService
   }
 
   async onApplicationBootstrap() {
+    const appEnv = this.configService.get<string>('APP_ENV', 'local');
     try {
       const redisUrl = this.configService.get<string>(
         'REDIS_URL',
@@ -81,9 +80,13 @@ export class QueueRunnerService
       this.connectionState = 'connected';
       await this.ensureBootstrapJob();
 
-      this.logger.log(
-        `BullMQ worker ready. Queue "${this.queueName}" terhubung ke ${redisUrl}`,
-      );
+      writeWorkerLog('log', {
+        event: 'worker_queue_ready',
+        app_env: appEnv,
+        queue_name: this.queueName,
+        redis_target: redisUrl,
+        redis_connection: this.connectionState,
+      });
     } catch (error) {
       this.connectionState = 'degraded';
       await this.cleanupQueueResources();
@@ -91,9 +94,13 @@ export class QueueRunnerService
       const message =
         error instanceof Error ? error.message : 'unknown connection error';
 
-      this.logger.warn(
-        `Worker queue berjalan dalam mode degraded. Redis belum tersedia: ${message}`,
-      );
+      writeWorkerLog('warn', {
+        event: 'worker_queue_degraded',
+        app_env: appEnv,
+        queue_name: this.queueName,
+        redis_connection: this.connectionState,
+        error_message: message,
+      });
     }
   }
 
@@ -104,9 +111,15 @@ export class QueueRunnerService
   private async processBootstrapJob(
     job: Job<BootstrapJobData>,
   ): Promise<BootstrapJobResult> {
-    this.logger.log(
-      `Memproses job ${job.name} dari ${job.data.source} pada ${job.data.createdAt}`,
-    );
+    writeWorkerLog('log', {
+      event: 'worker_job_processing',
+      app_env: this.configService.get<string>('APP_ENV', 'local'),
+      queue_name: this.queueName,
+      job_id: job.id ?? null,
+      job_name: job.name,
+      job_source: job.data.source,
+      job_created_at: job.data.createdAt,
+    });
 
     return Promise.resolve({
       processedAt: new Date().toISOString(),
@@ -117,22 +130,39 @@ export class QueueRunnerService
 
   private registerQueueObservers() {
     this.worker?.on('completed', (job) => {
-      this.logger.log(`Job selesai diproses: ${job.name}#${job.id}`);
+      writeWorkerLog('log', {
+        event: 'worker_job_completed',
+        app_env: this.configService.get<string>('APP_ENV', 'local'),
+        queue_name: this.queueName,
+        job_id: job.id ?? null,
+        job_name: job.name,
+      });
     });
 
     this.worker?.on('failed', (job, error) => {
-      this.logger.error(
-        `Job gagal diproses: ${job?.name ?? 'unknown'}#${job?.id ?? 'n/a'} - ${error.message}`,
-      );
+      writeWorkerLog('error', {
+        event: 'worker_job_failed',
+        app_env: this.configService.get<string>('APP_ENV', 'local'),
+        queue_name: this.queueName,
+        job_id: job?.id ?? null,
+        job_name: job?.name ?? null,
+        error_message: error.message,
+        stack: error.stack ?? null,
+      });
     });
 
     this.queueEvents?.on('error', (error) => {
-      this.logger.warn(`Queue event error: ${error.message}`);
+      writeWorkerLog('warn', {
+        event: 'worker_queue_event_error',
+        app_env: this.configService.get<string>('APP_ENV', 'local'),
+        queue_name: this.queueName,
+        error_message: error.message,
+      });
     });
   }
 
   private async ensureBootstrapJob() {
-    await this.queue?.add(
+    const job = await this.queue?.add(
       BOOTSTRAP_JOB_NAME,
       {
         createdAt: new Date().toISOString(),
@@ -144,6 +174,14 @@ export class QueueRunnerService
         removeOnFail: 20,
       },
     );
+
+    writeWorkerLog('log', {
+      event: 'worker_bootstrap_job_enqueued',
+      app_env: this.configService.get<string>('APP_ENV', 'local'),
+      queue_name: this.queueName,
+      job_id: job?.id ?? null,
+      job_name: BOOTSTRAP_JOB_NAME,
+    });
   }
 
   private async cleanupQueueResources() {
