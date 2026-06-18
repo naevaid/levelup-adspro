@@ -90,7 +90,7 @@ function formatFeeNotes(notes: string | null) {
     return null;
   }
 
-  return cleaned.replace(/^Cakupan:\s*/i, "Cakupan produk: ");
+  return cleaned.replace(/^Cakupan produk:\s*/i, "").replace(/^Cakupan:\s*/i, "").trim();
 }
 
 export default function SettingsPage() {

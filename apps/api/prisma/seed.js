@@ -237,7 +237,7 @@ function buildSeedNote(productTypes) {
     return null;
   }
 
-  return truncateText(`Cakupan produk: ${normalized}`, 300);
+  return truncateText(normalized, 300);
 }
 
 async function fetchShopeeCategoryFeeArticleContent() {
