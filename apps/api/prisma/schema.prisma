@@ -84,6 +84,12 @@ enum RawPayloadObjectStatus {
   EXPIRED
 }
 
+enum CategoryFeeStoreType {
+  NON_STAR
+  STAR
+  MALL
+}
+
 model User {
   id                   String          @id @default(uuid()) @db.Uuid
   email                String          @unique
@@ -118,6 +124,7 @@ model Organization {
   extensionSessions ExtensionSession[]
   ingestionBatches IngestionBatch[]
   rawPayloadObjects RawPayloadObject[]
+  marketplaceCategoryFees MarketplaceCategoryFee[]
 
   @@index([ownerUserId])
   @@map("organizations")
@@ -205,8 +212,32 @@ model Marketplace {
   createdAt DateTime        @default(now()) @map("created_at")
   updatedAt DateTime        @updatedAt @map("updated_at")
   shops     Shop[]
+  categoryFees MarketplaceCategoryFee[]
 
   @@map("marketplaces")
+}
+
+model MarketplaceCategoryFee {
+  id                String               @id @default(uuid()) @db.Uuid
+  organizationId    String               @map("organization_id") @db.Uuid
+  marketplaceId     String               @map("marketplace_id") @db.Uuid
+  storeType         CategoryFeeStoreType @map("store_type")
+  primaryCategory   String               @map("primary_category")
+  secondaryCategory String?              @map("secondary_category")
+  categoryName      String               @map("category_name")
+  feePercent        Float                @map("fee_percent")
+  isActive          Boolean              @default(true) @map("is_active")
+  notes             String?
+  createdAt         DateTime             @default(now()) @map("created_at")
+  updatedAt         DateTime             @updatedAt @map("updated_at")
+  organization      Organization         @relation(fields: [organizationId], references: [id])
+  marketplace       Marketplace          @relation(fields: [marketplaceId], references: [id])
+
+  @@unique([organizationId, marketplaceId, storeType, primaryCategory, secondaryCategory, categoryName])
+  @@index([organizationId, marketplaceId, storeType, isActive])
+  @@index([organizationId])
+  @@index([marketplaceId])
+  @@map("marketplace_category_fees")
 }
 
 model Shop {

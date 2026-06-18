@@ -7,15 +7,25 @@ body {
   font-family: Inter, Arial, sans-serif;
   background: #0f172a;
   color: #e2e8f0;
+  overflow: hidden;
 }
 
 .popup {
   width: 380px;
   min-height: 540px;
+  max-height: 600px;
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.popup::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .hero,
@@ -72,6 +82,45 @@ h2 {
   flex-direction: column;
   gap: 6px;
   font-size: 12px;
+}
+
+.password-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-field input {
+  width: 100%;
+  padding-right: 44px;
+}
+
+.icon-button {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(30, 41, 59, 0.88);
+  color: #cbd5e1;
+  line-height: 1;
+}
+
+.icon-button:hover {
+  background: rgba(51, 65, 85, 0.98);
+}
+
+.icon-button .icon-eye {
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
 }
 
 input,
@@ -139,6 +188,15 @@ button.ghost {
   margin: 8px 0 0;
   padding-left: 18px;
   font-size: 12px;
+  max-height: 140px;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.results-list::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .results-list li {

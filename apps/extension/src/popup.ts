@@ -13,6 +13,9 @@ const loginForm = document.querySelector<HTMLFormElement>('#login-form');
 const apiBaseUrlInput = document.querySelector<HTMLInputElement>('#api-base-url');
 const emailInput = document.querySelector<HTMLInputElement>('#email');
 const passwordInput = document.querySelector<HTMLInputElement>('#password');
+const togglePasswordButton = document.querySelector<HTMLButtonElement>(
+  '#toggle-password-button',
+);
 const authSummary = document.querySelector<HTMLElement>('#auth-summary');
 const organizationName = document.querySelector<HTMLElement>('#organization-name');
 const userEmail = document.querySelector<HTMLElement>('#user-email');
@@ -159,6 +162,59 @@ async function refreshState() {
   renderState(state);
 }
 
+function getEyeIconMarkup(visible: boolean) {
+  return visible
+    ? `
+      <svg
+        class="icon-eye"
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M3 3l18 18" />
+        <path d="M10.58 10.58A2 2 0 0 0 12 16c.49 0 .94-.18 1.28-.49" />
+        <path d="M9.88 5.09A10.94 10.94 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-4.24 5.19" />
+        <path d="M6.71 6.7A17.7 17.7 0 0 0 2 12s3.5 7 10 7a9.8 9.8 0 0 0 5.29-1.52" />
+      </svg>
+    `
+    : `
+      <svg
+        class="icon-eye"
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+    `;
+}
+
+function setPasswordVisibility(visible: boolean) {
+  if (!passwordInput || !togglePasswordButton) {
+    return;
+  }
+
+  passwordInput.type = visible ? 'text' : 'password';
+  togglePasswordButton.setAttribute('aria-pressed', visible ? 'true' : 'false');
+  togglePasswordButton.setAttribute(
+    'aria-label',
+    visible ? 'Sembunyikan password' : 'Lihat password',
+  );
+  togglePasswordButton.title = visible
+    ? 'Sembunyikan password'
+    : 'Lihat password';
+  togglePasswordButton.innerHTML = getEyeIconMarkup(visible);
+}
+
 loginForm?.addEventListener('submit', async (event) => {
   event.preventDefault();
   setBusyState(true);
@@ -173,6 +229,7 @@ loginForm?.addEventListener('submit', async (event) => {
       },
     });
     passwordInput!.value = '';
+    setPasswordVisibility(false);
     renderState(state);
   } catch (error) {
     activityMessage!.textContent =
@@ -180,6 +237,14 @@ loginForm?.addEventListener('submit', async (event) => {
   } finally {
     setBusyState(false);
   }
+});
+
+togglePasswordButton?.addEventListener('click', () => {
+  if (!passwordInput) {
+    return;
+  }
+
+  setPasswordVisibility(passwordInput.type === 'password');
 });
 
 logoutButton?.addEventListener('click', async () => {
@@ -238,3 +303,4 @@ shopSelect?.addEventListener('change', async () => {
 });
 
 void refreshState();
+setPasswordVisibility(false);

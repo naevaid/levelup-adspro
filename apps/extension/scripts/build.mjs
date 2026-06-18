@@ -19,6 +19,7 @@ const iconSizes = [16, 32, 48, 128];
 const entryPoints = {
   background: path.join(srcDir, 'background.ts'),
   content: path.join(srcDir, 'content.ts'),
+  pageBridge: path.join(srcDir, 'page-bridge.ts'),
   popup: path.join(srcDir, 'popup.ts'),
 };
 
@@ -47,10 +48,10 @@ async function writeManifest() {
   const icons = getIconMap();
   const manifest = {
     manifest_version: 3,
-    name: 'LevelUP adsPRO Collector',
+    name: 'LevelUP adsPRO',
     version: packageJson.version,
     description:
-      'Chrome extension collector for LevelUP adsPRO with login, page detection, and manual sync.',
+      'Riset pasar, temukan peluang, serta buat dan kelola iklan dengan lebih mudah, cepat, dan efisien..',
     permissions: ['storage', 'tabs', 'activeTab', 'alarms'],
     host_permissions: [
       'https://adspro.naeva.id/*',
@@ -62,7 +63,7 @@ async function writeManifest() {
       'https://*.tiktok.com/*',
     ],
     action: {
-      default_title: 'LevelUP adsPRO Collector',
+      default_title: 'LevelUP adsPRO',
       default_popup: 'popup.html',
       default_icon: icons,
     },
@@ -81,6 +82,12 @@ async function writeManifest() {
         ],
         js: ['content.js'],
         run_at: 'document_idle',
+      },
+    ],
+    web_accessible_resources: [
+      {
+        resources: ['pageBridge.js', 'header-logo.png'],
+        matches: ['https://shopee.co.id/*', 'https://*.shopee.co.id/*'],
       },
     ],
   };
@@ -106,6 +113,11 @@ async function copyStaticAssets() {
         path.join(distIconsDir, `icon-${size}.png`),
       ),
     ),
+  );
+
+  await copyFile(
+    path.join(assetsDir, 'header-logo.png'),
+    path.join(distDir, 'header-logo.png'),
   );
 }
 

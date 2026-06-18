@@ -76,6 +76,12 @@ type IngestionBatchSummary = {
           ratingHint: string | null;
           reviewCountHint: string | null;
         } | null;
+        salesHistory: {
+          currentTotalSold: number | null;
+          estimatedSold7d: number | null;
+          estimatedSold15d: number | null;
+          estimatedSold30d: number | null;
+        } | null;
         highlights: string[];
       }
     | null;
@@ -111,6 +117,14 @@ function formatCurrency(value: number | null | undefined) {
   }
 
   return `Rp${value.toLocaleString("id-ID")}`;
+}
+
+function formatUnits(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "-";
+  }
+
+  return `${value.toLocaleString("id-ID")} unit`;
 }
 
 function formatPriceRange(
@@ -501,6 +515,12 @@ export default function MarketResearchPage() {
                           <div className="mt-2 text-base font-semibold text-white">
                             {batch.preview.product?.salesHint || "-"}
                           </div>
+                          <div className="mt-1 text-xs text-slate-400">
+                            Total terbaca:{" "}
+                            {formatUnits(
+                              batch.preview.salesHistory?.currentTotalSold,
+                            )}
+                          </div>
                         </div>
                         <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
                           Rating / Ulasan
@@ -509,6 +529,32 @@ export default function MarketResearchPage() {
                           </div>
                           <div className="mt-1 text-xs text-slate-400">
                             {batch.preview.product?.reviewCountHint || "-"}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-4 grid gap-3 md:grid-cols-3">
+                        <div className="rounded-2xl border border-emerald-300/12 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-50">
+                          Estimasi 7 hari
+                          <div className="mt-2 text-base font-semibold text-white">
+                            {formatUnits(
+                              batch.preview.salesHistory?.estimatedSold7d,
+                            )}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-emerald-300/12 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-50">
+                          Estimasi 15 hari
+                          <div className="mt-2 text-base font-semibold text-white">
+                            {formatUnits(
+                              batch.preview.salesHistory?.estimatedSold15d,
+                            )}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-emerald-300/12 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-50">
+                          Estimasi 30 hari
+                          <div className="mt-2 text-base font-semibold text-white">
+                            {formatUnits(
+                              batch.preview.salesHistory?.estimatedSold30d,
+                            )}
                           </div>
                         </div>
                       </div>

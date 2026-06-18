@@ -68,11 +68,23 @@ export type SearchResultPreview = {
   position: number;
   productTitle: string;
   productUrl: string;
+  shopId?: string;
+  itemId?: string;
   imageUrl?: string;
   shopName: string | null;
+  locationLabel?: string;
   priceMin?: number;
   priceMax?: number;
   salesHint?: string;
+  monthlySoldHint?: string;
+  ratingHint?: string;
+  reviewCountHint?: string;
+  monthlyRevenueHint?: string;
+  deliveryHint?: string;
+};
+
+export type SearchResultEnrichment = Partial<SearchResultPreview> & {
+  productUrl: string;
 };
 
 export type ProductDetailSnapshot = {
@@ -83,6 +95,7 @@ export type ProductDetailSnapshot = {
   priceMin?: number;
   priceMax?: number;
   salesHint?: string;
+  monthlySoldHint?: string;
   ratingHint?: string;
   reviewCountHint?: string;
   highlights: string[];
@@ -131,4 +144,9 @@ export type BackgroundMessage =
   | { type: 'LOGOUT' }
   | { type: 'SET_SELECTED_SHOP'; payload: { shopId: string | null } }
   | { type: 'REFRESH_ACTIVE_TAB' }
-  | { type: 'SYNC_NOW' };
+  | { type: 'SYNC_NOW' }
+  | { type: 'SYNC_PRODUCT_URL'; payload: { productUrl: string } }
+  | {
+      type: 'ENRICH_SEARCH_RESULTS';
+      payload: { results: SearchResultPreview[] };
+    };

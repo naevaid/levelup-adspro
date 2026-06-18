@@ -6,6 +6,7 @@ import { apiEnvValidationSchema } from './config/env.validation';
 import { AuthModule } from './modules/auth/auth.module';
 import { ExtensionSessionsModule } from './modules/extension-sessions/extension-sessions.module';
 import { IngestionModule } from './modules/ingestion/ingestion.module';
+import { MarketplaceCategoryFeesModule } from './modules/marketplace-category-fees/marketplace-category-fees.module';
 import { MarketplacesModule } from './modules/marketplaces/marketplaces.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { RawDataModule } from './modules/raw-data/raw-data.module';
@@ -24,6 +25,7 @@ import { PrismaModule } from './prisma/prisma.module';
     AuthModule,
     OrganizationsModule,
     MarketplacesModule,
+    MarketplaceCategoryFeesModule,
     ShopsModule,
     ExtensionSessionsModule,
     RawDataModule,

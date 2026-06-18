@@ -9,6 +9,47 @@ import { ExtensionAuthenticatedRequest } from '../extension-sessions/extension-a
 import { RawDataService } from '../raw-data/raw-data.service';
 import { CreateIngestionBatchDto } from './dto/create-ingestion-batch.dto';
 
+type IngestionPreview =
+  | {
+      type: 'public_search';
+      keyword: string | null;
+      resultCount: number;
+      pageTitle: string | null;
+      topResults: Array<{
+        position: number | null;
+        productTitle: string | null;
+        productUrl: string | null;
+        imageUrl: string | null;
+        shopName: string | null;
+        priceMin: number | null;
+        priceMax: number | null;
+        salesHint: string | null;
+      }>;
+    }
+  | {
+      type: 'public_product';
+      pageTitle: string | null;
+      product: {
+        productTitle: string | null;
+        productUrl: string | null;
+        imageUrl: string | null;
+        shopName: string | null;
+        priceMin: number | null;
+        priceMax: number | null;
+        salesHint: string | null;
+        ratingHint: string | null;
+        reviewCountHint: string | null;
+      } | null;
+      salesHistory: {
+        currentTotalSold: number | null;
+        estimatedSold7d: number | null;
+        estimatedSold15d: number | null;
+        estimatedSold30d: number | null;
+      } | null;
+      highlights: string[];
+    }
+  | null;
+
 @Injectable()
 export class IngestionService {
   constructor(
@@ -35,7 +76,7 @@ export class IngestionService {
       take: 20,
     });
 
-    return Promise.all(
+    const summarizedBatches = await Promise.all(
       batches.map(async (batch) => {
         const rawPayloadObject = batch.rawPayloadObjects[0] ?? null;
         const preview = rawPayloadObject
@@ -87,6 +128,25 @@ export class IngestionService {
         };
       }),
     );
+
+    const salesHistoryByBatchId = await this.buildPublicProductSalesHistory(
+      organizationId,
+      summarizedBatches,
+    );
+
+    return summarizedBatches.map((batch) => {
+      if (batch.preview?.type !== 'public_product') {
+        return batch;
+      }
+
+      return {
+        ...batch,
+        preview: {
+          ...batch.preview,
+          salesHistory: salesHistoryByBatchId.get(batch.id) ?? null,
+        },
+      };
+    });
   }
 
   async createBatch(
@@ -221,7 +281,261 @@ export class IngestionService {
     return subscription?.plan.historyDays ?? 30;
   }
 
-  private async extractPreviewFromRawPayload(storageKey: string) {
+  private normalizeComparableProductUrl(rawUrl?: string | null) {
+    if (!rawUrl) {
+      return null;
+    }
+
+    try {
+      const parsed = new URL(rawUrl);
+      parsed.search = '';
+      parsed.hash = '';
+      return parsed.toString();
+    } catch {
+      return rawUrl;
+    }
+  }
+
+  private parseSalesHintUnits(rawValue?: string | null) {
+    if (!rawValue) {
+      return null;
+    }
+
+    const normalized = rawValue.replace(/\s+/g, ' ').trim().toLowerCase();
+    const match = normalized.match(
+      /(\d[\d.,]*)(?:\s?(rb|ribu|jt|juta|k|m))?\+?\s*(?:terjual|sold)/i,
+    );
+
+    if (!match) {
+      return null;
+    }
+
+    const numericPart = match[1];
+    const suffix = match[2]?.toLowerCase() ?? null;
+
+    if (suffix) {
+      const value = Number.parseFloat(
+        numericPart.replace(/\./g, '').replace(',', '.'),
+      );
+      if (!Number.isFinite(value)) {
+        return null;
+      }
+
+      if (suffix === 'rb' || suffix === 'ribu' || suffix === 'k') {
+        return Math.round(value * 1000);
+      }
+
+      if (suffix === 'jt' || suffix === 'juta' || suffix === 'm') {
+        return Math.round(value * 1000000);
+      }
+    }
+
+    const digits = numericPart.replace(/[^\d]/g, '');
+    if (!digits) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(digits, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private buildEstimatedSalesDelta(
+    points: Array<{ capturedAt: Date; salesCount: number | null }>,
+    targetCapturedAt: Date,
+    currentSalesCount: number | null,
+    windowDays: number,
+  ) {
+    if (currentSalesCount === null) {
+      return null;
+    }
+
+    const thresholdTime =
+      targetCapturedAt.getTime() - windowDays * 24 * 60 * 60 * 1000;
+    const baseline = points.find(
+      (point) =>
+        point.salesCount !== null &&
+        point.capturedAt.getTime() <= thresholdTime,
+    );
+
+    if (!baseline || baseline.salesCount === null) {
+      return null;
+    }
+
+    return Math.max(currentSalesCount - baseline.salesCount, 0);
+  }
+
+  private async buildPublicProductSalesHistory(
+    organizationId: string,
+    summarizedBatches: Array<{
+      id: string;
+      capturedAt: Date;
+      preview:
+        | {
+            type: 'public_product';
+            product: {
+              productUrl: string | null;
+              salesHint: string | null;
+            } | null;
+          }
+        | {
+            type: 'public_search';
+          }
+        | null;
+    }>,
+  ) {
+    const publicProductTargets = summarizedBatches
+      .map((batch) => {
+        if (
+          batch.preview?.type !== 'public_product' ||
+          !batch.preview.product
+        ) {
+          return null;
+        }
+
+        const productKey = this.normalizeComparableProductUrl(
+          batch.preview.product.productUrl,
+        );
+        if (!productKey) {
+          return null;
+        }
+
+        return {
+          batchId: batch.id,
+          productKey,
+          capturedAt: batch.capturedAt,
+          currentSalesCount: this.parseSalesHintUnits(
+            batch.preview.product.salesHint,
+          ),
+        };
+      })
+      .filter(
+        (
+          value,
+        ): value is {
+          batchId: string;
+          productKey: string;
+          capturedAt: Date;
+          currentSalesCount: number | null;
+        } => value !== null,
+      );
+
+    if (publicProductTargets.length === 0) {
+      return new Map<
+        string,
+        {
+          currentTotalSold: number | null;
+          estimatedSold7d: number | null;
+          estimatedSold15d: number | null;
+          estimatedSold30d: number | null;
+        }
+      >();
+    }
+
+    const lookbackStart = new Date(
+      Math.min(
+        ...publicProductTargets.map((item) => item.capturedAt.getTime()),
+      ) -
+        32 * 24 * 60 * 60 * 1000,
+    );
+
+    const historicalBatches = await this.prisma.ingestionBatch.findMany({
+      where: {
+        organizationId,
+        captureMode: CaptureMode.PUBLIC,
+        pageType: 'shopee_public_product',
+        capturedAt: {
+          gte: lookbackStart,
+        },
+      },
+      include: {
+        rawPayloadObjects: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+      orderBy: { capturedAt: 'desc' },
+      take: 250,
+    });
+
+    const pointsByProductKey = new Map<
+      string,
+      Array<{ capturedAt: Date; salesCount: number | null }>
+    >();
+
+    for (const batch of historicalBatches) {
+      const rawPayloadObject = batch.rawPayloadObjects[0];
+      if (!rawPayloadObject) {
+        continue;
+      }
+
+      const rawPayload = await this.rawDataService.readRawPayload<{
+        content?: {
+          product?: {
+            productUrl?: string;
+            salesHint?: string;
+          };
+        };
+      }>(rawPayloadObject.storageKey);
+
+      const productKey = this.normalizeComparableProductUrl(
+        rawPayload?.content?.product?.productUrl,
+      );
+      if (!productKey) {
+        continue;
+      }
+
+      const currentPoints = pointsByProductKey.get(productKey) ?? [];
+      currentPoints.push({
+        capturedAt: batch.capturedAt,
+        salesCount: this.parseSalesHintUnits(
+          rawPayload?.content?.product?.salesHint,
+        ),
+      });
+      pointsByProductKey.set(productKey, currentPoints);
+    }
+
+    for (const [productKey, points] of pointsByProductKey.entries()) {
+      points.sort(
+        (left, right) => right.capturedAt.getTime() - left.capturedAt.getTime(),
+      );
+      pointsByProductKey.set(productKey, points);
+    }
+
+    return new Map(
+      publicProductTargets.map((target) => {
+        const points = pointsByProductKey.get(target.productKey) ?? [];
+
+        return [
+          target.batchId,
+          {
+            currentTotalSold: target.currentSalesCount,
+            estimatedSold7d: this.buildEstimatedSalesDelta(
+              points,
+              target.capturedAt,
+              target.currentSalesCount,
+              7,
+            ),
+            estimatedSold15d: this.buildEstimatedSalesDelta(
+              points,
+              target.capturedAt,
+              target.currentSalesCount,
+              15,
+            ),
+            estimatedSold30d: this.buildEstimatedSalesDelta(
+              points,
+              target.capturedAt,
+              target.currentSalesCount,
+              30,
+            ),
+          },
+        ] as const;
+      }),
+    );
+  }
+
+  private async extractPreviewFromRawPayload(
+    storageKey: string,
+  ): Promise<IngestionPreview> {
     const rawPayload = await this.rawDataService.readRawPayload<{
       pageType?: string;
       marketplace?: string;
@@ -297,6 +611,7 @@ export class IngestionService {
                 rawPayload.content.product.reviewCountHint ?? null,
             }
           : null,
+        salesHistory: null,
         highlights: (rawPayload.content.highlights ?? []).slice(0, 8),
       };
     }

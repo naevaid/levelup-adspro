@@ -1,0 +1,42 @@
+import { CategoryFeeStoreType } from '@prisma/client';
+import { IsBoolean, IsEnum, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+
+export class UpdateMarketplaceCategoryFeeDto {
+  @IsOptional()
+  @IsUUID()
+  marketplaceId?: string;
+
+  @IsOptional()
+  @IsEnum(CategoryFeeStoreType)
+  storeType?: CategoryFeeStoreType;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  primaryCategory?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  secondaryCategory?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  categoryName?: string;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100)
+  feePercent?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  notes?: string | null;
+}
