@@ -1518,7 +1518,8 @@ function ensureOverlayStyle() {
     }
 
     #${OVERLAY_ID} .levelup-roas-field-row {
-      display: flex;
+      display: grid;
+      grid-template-columns: minmax(0, 10fr) minmax(84px, 2fr);
       gap: 10px;
       align-items: center;
     }
@@ -1662,7 +1663,8 @@ function ensureOverlayStyle() {
     }
 
     #${OVERLAY_ID} .levelup-roas-input[data-variant="pct"] {
-      width: 112px;
+      width: 100%;
+      min-width: 0;
       text-align: right;
     }
 
@@ -2951,7 +2953,7 @@ async function maybeAutoSuggestRoasCategory(detail: ProductDetailSnapshot) {
 
   if (typeof match.pct === 'number' && Number.isFinite(match.pct)) {
     const previousPct = roasCalculatorState.kategoriFeePct;
-    roasCalculatorState.categoryLabel = match.primary;
+    roasCalculatorState.categoryLabel = match.secondary ?? match.primary;
     roasCalculatorState.kategoriFeePct = match.pct;
     lastRoasCategorySelectionSource = 'auto';
     return previousPct !== match.pct;
@@ -2973,19 +2975,6 @@ function getRoasCategoryHelperText() {
       lastRoasCategorySuggestion.name,
     ].filter((part) => Boolean(normalizeText(part)));
     return `Fee kategori terisi otomatis dari kategori Shopee: ${parts.join(' > ')}.`;
-  }
-
-  if (
-    lastRoasCategorySuggestion &&
-    lastRoasCategorySuggestion.storeType === roasCalculatorState.storeType &&
-    lastRoasCategorySuggestion.pct === null
-  ) {
-    const parts = [
-      lastRoasCategorySuggestion.primary,
-      lastRoasCategorySuggestion.secondary,
-      lastRoasCategorySuggestion.name,
-    ].filter((part) => Boolean(normalizeText(part)));
-    return `Kategori Shopee terdeteksi: ${parts.join(' > ')}. Fee belum ditemukan di master, silakan pilih kategori atau isi persen manual.`;
   }
 
   return null;
@@ -3264,7 +3253,7 @@ async function openRoasCategoryPicker() {
                           'groupIndex' in entry ? entry.groupIndex : activeGroupIndex
                         }" data-sub-index="${
                           'subIndex' in entry ? entry.subIndex : activeSubIndex
-                        }" data-primary="${encodeURIComponent(primaryCategory)}">Pilih</button>
+                        }" data-primary="${encodeURIComponent(primaryCategory)}" data-secondary="${encodeURIComponent(secondaryCategory)}">Pilih</button>
                       </div>
                     </div>
                     ${note ? `<div class="levelup-product-insight">${note}</div>` : ''}
@@ -3350,6 +3339,7 @@ async function openRoasCategoryPicker() {
       const groupIndexRaw = target.getAttribute('data-group-index');
       const subIndexRaw = target.getAttribute('data-sub-index');
       const primaryCategory = decodeURIComponent(target.getAttribute('data-primary') ?? '');
+      const secondaryCategory = decodeURIComponent(target.getAttribute('data-secondary') ?? '');
       const pct = pctRaw ? Number.parseFloat(pctRaw) : null;
       if (!name || pct === null || !Number.isFinite(pct)) {
         return;
@@ -3364,6 +3354,7 @@ async function openRoasCategoryPicker() {
       }
 
       roasCalculatorState.categoryLabel =
+        normalizeText(secondaryCategory) ||
         normalizeText(primaryCategory) ||
         normalizeText(activePrimaryCategoryLabel) ||
         decodeURIComponent(name);

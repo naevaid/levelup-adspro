@@ -34,7 +34,15 @@ Dokumen ini menjelaskan cara deploy `levelup-adspro` ke VPS secara manual menggu
 
 ## 4) Manual Deploy (disarankan untuk release)
 
-Jalankan di VPS:
+Dari mesin lokal yang sudah punya alias SSH `vps`, cara paling aman adalah masuk dulu ke server:
+
+```bash
+ssh vps
+cd /opt/levelup-adspro
+FORCE_DEPLOY=1 bash infra/vps/deploy.sh
+```
+
+Jika sudah berada di VPS, jalankan:
 
 ```bash
 cd /opt/levelup-adspro
