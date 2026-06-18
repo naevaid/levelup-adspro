@@ -1589,9 +1589,26 @@ function ensureOverlayStyle() {
       background: rgba(255, 255, 255, 0.92);
     }
 
+    #${OVERLAY_ID} .levelup-roas-program-card[data-align="right"] {
+      text-align: right;
+    }
+
+    #${OVERLAY_ID} .levelup-roas-program-card[data-align="right"] .levelup-roas-program-copy {
+      justify-items: end;
+      text-align: right;
+    }
+
+    #${OVERLAY_ID} .levelup-roas-program-card[data-align="left"] {
+      text-align: left;
+    }
+
+    #${OVERLAY_ID} .levelup-roas-program-card[data-align="left"] .levelup-roas-program-copy {
+      justify-items: start;
+      text-align: left;
+    }
+
     #${OVERLAY_ID} .levelup-roas-program-copy {
       display: grid;
-      gap: 2px;
       min-width: 0;
     }
 
@@ -1602,10 +1619,22 @@ function ensureOverlayStyle() {
       line-height: 1.35;
     }
 
-    #${OVERLAY_ID} .levelup-roas-program-note {
-      font-size: 11px;
-      color: #6b7280;
-      line-height: 1.35;
+    #${OVERLAY_ID} .levelup-roas-program-title-button {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      padding: 0;
+      margin: 0;
+      color: inherit;
+      font: inherit;
+      cursor: help;
+      text-align: inherit;
+    }
+
+    #${OVERLAY_ID} .levelup-roas-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
     }
 
     #${OVERLAY_ID} .levelup-roas-select {
@@ -1917,7 +1946,8 @@ function ensureOverlayStyle() {
       }
 
       #${OVERLAY_ID} .levelup-roas-program-grid,
-      #${OVERLAY_ID} .levelup-roas-store-type-group {
+      #${OVERLAY_ID} .levelup-roas-store-type-group,
+      #${OVERLAY_ID} .levelup-roas-summary-grid {
         grid-template-columns: 1fr;
       }
     }
@@ -3307,7 +3337,7 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
       <div class="levelup-modal-header">
         <div class="levelup-modal-title">Kalkulator ROAS | LevelUP adsPRO</div>
         <div class="levelup-modal-actions">
-          <button type="button" class="levelup-button levelup-button-secondary" data-action="roas-reset">Hapus Data</button>
+          <button type="button" class="levelup-button levelup-button-secondary" data-action="roas-reset">Reset Data</button>
           <button type="button" class="levelup-button levelup-button-primary" data-action="roas-close">Sembunyikan Detail</button>
         </div>
       </div>
@@ -3365,22 +3395,41 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
             <input class="levelup-roas-input" data-field="operasional" inputmode="numeric" placeholder="Rp 0" value="${roasCalculatorState.operasional ? formatCompactCurrency(roasCalculatorState.operasional) : ''}" />
           </div>
           <div class="levelup-roas-field">
-            <div class="levelup-roas-field-label">Program Shopee</div>
             <div class="levelup-roas-program-grid">
-              <div class="levelup-roas-program-card">
+              <div class="levelup-roas-program-card" data-align="right">
                 <div class="levelup-roas-program-copy">
-                  <span class="levelup-roas-program-title">Promo Xtra</span>
-                  <span class="levelup-roas-program-note">${SHOPEE_PROMO_XTRA_FEE_PCT.toFixed(1)}% maks Rp${SHOPEE_PROMO_XTRA_FEE_CAP_IDR.toLocaleString('id-ID')}</span>
+                  <span class="levelup-tooltip">
+                    <button
+                      type="button"
+                      class="levelup-roas-program-title levelup-roas-program-title-button"
+                      aria-label="Info Promo Extra"
+                    >
+                      Promo Extra
+                    </button>
+                    <span class="levelup-tooltip-panel">
+                      ${SHOPEE_PROMO_XTRA_FEE_PCT.toFixed(1)}% maks Rp${SHOPEE_PROMO_XTRA_FEE_CAP_IDR.toLocaleString('id-ID')}
+                    </span>
+                  </span>
                 </div>
                 <label class="levelup-toggle">
                   <input type="checkbox" data-field="promoXtraEnabled" ${roasCalculatorState.promoXtraEnabled ? 'checked' : ''} />
                   <span class="levelup-toggle-track"></span>
                 </label>
               </div>
-              <div class="levelup-roas-program-card">
+              <div class="levelup-roas-program-card" data-align="left">
                 <div class="levelup-roas-program-copy">
-                  <span class="levelup-roas-program-title">Gratis Ongkir XTRA</span>
-                  <span class="levelup-roas-program-note">${SHOPEE_GRATIS_ONGKIR_XTRA_FEE_PCT.toFixed(1)}%</span>
+                  <span class="levelup-tooltip">
+                    <button
+                      type="button"
+                      class="levelup-roas-program-title levelup-roas-program-title-button"
+                      aria-label="Info Ongkir Extra"
+                    >
+                      Ongkir Extra
+                    </button>
+                    <span class="levelup-tooltip-panel">
+                      Gratis Ongkir XTRA ${SHOPEE_GRATIS_ONGKIR_XTRA_FEE_PCT.toFixed(1)}%
+                    </span>
+                  </span>
                 </div>
                 <label class="levelup-toggle">
                   <input type="checkbox" data-field="gratisOngkirXtraEnabled" ${roasCalculatorState.gratisOngkirXtraEnabled ? 'checked' : ''} />
@@ -3389,6 +3438,8 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
               </div>
             </div>
           </div>
+        </div>
+        <div class="levelup-roas-summary-grid">
           <div class="levelup-roas-field">
             <div class="levelup-roas-field-label levelup-field-label-row">
               <span>Biaya Shopee (Total)</span>
@@ -3403,12 +3454,12 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
               <span data-role="roas-shopee-fee">-</span>
             </div>
           </div>
-        </div>
-        <div class="levelup-roas-field">
-          <div class="levelup-roas-field-label">Profit Sebelum Iklan</div>
-          <div class="levelup-roas-output">
-            <span data-role="roas-profit-label">${typeof profitSebelumIklan === 'number' ? formatCompactCurrency(Math.round(profitSebelumIklan)) : '-'}</span>
-            <small data-role="roas-profit-pct">${typeof profitSebelumIklanPct === 'number' ? formatPercent(profitSebelumIklanPct) : '-'}</small>
+          <div class="levelup-roas-field">
+            <div class="levelup-roas-field-label">Profit Sebelum Iklan</div>
+            <div class="levelup-roas-output">
+              <span data-role="roas-profit-label">${typeof profitSebelumIklan === 'number' ? formatCompactCurrency(Math.round(profitSebelumIklan)) : '-'}</span>
+              <small data-role="roas-profit-pct">${typeof profitSebelumIklanPct === 'number' ? formatPercent(profitSebelumIklanPct) : '-'}</small>
+            </div>
           </div>
         </div>
       </div>
