@@ -71,6 +71,7 @@ type RoasCalculatorState = {
   operasional: number | null;
   storeType: 'non_star' | 'star' | 'mall';
   promoXtraEnabled: boolean;
+  gratisOngkirXtraEnabled: boolean;
   categoryLabel: string | null;
   kategoriFeePct: number | null;
 };
@@ -81,6 +82,7 @@ const roasCalculatorState: RoasCalculatorState = {
   operasional: null,
   storeType: 'non_star',
   promoXtraEnabled: false,
+  gratisOngkirXtraEnabled: false,
   categoryLabel: null,
   kategoriFeePct: 0,
 };
@@ -88,6 +90,7 @@ const roasCalculatorState: RoasCalculatorState = {
 const SHOPEE_ORDER_PROCESSING_FEE_IDR = 1250;
 const SHOPEE_PROMO_XTRA_FEE_PCT = 4.5;
 const SHOPEE_PROMO_XTRA_FEE_CAP_IDR = 60000;
+const SHOPEE_GRATIS_ONGKIR_XTRA_FEE_PCT = 0.5;
 
 type CategoryPickerCatalog = Record<
   RoasCalculatorState['storeType'],
@@ -1308,6 +1311,10 @@ function ensureOverlayStyle() {
       overflow: hidden;
     }
 
+    #${OVERLAY_ID} .levelup-modal.levelup-modal-roas {
+      overflow: visible;
+    }
+
     #${OVERLAY_ID} .levelup-modal-header {
       display: flex;
       align-items: center;
@@ -1436,6 +1443,21 @@ function ensureOverlayStyle() {
       transform: translateX(-50%) translateY(0);
     }
 
+    #${OVERLAY_ID} .levelup-roas-tier .levelup-tooltip-panel {
+      top: calc(100% + 10px);
+      bottom: auto;
+      transform: translateX(-50%) translateY(-4px);
+    }
+
+    #${OVERLAY_ID} .levelup-roas-tier .levelup-tooltip-panel::after {
+      top: auto;
+      bottom: calc(100% - 5px);
+      border-right: none;
+      border-bottom: none;
+      border-left: 1px solid rgba(248, 113, 113, 0.18);
+      border-top: 1px solid rgba(248, 113, 113, 0.18);
+    }
+
     #${OVERLAY_ID} .levelup-tooltip-lines {
       display: grid;
       gap: 4px;
@@ -1499,6 +1521,91 @@ function ensureOverlayStyle() {
       display: flex;
       gap: 10px;
       align-items: center;
+    }
+
+    #${OVERLAY_ID} .levelup-roas-store-type-group {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    #${OVERLAY_ID} .levelup-roas-radio {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    #${OVERLAY_ID} .levelup-roas-radio input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #${OVERLAY_ID} .levelup-roas-radio-label {
+      width: 100%;
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 40px;
+      padding: 0 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(203, 213, 225, 0.85);
+      background: rgba(255, 255, 255, 0.92);
+      color: #111827;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.3;
+      cursor: pointer;
+      text-align: center;
+      transition:
+        border-color 140ms ease,
+        background 140ms ease,
+        color 140ms ease,
+        box-shadow 140ms ease;
+    }
+
+    #${OVERLAY_ID} .levelup-roas-radio input:checked + .levelup-roas-radio-label {
+      border-color: rgba(251, 106, 53, 0.38);
+      background: rgba(251, 106, 53, 0.14);
+      color: #9a3412;
+      box-shadow: inset 0 0 0 1px rgba(251, 106, 53, 0.08);
+    }
+
+    #${OVERLAY_ID} .levelup-roas-program-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    #${OVERLAY_ID} .levelup-roas-program-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-height: 52px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(203, 213, 225, 0.85);
+      background: rgba(255, 255, 255, 0.92);
+    }
+
+    #${OVERLAY_ID} .levelup-roas-program-copy {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    #${OVERLAY_ID} .levelup-roas-program-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #111827;
+      line-height: 1.35;
+    }
+
+    #${OVERLAY_ID} .levelup-roas-program-note {
+      font-size: 11px;
+      color: #6b7280;
+      line-height: 1.35;
     }
 
     #${OVERLAY_ID} .levelup-roas-select {
@@ -1806,6 +1913,11 @@ function ensureOverlayStyle() {
       }
 
       #${OVERLAY_ID} .levelup-roas-grid {
+        grid-template-columns: 1fr;
+      }
+
+      #${OVERLAY_ID} .levelup-roas-program-grid,
+      #${OVERLAY_ID} .levelup-roas-store-type-group {
         grid-template-columns: 1fr;
       }
     }
@@ -2295,20 +2407,54 @@ function computeRoasMetrics() {
         SHOPEE_PROMO_XTRA_FEE_CAP_IDR,
       )
     : 0;
+  const feeGratisOngkirXtra = roasCalculatorState.gratisOngkirXtraEnabled
+    ? price * (SHOPEE_GRATIS_ONGKIR_XTRA_FEE_PCT / 100)
+    : 0;
   const feeProsesPesanan = SHOPEE_ORDER_PROCESSING_FEE_IDR;
-  const totalBiayaShopee = feeKategori + feePromoXtra + feeProsesPesanan;
+  const totalBiayaShopee =
+    feeKategori + feePromoXtra + feeGratisOngkirXtra + feeProsesPesanan;
   const totalBiayaShopeePct = (totalBiayaShopee / price) * 100;
 
   const biayaPokok = hpp + operasional + totalBiayaShopee;
   const profitSebelumIklan = price - biayaPokok;
+  const contributionMarginRatio = profitSebelumIklan / price;
+  const breakEvenRoas =
+    Number.isFinite(contributionMarginRatio) && contributionMarginRatio > 0
+      ? 1 / contributionMarginRatio
+      : null;
 
   const tiers = [
-    { key: 'rugi', label: 'Rugi', tone: 'danger', adSpendShare: 1.0 },
-    { key: 'kompetitif', label: 'Kompetitif', tone: 'warning', adSpendShare: 0.7 },
-    { key: 'konservatif', label: 'Konservatif', tone: 'safe', adSpendShare: 0.5 },
-    { key: 'prospektif', label: 'Prospektif', tone: 'prospect', adSpendShare: 0.25 },
+    {
+      key: 'rugi',
+      label: 'Rugi',
+      tone: 'danger',
+      resolveRoas: (base: number) => base,
+    },
+    {
+      key: 'kompetitif',
+      label: 'Kompetitif',
+      tone: 'warning',
+      resolveRoas: (base: number) => Math.max(base * 1.15, base + 0.3),
+    },
+    {
+      key: 'konservatif',
+      label: 'Konservatif',
+      tone: 'safe',
+      resolveRoas: (base: number) => Math.max(base * 1.35, base + 0.8),
+    },
+    {
+      key: 'prospektif',
+      label: 'Prospektif',
+      tone: 'prospect',
+      resolveRoas: (base: number) => Math.max(base * 1.75, base + 1.8),
+    },
   ].map((tier) => {
-    if (!Number.isFinite(profitSebelumIklan) || profitSebelumIklan <= 0) {
+    if (
+      !Number.isFinite(profitSebelumIklan) ||
+      profitSebelumIklan <= 0 ||
+      typeof breakEvenRoas !== 'number' ||
+      !Number.isFinite(breakEvenRoas)
+    ) {
       return {
         ...tier,
         roas: null as number | null,
@@ -2318,8 +2464,8 @@ function computeRoasMetrics() {
       };
     }
 
-    const biayaIklan = profitSebelumIklan * tier.adSpendShare;
-    const roas = biayaIklan > 0 ? price / biayaIklan : null;
+    const roas = tier.resolveRoas(breakEvenRoas);
+    const biayaIklan = roas > 0 ? price / roas : null;
     const profit = profitSebelumIklan - biayaIklan;
     const marginPct = (profit / price) * 100;
     return { ...tier, roas, biayaIklan, profit, marginPct };
@@ -2329,11 +2475,13 @@ function computeRoasMetrics() {
     price,
     biayaPokok,
     profitSebelumIklan,
+    breakEvenRoas,
     tiers,
     totalBiayaShopee,
     totalBiayaShopeePct,
     feeKategori,
     feePromoXtra,
+    feeGratisOngkirXtra,
     feeProsesPesanan,
   };
 }
@@ -2341,6 +2489,7 @@ function computeRoasMetrics() {
 function getRoasTierTooltipText(
   key: 'rugi' | 'kompetitif' | 'konservatif' | 'prospektif',
   roasValue: number | null,
+  breakEvenRoas?: number | null,
 ) {
   if (typeof roasValue !== 'number' || !Number.isFinite(roasValue) || roasValue <= 0) {
     return 'Nilai ROAS belum bisa dihitung karena profit sebelum iklan <= 0.';
@@ -2351,14 +2500,14 @@ function getRoasTierTooltipText(
   }
 
   if (key === 'kompetitif') {
-    return 'Pakai target ROAS ini untuk iklan dengan tujuan traffic.';
+    return `Pakai target ROAS sekitar ${roasValue.toFixed(1)} untuk iklan dengan tujuan traffic, sedikit di atas break-even${typeof breakEvenRoas === 'number' ? ` ${breakEvenRoas.toFixed(1)}` : ''}.`;
   }
 
   if (key === 'konservatif') {
-    return 'Pakai target ROAS ini untuk iklan dengan tujuan profit.';
+    return `Pakai target ROAS sekitar ${roasValue.toFixed(1)} untuk iklan dengan tujuan profit, dengan jarak aman di atas break-even${typeof breakEvenRoas === 'number' ? ` ${breakEvenRoas.toFixed(1)}` : ''}.`;
   }
 
-  return 'Alokasi ROAS ini hanya untuk tes pasar, bukan hero product.';
+  return `Gunakan target ROAS sekitar ${roasValue.toFixed(1)} untuk tes pasar atau produk baru, bukan hero product.`;
 }
 
 function closeRoasCalculator() {
@@ -2735,7 +2884,7 @@ function openRoasCategoryLoginGate(storeTypeLabel: string) {
   modal.className = 'levelup-modal-backdrop';
   modal.dataset.role = 'roas-category-modal';
   modal.innerHTML = `
-    <div class="levelup-modal" role="dialog" aria-modal="true">
+    <div class="levelup-modal levelup-modal-roas" role="dialog" aria-modal="true">
       <div class="levelup-modal-header">
         <div class="levelup-modal-title">Pilih Fee Kategori Produk ${storeTypeLabel}</div>
         <div class="levelup-modal-actions">
@@ -2822,7 +2971,7 @@ async function openRoasCategoryPicker() {
   }
 
   modal.innerHTML = `
-    <div class="levelup-modal" role="dialog" aria-modal="true">
+    <div class="levelup-modal levelup-modal-roas" role="dialog" aria-modal="true">
       <div class="levelup-modal-header">
         <div class="levelup-modal-title">Pilih Fee Kategori Produk ${storeTypeLabel}</div>
         <div class="levelup-modal-actions">
@@ -3154,7 +3303,7 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
   modal.className = 'levelup-modal-backdrop';
   modal.dataset.role = 'roas-modal';
   modal.innerHTML = `
-    <div class="levelup-modal" role="dialog" aria-modal="true">
+    <div class="levelup-modal levelup-modal-roas" role="dialog" aria-modal="true">
       <div class="levelup-modal-header">
         <div class="levelup-modal-title">Kalkulator ROAS | LevelUP adsPRO</div>
         <div class="levelup-modal-actions">
@@ -3171,7 +3320,7 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
                   <span class="levelup-roas-tier-label" data-role="roas-tier-label">${tier.label} ROAS ${typeof tier.roas === 'number' ? tier.roas.toFixed(1) : '-'}</span>
                 </div>
                 <span data-role="roas-tier-profit">${formatCompactCurrency(Math.round(tier.profit))}</span>
-                <span class="levelup-tooltip-panel" data-role="roas-tier-tooltip">${getRoasTierTooltipText(tier.key, tier.roas)}</span>
+                <span class="levelup-tooltip-panel" data-role="roas-tier-tooltip">${getRoasTierTooltipText(tier.key, tier.roas, metrics?.breakEvenRoas ?? null)}</span>
               </div>
             `,
           )
@@ -3189,31 +3338,56 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
           </div>
           <div class="levelup-roas-field">
             <div class="levelup-roas-field-label">Jenis Toko</div>
-            <div class="levelup-roas-field-row">
-              <select class="levelup-roas-select" data-field="storeType">
-                <option value="non_star" ${roasCalculatorState.storeType === 'non_star' ? 'selected' : ''}>Non-Star</option>
-                <option value="star" ${roasCalculatorState.storeType === 'star' ? 'selected' : ''}>Star/Star+</option>
-                <option value="mall" ${roasCalculatorState.storeType === 'mall' ? 'selected' : ''}>Mall</option>
-              </select>
-              <div class="levelup-roas-toggle-inline">
-                <span>Promo Xtra</span>
-                <label class="levelup-toggle">
-                  <input type="checkbox" data-field="promoXtraEnabled" ${roasCalculatorState.promoXtraEnabled ? 'checked' : ''} />
-                  <span class="levelup-toggle-track"></span>
-                </label>
-              </div>
+            <div class="levelup-roas-store-type-group">
+              <label class="levelup-roas-radio">
+                <input type="radio" name="levelup-roas-store-type" value="non_star" ${roasCalculatorState.storeType === 'non_star' ? 'checked' : ''} />
+                <span class="levelup-roas-radio-label">Non-Star</span>
+              </label>
+              <label class="levelup-roas-radio">
+                <input type="radio" name="levelup-roas-store-type" value="star" ${roasCalculatorState.storeType === 'star' ? 'checked' : ''} />
+                <span class="levelup-roas-radio-label">Star/Star+</span>
+              </label>
+              <label class="levelup-roas-radio">
+                <input type="radio" name="levelup-roas-store-type" value="mall" ${roasCalculatorState.storeType === 'mall' ? 'checked' : ''} />
+                <span class="levelup-roas-radio-label">Mall</span>
+              </label>
             </div>
           </div>
           <div class="levelup-roas-field">
             <div class="levelup-roas-field-label">Kategori Produk</div>
             <div class="levelup-roas-field-row">
-              <button type="button" class="levelup-button levelup-button-secondary levelup-roas-category-button" data-action="roas-pick-category">${roasCalculatorState.categoryLabel ? roasCalculatorState.categoryLabel : 'Pilih'}</button>
+              <button type="button" class="levelup-button levelup-button-secondary levelup-roas-category-button" data-action="roas-pick-category">${roasCalculatorState.categoryLabel ? roasCalculatorState.categoryLabel : 'Pilih Kategori'}</button>
               <input class="levelup-roas-input" data-variant="pct" data-field="kategoriFeePct" inputmode="decimal" placeholder="0.00" value="${roasCalculatorState.kategoriFeePct ?? 0}" />
             </div>
           </div>
           <div class="levelup-roas-field">
             <div class="levelup-roas-field-label">Operasional</div>
             <input class="levelup-roas-input" data-field="operasional" inputmode="numeric" placeholder="Rp 0" value="${roasCalculatorState.operasional ? formatCompactCurrency(roasCalculatorState.operasional) : ''}" />
+          </div>
+          <div class="levelup-roas-field">
+            <div class="levelup-roas-field-label">Program Shopee</div>
+            <div class="levelup-roas-program-grid">
+              <div class="levelup-roas-program-card">
+                <div class="levelup-roas-program-copy">
+                  <span class="levelup-roas-program-title">Promo Xtra</span>
+                  <span class="levelup-roas-program-note">${SHOPEE_PROMO_XTRA_FEE_PCT.toFixed(1)}% maks Rp${SHOPEE_PROMO_XTRA_FEE_CAP_IDR.toLocaleString('id-ID')}</span>
+                </div>
+                <label class="levelup-toggle">
+                  <input type="checkbox" data-field="promoXtraEnabled" ${roasCalculatorState.promoXtraEnabled ? 'checked' : ''} />
+                  <span class="levelup-toggle-track"></span>
+                </label>
+              </div>
+              <div class="levelup-roas-program-card">
+                <div class="levelup-roas-program-copy">
+                  <span class="levelup-roas-program-title">Gratis Ongkir XTRA</span>
+                  <span class="levelup-roas-program-note">${SHOPEE_GRATIS_ONGKIR_XTRA_FEE_PCT.toFixed(1)}%</span>
+                </div>
+                <label class="levelup-toggle">
+                  <input type="checkbox" data-field="gratisOngkirXtraEnabled" ${roasCalculatorState.gratisOngkirXtraEnabled ? 'checked' : ''} />
+                  <span class="levelup-toggle-track"></span>
+                </label>
+              </div>
+            </div>
           </div>
           <div class="levelup-roas-field">
             <div class="levelup-roas-field-label levelup-field-label-row">
@@ -3231,7 +3405,7 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
           </div>
         </div>
         <div class="levelup-roas-field">
-          <div class="levelup-roas-field-label">Profit Kotor</div>
+          <div class="levelup-roas-field-label">Profit Sebelum Iklan</div>
           <div class="levelup-roas-output">
             <span data-role="roas-profit-label">${typeof profitSebelumIklan === 'number' ? formatCompactCurrency(Math.round(profitSebelumIklan)) : '-'}</span>
             <small data-role="roas-profit-pct">${typeof profitSebelumIklanPct === 'number' ? formatPercent(profitSebelumIklanPct) : '-'}</small>
@@ -3245,8 +3419,13 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
   const resetButton = modal.querySelector<HTMLButtonElement>('[data-action="roas-reset"]');
   const pickCategoryButton = modal.querySelector<HTMLButtonElement>('[data-action="roas-pick-category"]');
   const inputs = Array.from(modal.querySelectorAll<HTMLInputElement>('.levelup-roas-input'));
-  const storeTypeSelect = modal.querySelector<HTMLSelectElement>('[data-field="storeType"]');
+  const storeTypeRadios = Array.from(
+    modal.querySelectorAll<HTMLInputElement>('input[name="levelup-roas-store-type"]'),
+  );
   const promoToggle = modal.querySelector<HTMLInputElement>('[data-field="promoXtraEnabled"]');
+  const gratisOngkirToggle = modal.querySelector<HTMLInputElement>(
+    '[data-field="gratisOngkirXtraEnabled"]',
+  );
   const profitLabel = modal.querySelector<HTMLElement>('[data-role="roas-profit-label"]');
   const profitPct = modal.querySelector<HTMLElement>('[data-role="roas-profit-pct"]');
   const shopeeFeeLabel = modal.querySelector<HTMLElement>('[data-role="roas-shopee-fee"]');
@@ -3289,6 +3468,11 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
             `Promo Xtra: ${formatCompactCurrency(Math.round(computed.feePromoXtra))} (${SHOPEE_PROMO_XTRA_FEE_PCT.toFixed(1)}%, maks Rp${SHOPEE_PROMO_XTRA_FEE_CAP_IDR.toLocaleString('id-ID')})`,
           );
         }
+        if (roasCalculatorState.gratisOngkirXtraEnabled) {
+          parts.push(
+            `Gratis Ongkir XTRA: ${formatCompactCurrency(Math.round(computed.feeGratisOngkirXtra))} (${SHOPEE_GRATIS_ONGKIR_XTRA_FEE_PCT.toFixed(1)}%)`,
+          );
+        }
         shopeeFeeTooltipContent.innerHTML = parts
           .map((part) => `<span>${part}</span>`)
           .join('');
@@ -3317,7 +3501,11 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
         profitNode.textContent = tier ? formatCompactCurrency(Math.round(tier.profit)) : '-';
       }
       if (tooltipNode && key) {
-        tooltipNode.textContent = getRoasTierTooltipText(key, tier?.roas ?? null);
+        tooltipNode.textContent = getRoasTierTooltipText(
+          key,
+          tier?.roas ?? null,
+          computed?.breakEvenRoas ?? null,
+        );
       }
     }
   };
@@ -3327,10 +3515,12 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
   });
 
   resetButton?.addEventListener('click', () => {
+    const resetDefaults = getSelectedShopRoasDefaults(lastKnownState);
     roasCalculatorState.hpp = null;
     roasCalculatorState.operasional = null;
-    roasCalculatorState.storeType = 'non_star';
-    roasCalculatorState.promoXtraEnabled = false;
+    roasCalculatorState.storeType = resetDefaults?.storeType ?? 'non_star';
+    roasCalculatorState.promoXtraEnabled = resetDefaults?.promoXtraEnabled ?? false;
+    roasCalculatorState.gratisOngkirXtraEnabled = false;
     roasCalculatorState.categoryLabel = null;
     roasCalculatorState.kategoriFeePct = 0;
     roasCalculatorState.price = getRepresentativeProductPrice(detail);
@@ -3353,6 +3543,19 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
 
       input.value = '';
     }
+
+    for (const radio of storeTypeRadios) {
+      radio.checked = radio.value === roasCalculatorState.storeType;
+    }
+    if (promoToggle) {
+      promoToggle.checked = roasCalculatorState.promoXtraEnabled;
+    }
+    if (gratisOngkirToggle) {
+      gratisOngkirToggle.checked = false;
+    }
+    if (pickCategoryButton) {
+      pickCategoryButton.textContent = 'Pilih Kategori';
+    }
     refreshComputed();
   });
 
@@ -3360,19 +3563,26 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
     void openRoasCategoryPicker();
   });
 
-  storeTypeSelect?.addEventListener('change', () => {
-    const nextValue = normalizeText(storeTypeSelect.value) as RoasCalculatorState['storeType'];
-    if (nextValue === 'non_star' || nextValue === 'star' || nextValue === 'mall') {
-      roasCalculatorState.storeType = nextValue;
-      roasCalculatorState.categoryLabel = null;
-      roasCalculatorState.kategoriFeePct = 0;
-    }
-    refreshComputed();
-    openRoasCalculator(detail);
-  });
+  for (const radio of storeTypeRadios) {
+    radio.addEventListener('change', () => {
+      const nextValue = normalizeText(radio.value) as RoasCalculatorState['storeType'];
+      if (nextValue === 'non_star' || nextValue === 'star' || nextValue === 'mall') {
+        roasCalculatorState.storeType = nextValue;
+        roasCalculatorState.categoryLabel = null;
+        roasCalculatorState.kategoriFeePct = 0;
+      }
+      refreshComputed();
+      openRoasCalculator(detail);
+    });
+  }
 
   promoToggle?.addEventListener('change', () => {
     roasCalculatorState.promoXtraEnabled = Boolean(promoToggle.checked);
+    refreshComputed();
+  });
+
+  gratisOngkirToggle?.addEventListener('change', () => {
+    roasCalculatorState.gratisOngkirXtraEnabled = Boolean(gratisOngkirToggle.checked);
     refreshComputed();
   });
 
