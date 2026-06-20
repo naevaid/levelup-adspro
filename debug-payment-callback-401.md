@@ -61,3 +61,39 @@ Hipotesis yang ditolak:
 ## Fix Minimal
 
 - Tambahkan `PAYMENT_BASE_URL`, `PAYMENT_APP_ID`, `PAYMENT_SECRET_KEY`, dan `BILLING_CALLBACK_URL` ke `environment` service `api` di `docker-compose.vps.yml`
+
+## Bukti Lanjutan
+
+- Restart stack VPS penuh sudah berhasil dan `levelup-adspro-api` aktif dengan env:
+  - `PAYMENT_BASE_URL`
+  - `PAYMENT_APP_ID`
+  - `PAYMENT_SECRET_KEY`
+  - `BILLING_CALLBACK_URL`
+- Callback test terbaru setelah restart masih `401`
+- Record callback terbaru menunjukkan:
+  - `app_id_matches_expected=true`
+  - `raw_body_present=true`
+  - `provided_signature` tidak cocok dengan:
+    - HMAC raw payload
+    - request-style HMAC `method + path + appId + timestamp + sha256(body)`
+    - beberapa variasi umum canonical JSON dan format request signature
+
+## Status Hipotesis Saat Ini
+
+Terkonfirmasi:
+
+1. Env payment production sudah aktif benar di container `api`
+2. Backend menerima raw body callback asli
+
+Masih terbuka:
+
+1. `payment.naeva.id` callback forwarding memakai canonical string signature yang berbeda dari docs publik yang sudah dibaca
+2. Event `payment.callback.test` memakai formula signature khusus yang belum terdokumentasi di docs publik
+
+## Kebutuhan Berikutnya
+
+- Dokumentasi tambahan atau contoh konkret dari `payment.naeva.id` untuk pembentukan `X-Payment-Signature` pada callback forwarding
+- Alternatif minimal:
+  - contoh callback mentah lengkap
+  - string-to-sign yang dipakai
+  - atau contoh kode verifikasi resmi

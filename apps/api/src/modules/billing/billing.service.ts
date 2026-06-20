@@ -511,6 +511,25 @@ export class BillingService {
       throw new UnauthorizedException('Signature callback payment tidak valid.');
     }
 
+    if (params.headers.eventType === 'payment.callback.test') {
+      await this.upsertCallbackDelivery({
+        debug: verificationDebug,
+        existingId: existingDelivery?.id ?? null,
+        invoiceId: invoice?.id ?? null,
+        headers: params.headers,
+        payload: params.payload,
+        signatureValid: true,
+        processedSuccessfully: true,
+        httpResponseCode: 200,
+        errorMessage: null,
+      });
+
+      return {
+        received: true,
+        message: 'Test callback diterima.',
+      };
+    }
+
     if (!invoice) {
       throw new NotFoundException('Invoice callback payment tidak ditemukan.');
     }
