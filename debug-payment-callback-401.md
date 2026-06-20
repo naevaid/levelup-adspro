@@ -33,3 +33,31 @@ Status: [OPEN]
 
 - Pada sesi debug ini, tahap awal hanya pengumpulan bukti runtime
 - Tidak ada perubahan logic baru sampai bukti runtime cukup
+
+## Bukti Runtime
+
+- `GET /projects/me` dengan `APP-FI4YVWSGZHXN` dan secret project berhasil `200`
+- Project readiness dari `payment.naeva.id` berstatus `ready`
+- `default_callback_url` project menunjuk ke `https://adspro.naeva.id/api/billing/payment/callback`
+- Callback test terbaru masuk ke backend dengan `app_id` yang benar
+- Record callback delivery menunjukkan `app_id_matches_expected=false`
+- Inspect runtime container `levelup-adspro-api` menunjukkan:
+  - `PAYMENT_APP_ID=` kosong
+  - `PAYMENT_BASE_URL=` kosong
+  - `BILLING_CALLBACK_URL=` kosong
+  - `PAYMENT_SECRET_KEY` tidak ada
+
+## Kesimpulan Sementara
+
+Hipotesis yang terkonfirmasi:
+
+1. Konfigurasi env payment tidak diteruskan ke container `api` pada deployment VPS.
+
+Hipotesis yang ditolak:
+
+1. App ID / secret project salah total.
+2. Default callback URL di project payment salah.
+
+## Fix Minimal
+
+- Tambahkan `PAYMENT_BASE_URL`, `PAYMENT_APP_ID`, `PAYMENT_SECRET_KEY`, dan `BILLING_CALLBACK_URL` ke `environment` service `api` di `docker-compose.vps.yml`

@@ -39,6 +39,10 @@ services:
       MINIO_BUCKET_RAW_CAPTURE: ${MINIO_BUCKET_RAW_CAPTURE:-raw-capture}
       MINIO_BUCKET_EXPORTS: ${MINIO_BUCKET_EXPORTS:-exports}
       JWT_SECRET: ${JWT_SECRET}
+      PAYMENT_BASE_URL: ${PAYMENT_BASE_URL:-https://payment.naeva.id/api/v1}
+      PAYMENT_APP_ID: ${PAYMENT_APP_ID}
+      PAYMENT_SECRET_KEY: ${PAYMENT_SECRET_KEY}
+      BILLING_CALLBACK_URL: ${BILLING_CALLBACK_URL}
     ports:
       - "127.0.0.1:3101:3001"
     depends_on:
