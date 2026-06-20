@@ -25,6 +25,12 @@ export class BillingCallbackController {
     const rawPayload =
       request.rawBody?.toString('utf8') ?? JSON.stringify(payload ?? {});
     const parsedAttempt = attemptRaw ? Number.parseInt(attemptRaw, 10) : 1;
+    const receivedHeaders = Object.fromEntries(
+      Object.entries(request.headers).map(([key, value]) => [
+        key,
+        Array.isArray(value) ? value.join(', ') : (value ?? ''),
+      ]),
+    );
 
     return this.billingService.handlePaymentCallback({
       headers: {
@@ -33,6 +39,7 @@ export class BillingCallbackController {
         deliveryId: deliveryId ?? null,
         eventType: eventType ?? null,
         requestPath: request.originalUrl ?? request.url ?? null,
+        receivedHeaders,
         signature: signature ?? null,
         timestamp: timestamp ?? null,
         rawBodyPresent,

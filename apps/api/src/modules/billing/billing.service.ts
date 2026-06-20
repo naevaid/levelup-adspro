@@ -35,6 +35,7 @@ type CallbackHeaders = {
   deliveryId: string | null;
   eventType: string | null;
   requestPath: string | null;
+  receivedHeaders?: Record<string, string>;
   rawBodyPresent?: boolean;
   signature: string | null;
   timestamp: string | null;
@@ -1057,6 +1058,7 @@ export class BillingService {
         delivery_id: params.headers.deliveryId,
         provided_signature: params.debug.providedSignature,
         request_path: params.headers.requestPath,
+        received_headers: params.headers.receivedHeaders ?? {},
         app_id_matches_expected: params.debug.appIdMatches,
         raw_body_present: params.debug.rawBodyPresent,
         raw_payload_length: params.debug.rawPayloadLength,
