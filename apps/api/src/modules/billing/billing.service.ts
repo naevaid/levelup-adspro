@@ -34,6 +34,7 @@ type CallbackHeaders = {
   attempt: number;
   deliveryId: string | null;
   eventType: string | null;
+  requestPath: string | null;
   signature: string | null;
   timestamp: string | null;
 };
@@ -944,9 +945,12 @@ export class BillingService {
     }
 
     return this.paymentSignatureService.isCallbackSignatureValid({
+      appId: headers.appId,
       rawPayload,
       providedSignature: headers.signature,
+      requestPath: headers.requestPath ?? undefined,
       secretKey,
+      timestamp: headers.timestamp ?? undefined,
     });
   }
 

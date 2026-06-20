@@ -31,6 +31,7 @@ export class BillingCallbackController {
         attempt: Number.isFinite(parsedAttempt) ? parsedAttempt : 1,
         deliveryId: deliveryId ?? null,
         eventType: eventType ?? null,
+        requestPath: request.originalUrl ?? request.url ?? null,
         signature: signature ?? null,
         timestamp: timestamp ?? null,
       },
