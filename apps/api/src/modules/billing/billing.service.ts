@@ -1056,7 +1056,7 @@ export class BillingService {
     httpResponseCode: number;
     errorMessage: string | null;
   }) {
-    const data: Prisma.BillingCallbackDeliveryUncheckedCreateInput = {
+    const createData: Prisma.BillingCallbackDeliveryUncheckedCreateInput = {
       invoiceId: params.invoiceId,
       gatewayOrderId:
         typeof params.payload.gateway_order_id === 'string'
@@ -1087,16 +1087,46 @@ export class BillingService {
       payloadJson: this.toPlainObject(params.payload) as Prisma.InputJsonValue,
       errorMessage: params.errorMessage,
     };
+    const updateData: Prisma.BillingCallbackDeliveryUncheckedUpdateInput = {
+      invoiceId: params.invoiceId,
+      gatewayOrderId:
+        typeof params.payload.gateway_order_id === 'string'
+          ? params.payload.gateway_order_id
+          : null,
+      eventType: params.headers.eventType,
+      signatureValid: params.signatureValid,
+      processedSuccessfully: params.processedSuccessfully,
+      httpResponseCode: params.httpResponseCode,
+      processedAt: params.processedSuccessfully ? new Date() : null,
+      headersJson: {
+        app_id: params.headers.appId,
+        event: params.headers.eventType,
+        attempt: params.headers.attempt,
+        timestamp: params.headers.timestamp,
+        delivery_id: params.headers.deliveryId,
+        provided_signature: params.debug.providedSignature,
+        request_path: params.headers.requestPath,
+        received_headers: params.headers.receivedHeaders ?? {},
+        app_id_matches_expected: params.debug.appIdMatches,
+        raw_body_present: params.debug.rawBodyPresent,
+        raw_payload_length: params.debug.rawPayloadLength,
+        raw_payload_sha256: params.debug.rawPayloadSha256,
+        signature_candidates: params.debug.candidates,
+      } as Prisma.InputJsonValue,
+      payloadJson: this.toPlainObject(params.payload) as Prisma.InputJsonValue,
+      errorMessage: params.errorMessage,
+    };
 
-    if (params.existingId) {
-      await this.prisma.billingCallbackDelivery.update({
-        where: { id: params.existingId },
-        data,
-      });
-      return;
-    }
-
-    await this.prisma.billingCallbackDelivery.create({ data });
+    await this.prisma.billingCallbackDelivery.upsert({
+      where: {
+        deliveryId_attempt: {
+          deliveryId: params.headers.deliveryId ?? 'missing-delivery-id',
+          attempt: params.headers.attempt,
+        },
+      },
+      create: createData,
+      update: updateData,
+    });
   }
 
   private toPlainObject(value: unknown) {
