@@ -487,9 +487,14 @@ export class BillingService {
     }
 
     const invoice = await this.findInvoiceForCallback(params.payload);
-    const signatureValid = this.isCallbackSignatureValid(params.headers, params.rawPayload);
+    const verificationDebug = this.buildCallbackVerificationDebug(
+      params.headers,
+      params.rawPayload,
+    );
+    const signatureValid = verificationDebug.signatureValid;
 
     await this.upsertCallbackDelivery({
+      debug: verificationDebug,
       existingId: existingDelivery?.id ?? null,
       invoiceId: invoice?.id ?? null,
       headers: params.headers,
@@ -540,6 +545,7 @@ export class BillingService {
     await this.refreshEntitlementSnapshot(invoice.organizationId, nextSubscription);
 
     await this.upsertCallbackDelivery({
+      debug: verificationDebug,
       existingId: existingDelivery?.id ?? null,
       invoiceId: invoice.id,
       headers: params.headers,
@@ -929,29 +935,60 @@ export class BillingService {
     return null;
   }
 
-  private isCallbackSignatureValid(headers: CallbackHeaders, rawPayload: string) {
+  private buildCallbackVerificationDebug(
+    headers: CallbackHeaders,
+    rawPayload: string,
+  ) {
     if (!headers.signature || !headers.appId) {
-      return false;
+      return {
+        appIdMatches: false,
+        candidates: [],
+        providedSignature: headers.signature,
+        signatureValid: false,
+      };
     }
 
     const appId = this.configService.get<string>('PAYMENT_APP_ID');
     if (!appId || headers.appId !== appId) {
-      return false;
+      return {
+        appIdMatches: false,
+        candidates: [],
+        providedSignature: headers.signature,
+        signatureValid: false,
+      };
     }
 
     const secretKey = this.configService.get<string>('PAYMENT_SECRET_KEY');
     if (!secretKey) {
-      return false;
+      return {
+        appIdMatches: true,
+        candidates: [],
+        providedSignature: headers.signature,
+        signatureValid: false,
+      };
     }
 
-    return this.paymentSignatureService.isCallbackSignatureValid({
+    const candidates = this.paymentSignatureService.listCallbackSignatureCandidates({
       appId: headers.appId,
       rawPayload,
-      providedSignature: headers.signature,
       requestPath: headers.requestPath ?? undefined,
       secretKey,
       timestamp: headers.timestamp ?? undefined,
     });
+
+    return {
+      appIdMatches: true,
+      candidates,
+      providedSignature: headers.signature,
+      signatureValid: this.paymentSignatureService.isCallbackSignatureValid({
+        appId: headers.appId,
+        rawPayload,
+        providedSignature: headers.signature,
+        requestPath: headers.requestPath ?? undefined,
+        secretKey,
+        timestamp: headers.timestamp ?? undefined,
+      }),
+    };
   }
 
   private parseTransactionTime(value: unknown) {
@@ -968,6 +1005,12 @@ export class BillingService {
   }
 
   private async upsertCallbackDelivery(params: {
+    debug: {
+      appIdMatches: boolean;
+      candidates: Array<{ name: string; value: string }>;
+      providedSignature: string | null;
+      signatureValid: boolean;
+    };
     existingId: string | null;
     invoiceId: string | null;
     headers: CallbackHeaders;
@@ -996,6 +1039,10 @@ export class BillingService {
         attempt: params.headers.attempt,
         timestamp: params.headers.timestamp,
         delivery_id: params.headers.deliveryId,
+        provided_signature: params.debug.providedSignature,
+        request_path: params.headers.requestPath,
+        app_id_matches_expected: params.debug.appIdMatches,
+        signature_candidates: params.debug.candidates,
       } as Prisma.InputJsonValue,
       payloadJson: this.toPlainObject(params.payload) as Prisma.InputJsonValue,
       errorMessage: params.errorMessage,

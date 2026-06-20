@@ -46,6 +46,60 @@ export class PaymentSignatureService {
     });
   }
 
+  listCallbackSignatureCandidates(params: {
+    rawPayload: string;
+    secretKey: string;
+    appId?: string;
+    timestamp?: string;
+    requestPath?: string;
+  }) {
+    const candidates = [
+      {
+        name: 'payload_hex',
+        value: this.createCallbackSignature(params.rawPayload, params.secretKey),
+      },
+    ];
+
+    if (params.appId && params.timestamp && params.requestPath) {
+      const requestHex = this.createCallbackRequestSignature({
+        appId: params.appId,
+        requestPath: params.requestPath,
+        timestamp: params.timestamp,
+        rawBody: params.rawPayload,
+        secretKey: params.secretKey,
+      });
+
+      candidates.push(
+        {
+          name: 'request_hex',
+          value: requestHex,
+        },
+        {
+          name: 'request_hex_upper',
+          value: requestHex.toUpperCase(),
+        },
+        {
+          name: 'request_base64',
+          value: Buffer.from(requestHex, 'hex').toString('base64'),
+        },
+      );
+    }
+
+    const payloadHex = candidates[0].value;
+    candidates.push(
+      {
+        name: 'payload_hex_upper',
+        value: payloadHex.toUpperCase(),
+      },
+      {
+        name: 'payload_base64',
+        value: Buffer.from(payloadHex, 'hex').toString('base64'),
+      },
+    );
+
+    return candidates;
+  }
+
   isCallbackSignatureValid(params: {
     rawPayload: string;
     providedSignature: string;
@@ -54,21 +108,9 @@ export class PaymentSignatureService {
     timestamp?: string;
     requestPath?: string;
   }) {
-    const candidateSignatures = [
-      this.createCallbackSignature(params.rawPayload, params.secretKey),
-    ];
-
-    if (params.appId && params.timestamp && params.requestPath) {
-      candidateSignatures.push(
-        this.createCallbackRequestSignature({
-          appId: params.appId,
-          requestPath: params.requestPath,
-          timestamp: params.timestamp,
-          rawBody: params.rawPayload,
-          secretKey: params.secretKey,
-        }),
-      );
-    }
+    const candidateSignatures = this.listCallbackSignatureCandidates(params).map(
+      (candidate) => candidate.value,
+    );
 
     return candidateSignatures.some((expectedSignature) =>
       this.compareSignatureVariants(expectedSignature, params.providedSignature),
