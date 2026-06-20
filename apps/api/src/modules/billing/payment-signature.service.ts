@@ -60,6 +60,14 @@ export class PaymentSignatureService {
       },
     ];
 
+    const normalizedPayload = this.normalizeJsonPayload(params.rawPayload);
+    if (normalizedPayload && normalizedPayload !== params.rawPayload) {
+      candidates.push({
+        name: 'payload_normalized_hex',
+        value: this.createCallbackSignature(normalizedPayload, params.secretKey),
+      });
+    }
+
     if (params.appId && params.timestamp && params.requestPath) {
       const requestHex = this.createCallbackRequestSignature({
         appId: params.appId,
@@ -139,5 +147,13 @@ export class PaymentSignatureService {
     }
 
     return false;
+  }
+
+  private normalizeJsonPayload(rawPayload: string) {
+    try {
+      return JSON.stringify(JSON.parse(rawPayload));
+    } catch {
+      return null;
+    }
   }
 }
