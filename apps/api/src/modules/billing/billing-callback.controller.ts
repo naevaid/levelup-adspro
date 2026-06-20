@@ -21,6 +21,7 @@ export class BillingCallbackController {
     @Headers('x-payment-signature') signature?: string,
     @Body() payload?: Record<string, unknown>,
   ) {
+    const rawBodyPresent = Boolean(request.rawBody);
     const rawPayload =
       request.rawBody?.toString('utf8') ?? JSON.stringify(payload ?? {});
     const parsedAttempt = attemptRaw ? Number.parseInt(attemptRaw, 10) : 1;
@@ -34,6 +35,7 @@ export class BillingCallbackController {
         requestPath: request.originalUrl ?? request.url ?? null,
         signature: signature ?? null,
         timestamp: timestamp ?? null,
+        rawBodyPresent,
       },
       payload: payload ?? {},
       rawPayload,

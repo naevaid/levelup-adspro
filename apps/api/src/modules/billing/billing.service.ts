@@ -16,7 +16,7 @@ import {
   Subscription,
   SubscriptionStatus,
 } from '@prisma/client';
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CheckoutDto } from './dto/checkout.dto';
 import {
@@ -35,6 +35,7 @@ type CallbackHeaders = {
   deliveryId: string | null;
   eventType: string | null;
   requestPath: string | null;
+  rawBodyPresent?: boolean;
   signature: string | null;
   timestamp: string | null;
 };
@@ -944,6 +945,9 @@ export class BillingService {
         appIdMatches: false,
         candidates: [],
         providedSignature: headers.signature,
+        rawBodyPresent: headers.rawBodyPresent ?? false,
+        rawPayloadLength: rawPayload.length,
+        rawPayloadSha256: createHash('sha256').update(rawPayload).digest('hex'),
         signatureValid: false,
       };
     }
@@ -954,6 +958,9 @@ export class BillingService {
         appIdMatches: false,
         candidates: [],
         providedSignature: headers.signature,
+        rawBodyPresent: headers.rawBodyPresent ?? false,
+        rawPayloadLength: rawPayload.length,
+        rawPayloadSha256: createHash('sha256').update(rawPayload).digest('hex'),
         signatureValid: false,
       };
     }
@@ -964,6 +971,9 @@ export class BillingService {
         appIdMatches: true,
         candidates: [],
         providedSignature: headers.signature,
+        rawBodyPresent: headers.rawBodyPresent ?? false,
+        rawPayloadLength: rawPayload.length,
+        rawPayloadSha256: createHash('sha256').update(rawPayload).digest('hex'),
         signatureValid: false,
       };
     }
@@ -980,6 +990,9 @@ export class BillingService {
       appIdMatches: true,
       candidates,
       providedSignature: headers.signature,
+      rawBodyPresent: headers.rawBodyPresent ?? false,
+      rawPayloadLength: rawPayload.length,
+      rawPayloadSha256: createHash('sha256').update(rawPayload).digest('hex'),
       signatureValid: this.paymentSignatureService.isCallbackSignatureValid({
         appId: headers.appId,
         rawPayload,
@@ -1009,6 +1022,9 @@ export class BillingService {
       appIdMatches: boolean;
       candidates: Array<{ name: string; value: string }>;
       providedSignature: string | null;
+      rawBodyPresent: boolean;
+      rawPayloadLength: number;
+      rawPayloadSha256: string;
       signatureValid: boolean;
     };
     existingId: string | null;
@@ -1042,6 +1058,9 @@ export class BillingService {
         provided_signature: params.debug.providedSignature,
         request_path: params.headers.requestPath,
         app_id_matches_expected: params.debug.appIdMatches,
+        raw_body_present: params.debug.rawBodyPresent,
+        raw_payload_length: params.debug.rawPayloadLength,
+        raw_payload_sha256: params.debug.rawPayloadSha256,
         signature_candidates: params.debug.candidates,
       } as Prisma.InputJsonValue,
       payloadJson: this.toPlainObject(params.payload) as Prisma.InputJsonValue,
