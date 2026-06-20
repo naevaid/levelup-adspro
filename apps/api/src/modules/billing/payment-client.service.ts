@@ -167,8 +167,11 @@ export class PaymentClientService {
 
   private normalizeRequestPath(path: string) {
     const base = new URL(this.ensureBaseUrlTrailingSlash());
+    const basePath = base.pathname.endsWith('/')
+      ? base.pathname.slice(0, -1)
+      : base.pathname;
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-    const url = new URL(normalizedPath, base);
+    const url = new URL(`${basePath}${normalizedPath}`, base);
     return `${url.pathname}${url.search}`;
   }
 
