@@ -21,4 +21,12 @@ export const apiEnvValidationSchema = Joi.object({
   MINIO_BUCKET_EXPORTS: Joi.string().default('exports'),
   JWT_SECRET: Joi.string().min(8).default('replace-me-in-local'),
   SESSION_TTL_HOURS: Joi.number().integer().min(1).default(168),
+  PAYMENT_BASE_URL: Joi.string()
+    .uri({ scheme: ['http', 'https'] })
+    .default('https://payment.naeva.id/api/v1'),
+  PAYMENT_APP_ID: Joi.string().default('replace-with-payment-app-id'),
+  PAYMENT_SECRET_KEY: Joi.string().min(8).default('replace-with-payment-secret-key'),
+  BILLING_CALLBACK_URL: Joi.string()
+    .uri({ scheme: ['http', 'https'] })
+    .default('http://localhost:3001/api/billing/payment/callback'),
 });

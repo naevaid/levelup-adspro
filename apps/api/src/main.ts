@@ -7,7 +7,9 @@ import { httpRequestLoggingMiddleware } from './observability/http-request-loggi
 import { PrismaService } from './prisma/prisma.service';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    rawBody: true,
+  });
   const configService = app.get(ConfigService);
   const prismaService = app.get(PrismaService);
   const httpAdapterHost = app.get(HttpAdapterHost);

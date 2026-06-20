@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { apiEnvValidationSchema } from './config/env.validation';
+import { BillingModule } from './modules/billing/billing.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ExtensionSessionsModule } from './modules/extension-sessions/extension-sessions.module';
 import { IngestionModule } from './modules/ingestion/ingestion.module';
@@ -24,6 +25,7 @@ import { PrismaModule } from './prisma/prisma.module';
     }),
     PrismaModule,
     AuthModule,
+    BillingModule,
     OrganizationsModule,
     MarketplacesModule,
     MarketplaceCategoryFeesModule,
