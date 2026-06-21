@@ -2,6 +2,11 @@
 
 Dokumen ini menjelaskan cara deploy `levelup-adspro` ke VPS secara manual menggunakan mekanisme yang saat ini dipakai di server: `docker compose` + `nginx` host reverse proxy. Auto deploy berbasis timer/polling tidak dipakai.
 
+Catatan penting:
+
+- Jika server adalah VPS bersama yang juga dipakai project lain, jangan langsung mengikuti alur build penuh di dokumen ini.
+- Gunakan SOP khusus di [`docs/SHARED-VPS-SAFE-DEPLOY.md`](file:///d:/levelup-adspro/docs/SHARED-VPS-SAFE-DEPLOY.md) sebagai acuan utama agar deploy tidak menekan resource host secara berlebihan.
+
 ## 1) Gambaran Arsitektur
 
 - Domain publik: `https://adspro.naeva.id`
