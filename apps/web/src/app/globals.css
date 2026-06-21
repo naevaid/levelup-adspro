@@ -41,6 +41,17 @@ a {
   text-decoration: none;
 }
 
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: none;
+}
+
+select::-ms-expand {
+  display: none;
+}
+
 ::selection {
   background: rgba(56, 189, 248, 0.35);
 }

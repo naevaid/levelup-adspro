@@ -99,6 +99,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return currentSession;
         }
 
+        const sessionAlreadySynced =
+          currentSession.user.id === me.user.id &&
+          currentSession.user.email === me.user.email &&
+          currentSession.user.name === me.user.name &&
+          currentSession.user.status === me.user.status &&
+          currentSession.user.internalRole === me.user.internalRole &&
+          currentSession.activeOrganization.id === me.activeOrganization.id &&
+          currentSession.activeOrganization.name === me.activeOrganization.name &&
+          currentSession.activeOrganization.slug === me.activeOrganization.slug &&
+          currentSession.activeOrganization.status === me.activeOrganization.status &&
+          currentSession.membership.id === me.membership.id &&
+          currentSession.membership.role === me.membership.role &&
+          currentSession.membership.status === me.membership.status;
+
+        if (sessionAlreadySynced) {
+          return currentSession;
+        }
+
         const nextSession: StoredAuthSession = {
           ...currentSession,
           user: me.user,
@@ -113,8 +131,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const authorization = session
+    ? `${session.tokenType} ${session.accessToken}`
+    : null;
+
   const refreshProfile = useCallback(async () => {
-    if (!session) {
+    if (!authorization) {
       return;
     }
 
@@ -122,7 +144,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfileError(null);
 
     try {
-      const authorization = `${session.tokenType} ${session.accessToken}`;
       const [me, organization, workspaces] = await Promise.all([
         apiFetch<MeResponse>("/api/v1/me", {
           headers: {
@@ -160,11 +181,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsRefreshingProfile(false);
     }
-  }, [clearSessionState, session, syncSessionFromProfile]);
+  }, [authorization, clearSessionState, syncSessionFromProfile]);
 
   const switchOrganization = useCallback(
     async (organizationId: string) => {
-      if (!session) {
+      if (!session || !authorization) {
         return;
       }
 
@@ -176,7 +197,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfileError(null);
 
       try {
-        const authorization = `${session.tokenType} ${session.accessToken}`;
         await apiFetch("/api/v1/organizations/switch", {
           method: "POST",
           headers: {
@@ -192,11 +212,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsSwitchingOrganization(false);
       }
     },
-    [refreshProfile, session],
+    [authorization, refreshProfile, session],
   );
 
   useEffect(() => {
-    if (!session) {
+    if (!authorization) {
       return;
     }
 
@@ -205,7 +225,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, [refreshProfile, session]);
+  }, [authorization, refreshProfile]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

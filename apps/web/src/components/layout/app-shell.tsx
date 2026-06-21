@@ -66,6 +66,14 @@ const navigationItems: NavigationItem[] = [
   },
 ];
 
+function formatWorkspaceLabel(name: string, isInternal?: boolean) {
+  if (isInternal) {
+    return "Internal";
+  }
+
+  return name;
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -97,10 +105,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             Memuat Workspace
           </p>
           <h1 className="mt-3 text-2xl font-semibold text-white">
-            Menyiapkan konteks tenant Anda.
+            Menyiapkan ruang kerja Anda.
           </h1>
           <p className="mt-2.5 text-sm leading-6 muted-text">
-            Session browser sedang diperiksa sebelum halaman private dibuka.
+            Mohon tunggu sebentar, kami sedang memuat sesi dan akses Anda.
           </p>
         </div>
       </main>
@@ -142,51 +150,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-3">
               <span className="status-dot" />
               <div>
-                <p className="text-[11px] uppercase tracking-[0.24em] text-sky-100/70">
-                  LevelUP adsPRO
+                <p className="text-base font-semibold text-white">LevelUP adsPRO</p>
+                <p className="mt-1 text-sm text-sky-100/75">
+                  Grow Higher, Achieve More
                 </p>
-                <p className="mt-1 text-base font-semibold text-white">Workspace</p>
               </div>
             </div>
-
-            <p className="mt-4 text-sm font-medium text-white">
-              {activeOrganization.name}
-            </p>
-            <p className="mt-2 text-sm muted-text">{activeOrganization.slug}</p>
-            <p className="mt-2 text-sm muted-text">
-              Role aktif: {role.toLowerCase().replace("_", " ")}
-            </p>
-            <p className="mt-2 text-sm muted-text">
-              Tipe: {activeOrganizationIsInternal ? "Internal" : "Tenant"}
-            </p>
-            {internalRole ? (
-              <p className="mt-2 text-sm text-sky-100/80">
-                Internal: {internalRole.toLowerCase().replace("_", " ")}
-              </p>
-            ) : null}
-
-            {organizations.length > 1 ? (
-              <label className="mt-4 block">
-                <span className="text-[11px] uppercase tracking-[0.2em] text-sky-100/70">
-                  Switch Workspace
-                </span>
-                <select
-                  value={activeOrganization.id}
-                  onChange={(event) => {
-                    void switchOrganization(event.target.value);
-                  }}
-                  disabled={isSwitchingOrganization}
-                  className="mt-2 w-full rounded-2xl border border-white/12 bg-slate-950/45 px-3 py-2.5 text-sm text-white outline-none transition focus:border-sky-300/35 disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  {organizations.map((organization) => (
-                    <option key={organization.id} value={organization.id}>
-                      {organization.name}
-                      {organization.isInternal ? " (Internal)" : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
           </div>
 
           <div
@@ -266,37 +235,53 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="flex min-h-screen flex-col gap-6">
           <section className="glass-card rounded-[1.8rem] border border-white/14 px-5 py-4 sm:px-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
+              <div className="min-w-0">
                 <p className="text-[11px] uppercase tracking-[0.24em] text-sky-100/70">
-                  Workspace
+                  Workspace Aktif
                 </p>
                 <h2 className="mt-2 text-xl font-semibold tracking-tight text-white sm:text-2xl">
                   {activeOrganization.name}
                 </h2>
                 <p className="mt-2 text-sm muted-text">
-                  {profile?.membership.role.toLowerCase().replace("_", " ")} aktif
-                  pada workspace {activeOrganizationIsInternal ? "internal" : "tenant"}.
+                  Anda sedang masuk sebagai{" "}
+                  {profile?.membership.role.toLowerCase().replace("_", " ")} di
+                  workspace {activeOrganizationIsInternal ? "internal" : "tenant"}.
                 </p>
               </div>
 
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap gap-3 sm:justify-end">
                 {organizations.length > 1 ? (
-                  <span className="rounded-full border border-white/14 bg-white/6 px-4 py-2.5 text-sm text-slate-100">
-                    {isSwitchingOrganization ? "Mengganti workspace..." : `${organizations.length} workspace`}
-                  </span>
+                  <select
+                    aria-label="Workspace aktif"
+                    value={activeOrganization.id}
+                    onChange={(event) => {
+                      void switchOrganization(event.target.value);
+                    }}
+                    disabled={isSwitchingOrganization}
+                    className="min-w-[180px] rounded-full border border-white/12 bg-slate-950/45 px-4 py-2.5 text-sm text-white outline-none transition focus:border-sky-300/35 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {organizations.map((organization) => (
+                      <option key={organization.id} value={organization.id}>
+                        {formatWorkspaceLabel(
+                          organization.name,
+                          organization.isInternal,
+                        )}
+                      </option>
+                    ))}
+                  </select>
                 ) : null}
                 <button
                   type="button"
                   onClick={() => void refreshProfile()}
                   className="rounded-full border border-white/16 bg-white/6 px-4 py-2.5 text-sm font-medium text-slate-50 transition hover:border-sky-200/55 hover:bg-white/10 hover:text-white"
                 >
-                  {isRefreshingProfile ? "Menyegarkan..." : "Refresh Context"}
+                  {isRefreshingProfile ? "Memuat ulang..." : "Muat Ulang Data"}
                 </button>
                 <Link
                   href="/"
                   className="rounded-full bg-sky-300 px-4 py-2.5 text-sm font-medium text-slate-950 transition hover:bg-sky-200"
                 >
-                  Landing
+                  Buka Beranda
                 </Link>
               </div>
             </div>
@@ -304,10 +289,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           {profileError ? (
             <EmptyStatePanel
-              title="Konteks tenant belum termuat sempurna"
+              title="Informasi workspace belum berhasil dimuat"
               description={profileError}
               primaryAction={{
-                label: "Coba Muat Ulang",
+                label: "Coba Lagi",
                 href: pathname,
               }}
               secondaryAction={{
