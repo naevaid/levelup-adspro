@@ -248,6 +248,7 @@ function renderSubscriptionCard(state: ExtensionState) {
   const isInternalWorkspace = Boolean(state.authSession?.activeOrganization.isInternal);
   const statusLabel = formatStatusLabel(subscription?.status);
   const statusTone = getStatusTone(subscription?.status);
+  let helperMessage = '';
 
   subscriptionPlan!.textContent = formatPlanCode(subscription?.plan_code);
   subscriptionStatusBadge!.textContent = statusLabel;
@@ -266,32 +267,35 @@ function renderSubscriptionCard(state: ExtensionState) {
   );
 
   if (isInternalWorkspace) {
-    subscriptionHelper!.textContent =
+    helperMessage =
       'Workspace internal tidak memakai upgrade billing tenant. Gunakan dashboard untuk pengelolaan internal.';
     upgradeSubscriptionButton?.classList.add('hidden');
-    return;
-  }
+  } else {
+    upgradeSubscriptionButton?.classList.remove('hidden');
 
-  upgradeSubscriptionButton?.classList.remove('hidden');
+    if (!overview || !subscription) {
+      helperMessage =
+        'Buka dashboard untuk melihat pilihan paket dan aktifkan subscription yang paling sesuai untuk workspace Anda.';
+      if (upgradeSubscriptionButton) {
+        upgradeSubscriptionButton.textContent = 'Lihat Paket';
+      }
+    } else {
+      if (upgradeSubscriptionButton) {
+        upgradeSubscriptionButton.textContent =
+          subscription.status === 'ACTIVE'
+            ? 'Upgrade Subscription'
+            : 'Aktifkan Subscription';
+      }
 
-  if (!overview || !subscription) {
-    subscriptionHelper!.textContent =
-      'Buka dashboard untuk melihat pilihan paket dan aktifkan subscription yang paling sesuai untuk workspace Anda.';
-    if (upgradeSubscriptionButton) {
-      upgradeSubscriptionButton.textContent = 'Lihat Paket';
+      helperMessage =
+        subscription.status === 'ACTIVE'
+          ? ''
+          : 'Subscription workspace belum aktif penuh. Buka halaman subscription untuk melanjutkan aktivasi atau upgrade paket.';
     }
-    return;
   }
 
-  if (upgradeSubscriptionButton) {
-    upgradeSubscriptionButton.textContent =
-      subscription.status === 'ACTIVE' ? 'Upgrade Subscription' : 'Aktifkan Subscription';
-  }
-
-  subscriptionHelper!.textContent =
-    subscription.status === 'ACTIVE'
-      ? 'Workspace sudah aktif. Upgrade subscription untuk menambah kuota shop, member, dan membuka peluang pertumbuhan yang lebih besar.'
-      : 'Subscription workspace belum aktif penuh. Buka halaman subscription untuk melanjutkan aktivasi atau upgrade paket.';
+  subscriptionHelper!.textContent = helperMessage;
+  subscriptionHelper!.classList.toggle('hidden', helperMessage.length === 0);
 }
 
 function renderState(state: ExtensionState) {
