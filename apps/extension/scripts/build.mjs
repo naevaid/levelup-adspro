@@ -106,7 +106,7 @@ async function writeManifest() {
     ],
     web_accessible_resources: [
       {
-        resources: ['pageBridge.js', 'header-logo.png'],
+        resources: ['pageBridge.js', 'header-logo.png', 'powered-by.png'],
         matches: [
           'https://shopee.co.id/*',
           'https://*.shopee.co.id/*',
@@ -146,6 +146,10 @@ async function copyStaticAssets() {
   await copyFile(
     path.join(assetsDir, 'header-logo.png'),
     path.join(distDir, 'header-logo.png'),
+  );
+  await copyFile(
+    path.join(assetsDir, 'powered-by.png'),
+    path.join(distDir, 'powered-by.png'),
   );
 }
 

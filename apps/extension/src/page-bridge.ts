@@ -98,6 +98,47 @@ function formatCompactCurrencyLabel(value?: number | null) {
   return `Rp${value.toLocaleString('id-ID')}`;
 }
 
+function formatListingAgeHint(timestampSeconds?: number | null) {
+  if (
+    typeof timestampSeconds !== 'number' ||
+    !Number.isFinite(timestampSeconds) ||
+    timestampSeconds <= 0
+  ) {
+    return undefined;
+  }
+
+  const ageMs = Date.now() - timestampSeconds * 1000;
+  if (!Number.isFinite(ageMs) || ageMs < 0) {
+    return undefined;
+  }
+
+  const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+  if (ageDays <= 0) {
+    return 'Hari ini';
+  }
+
+  if (ageDays < 30) {
+    if (ageDays < 7) {
+      return `${ageDays} hari`;
+    }
+
+    const ageWeeks = Math.floor(ageDays / 7);
+    const remainingDays = ageDays % 7;
+    return remainingDays > 0
+      ? `${ageWeeks} minggu ${remainingDays} hari`
+      : `${ageWeeks} minggu`;
+  }
+
+  const ageMonths = Math.floor(ageDays / 30.4375);
+  if (ageMonths < 12) {
+    return `${ageMonths} bulan`;
+  }
+
+  const years = Math.floor(ageMonths / 12);
+  const remainingMonths = ageMonths % 12;
+  return remainingMonths > 0 ? `${years} tahun ${remainingMonths} bulan` : `${years} tahun`;
+}
+
 function extractShopeeIdsFromUrl(rawUrl: string) {
   const matched = rawUrl.match(/-i\.(\d+)\.(\d+)(?:$|[/?#])/i);
   if (!matched) {
@@ -191,6 +232,7 @@ async function fetchSingleSearchResultEnrichment(result: SearchResultPreview) {
       price_max?: number;
       historical_sold?: number;
       sold?: number;
+      ctime?: number;
       cmt_count?: number;
       item_rating?: {
         rating_star?: number;
@@ -239,6 +281,10 @@ async function fetchSingleSearchResultEnrichment(result: SearchResultPreview) {
     typeof representativePrice === 'number' && typeof itemData?.sold === 'number'
       ? representativePrice * itemData.sold
       : null;
+  const totalRevenue =
+    typeof representativePrice === 'number' && typeof itemData?.historical_sold === 'number'
+      ? representativePrice * itemData.historical_sold
+      : null;
   const normalizedShopName = normalizeText(shopData?.name);
   const normalizedLocation = cleanSearchContextLabel(
     shopData?.shop_location ?? itemData?.shop_location ?? result.locationLabel,
@@ -253,12 +299,17 @@ async function fetchSingleSearchResultEnrichment(result: SearchResultPreview) {
     priceMin: normalizedPriceMin,
     priceMax: normalizedPriceMax,
     salesHint: totalSold ? `${totalSold} Terjual` : result.salesHint,
-    monthlySoldHint: monthlySold ? `${monthlySold} Terjual/Bln` : result.monthlySoldHint,
+    monthlySoldHint:
+      monthlySold ? `${monthlySold} Terjual/30 Hari` : result.monthlySoldHint,
     ratingHint: ratingStar ?? result.ratingHint,
     reviewCountHint: reviewCount ? `${reviewCount} Ulasan` : result.reviewCountHint,
+    totalRevenueHint: totalRevenue
+      ? `± ${formatCompactCurrencyLabel(totalRevenue)} Total`
+      : result.totalRevenueHint,
     monthlyRevenueHint: monthlyRevenue
-      ? `± ${formatCompactCurrencyLabel(monthlyRevenue)} /Bln`
+      ? `± ${formatCompactCurrencyLabel(monthlyRevenue)} /30 Hari`
       : result.monthlyRevenueHint,
+    listingAgeHint: formatListingAgeHint(itemData?.ctime) ?? result.listingAgeHint,
   } satisfies SearchResultEnrichment;
 
   if (cacheKey) {

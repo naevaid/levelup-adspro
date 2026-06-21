@@ -55,6 +55,24 @@ export type ExtensionSession = {
   } | null;
 };
 
+export type OrganizationWorkspace = {
+  id: string;
+  name: string;
+  slug: string;
+  isInternal: boolean;
+  status: string;
+  isActive?: boolean;
+  currentMembership: {
+    id: string;
+    role: MembershipRole;
+    status: string;
+  };
+};
+
+export type OrganizationListResponse = {
+  data: OrganizationWorkspace[];
+};
+
 export type MarketplaceSummary = {
   id: string;
   code: string;
@@ -81,6 +99,13 @@ export type MarketplaceCategoryFeeSummary = {
   marketplace: MarketplaceSummary;
 };
 
+export type MarketplaceCategoryFeeFilters = {
+  marketplaceId?: string;
+  marketplaceCode?: string;
+  storeType?: CategoryFeeStoreType;
+  isActive?: boolean;
+};
+
 export type CaptureMode = 'owned' | 'public';
 
 export type PageType =
@@ -88,6 +113,7 @@ export type PageType =
   | 'shopee_public_search'
   | 'shopee_public_product'
   | 'shopee_ads_dashboard'
+  | 'shopee_ads_product_detail'
   | 'shopee_seller_product_page'
   | 'tiktok_ads_dashboard'
   | 'tiktok_public_search';
@@ -109,7 +135,9 @@ export type SearchResultPreview = {
   monthlySoldHint?: string;
   ratingHint?: string;
   reviewCountHint?: string;
+  totalRevenueHint?: string;
   monthlyRevenueHint?: string;
+  listingAgeHint?: string;
   deliveryHint?: string;
 };
 
@@ -128,7 +156,27 @@ export type ProductDetailSnapshot = {
   monthlySoldHint?: string;
   ratingHint?: string;
   reviewCountHint?: string;
+  totalRevenueHint?: string;
+  monthlyRevenueHint?: string;
+  listingAgeHint?: string;
   highlights: string[];
+};
+
+export type AdsDashboardMetricSnapshot = {
+  label: string;
+  rawValue: string;
+  numericValue?: number;
+};
+
+export type ShopeeAdsDashboardSnapshot = {
+  impressions?: AdsDashboardMetricSnapshot;
+  clicks?: AdsDashboardMetricSnapshot;
+  ctr?: AdsDashboardMetricSnapshot;
+  orders?: AdsDashboardMetricSnapshot;
+  unitsSold?: AdsDashboardMetricSnapshot;
+  revenue?: AdsDashboardMetricSnapshot;
+  adSpend?: AdsDashboardMetricSnapshot;
+  roas?: AdsDashboardMetricSnapshot;
 };
 
 export type PageSnapshot = {
@@ -143,6 +191,7 @@ export type PageSnapshot = {
   shopIdentifier?: string;
   resultsPreview: SearchResultPreview[];
   productDetail?: ProductDetailSnapshot;
+  adsDashboard?: ShopeeAdsDashboardSnapshot;
 };
 
 export type LastSyncStatus = {
@@ -168,7 +217,7 @@ export type DetectionMessage =
 export type BackgroundMessage =
   | { type: 'GET_STATE' }
   | { type: 'OPEN_EXTENSION_LOGIN' }
-  | { type: 'GET_MARKETPLACE_CATEGORY_FEES' }
+  | { type: 'GET_MARKETPLACE_CATEGORY_FEES'; payload?: MarketplaceCategoryFeeFilters }
   | {
       type: 'LOGIN';
       payload: { apiBaseUrl: string; email: string; password: string };

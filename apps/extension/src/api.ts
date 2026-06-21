@@ -1,7 +1,11 @@
 import type {
   AuthSession,
   ExtensionSession,
+  MarketplaceCategoryFeeFilters,
   MarketplaceCategoryFeeSummary,
+  OrganizationListResponse,
+  OrganizationWorkspace,
+  SearchResultEnrichment,
   ShopSummary,
 } from './types';
 
@@ -67,6 +71,31 @@ export async function listShops(baseUrl: string, token: string) {
   return apiRequest<ShopSummary[]>(baseUrl, '/api/v1/shops', undefined, token);
 }
 
+export async function listOrganizations(baseUrl: string, token: string) {
+  return apiRequest<OrganizationListResponse>(
+    baseUrl,
+    '/api/v1/organizations',
+    undefined,
+    token,
+  );
+}
+
+export async function switchOrganization(
+  baseUrl: string,
+  token: string,
+  organizationId: string,
+) {
+  return apiRequest<{ data: OrganizationWorkspace }>(
+    baseUrl,
+    '/api/v1/organizations/switch',
+    {
+      method: 'POST',
+      body: JSON.stringify({ organizationId }),
+    },
+    token,
+  );
+}
+
 export async function createExtensionSession(
   baseUrl: string,
   token: string,
@@ -127,10 +156,32 @@ export async function createIngestionBatch(
   );
 }
 
-export async function listMarketplaceCategoryFees(baseUrl: string, token: string) {
+export async function listMarketplaceCategoryFees(
+  baseUrl: string,
+  token: string,
+  filters?: MarketplaceCategoryFeeFilters,
+) {
+  const params = new URLSearchParams();
+  if (filters?.marketplaceId) {
+    params.set('marketplaceId', filters.marketplaceId);
+  }
+  if (filters?.marketplaceCode) {
+    params.set('marketplaceCode', filters.marketplaceCode);
+  }
+  if (filters?.storeType) {
+    params.set('storeType', filters.storeType);
+  }
+  if (typeof filters?.isActive === 'boolean') {
+    params.set('isActive', String(filters.isActive));
+  }
+
+  const path = params.size
+    ? `/api/v1/marketplace-category-fees?${params.toString()}`
+    : '/api/v1/marketplace-category-fees';
+
   return apiRequest<MarketplaceCategoryFeeSummary[]>(
     baseUrl,
-    '/api/v1/marketplace-category-fees',
+    path,
     undefined,
     token,
   );

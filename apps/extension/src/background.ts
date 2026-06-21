@@ -2,9 +2,11 @@ import {
   createExtensionSession,
   createIngestionBatch,
   listMarketplaceCategoryFees,
+  listOrganizations,
   listShops,
   login,
   sendHeartbeat,
+  switchOrganization,
 } from './api';
 import {
   DEFAULT_API_BASE_URL,
@@ -22,6 +24,7 @@ import type {
   AuthSession,
   BackgroundMessage,
   DetectionMessage,
+  MarketplaceCategoryFeeFilters,
   PageSnapshot,
   SearchResultEnrichment,
   SearchResultPreview,
@@ -180,6 +183,47 @@ function formatCompactCurrencyLabel(value?: number | null) {
   return `Rp${value.toLocaleString('id-ID')}`;
 }
 
+function formatListingAgeHint(timestampSeconds?: number | null) {
+  if (
+    typeof timestampSeconds !== 'number' ||
+    !Number.isFinite(timestampSeconds) ||
+    timestampSeconds <= 0
+  ) {
+    return undefined;
+  }
+
+  const ageMs = Date.now() - timestampSeconds * 1000;
+  if (!Number.isFinite(ageMs) || ageMs < 0) {
+    return undefined;
+  }
+
+  const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+  if (ageDays <= 0) {
+    return 'Hari ini';
+  }
+
+  if (ageDays < 30) {
+    if (ageDays < 7) {
+      return `${ageDays} hari`;
+    }
+
+    const ageWeeks = Math.floor(ageDays / 7);
+    const remainingDays = ageDays % 7;
+    return remainingDays > 0
+      ? `${ageWeeks} minggu ${remainingDays} hari`
+      : `${ageWeeks} minggu`;
+  }
+
+  const ageMonths = Math.floor(ageDays / 30.4375);
+  if (ageMonths < 12) {
+    return `${ageMonths} bulan`;
+  }
+
+  const years = Math.floor(ageMonths / 12);
+  const remainingMonths = ageMonths % 12;
+  return remainingMonths > 0 ? `${years} tahun ${remainingMonths} bulan` : `${years} tahun`;
+}
+
 function extractShopeeIdsFromUrl(rawUrl: string) {
   const matched = rawUrl.match(/-i\.(\d+)\.(\d+)(?:$|[/?#])/i);
   if (!matched) {
@@ -261,6 +305,7 @@ async function fetchSingleSearchResultEnrichment(result: SearchResultPreview) {
         price_max?: number;
         historical_sold?: number;
         sold?: number;
+        ctime?: number;
         cmt_count?: number;
         item_rating?: {
           rating_star?: number;
@@ -297,6 +342,10 @@ async function fetchSingleSearchResultEnrichment(result: SearchResultPreview) {
     typeof representativePrice === 'number' && typeof itemData?.sold === 'number'
       ? representativePrice * itemData.sold
       : null;
+  const totalRevenue =
+    typeof representativePrice === 'number' && typeof itemData?.historical_sold === 'number'
+      ? representativePrice * itemData.historical_sold
+      : null;
   const normalizedShopName = normalizeText(shopData?.name);
   const normalizedLocation = cleanSearchContextLabel(
     shopData?.shop_location ?? itemData?.shop_location ?? result.locationLabel,
@@ -311,12 +360,17 @@ async function fetchSingleSearchResultEnrichment(result: SearchResultPreview) {
     priceMin: normalizedPriceMin,
     priceMax: normalizedPriceMax,
     salesHint: totalSold ? `${totalSold} Terjual` : result.salesHint,
-    monthlySoldHint: monthlySold ? `${monthlySold} Terjual/Bln` : result.monthlySoldHint,
+    monthlySoldHint:
+      monthlySold ? `${monthlySold} Terjual/30 Hari` : result.monthlySoldHint,
     ratingHint: ratingStar ?? result.ratingHint,
     reviewCountHint: reviewCount ? `${reviewCount} Ulasan` : result.reviewCountHint,
+    totalRevenueHint: totalRevenue
+      ? `± ${formatCompactCurrencyLabel(totalRevenue)} Total`
+      : result.totalRevenueHint,
     monthlyRevenueHint: monthlyRevenue
-      ? `± ${formatCompactCurrencyLabel(monthlyRevenue)} /Bln`
+      ? `± ${formatCompactCurrencyLabel(monthlyRevenue)} /30 Hari`
       : result.monthlyRevenueHint,
+    listingAgeHint: formatListingAgeHint(itemData?.ctime) ?? result.listingAgeHint,
   } satisfies SearchResultEnrichment;
 }
 
@@ -362,12 +416,46 @@ async function createSessionBundle(
   authSession: AuthSession,
   shopId?: string | null,
 ) {
-  const shops = await listShops(apiBaseUrl, authSession.accessToken);
+  let nextAuthSession = authSession;
+  const organizations = await listOrganizations(apiBaseUrl, authSession.accessToken);
+  const preferredOrganization =
+    organizations.data.find((organization) => !organization.isInternal) ??
+    organizations.data.find((organization) => organization.isActive) ??
+    organizations.data[0];
+
+  if (
+    preferredOrganization &&
+    preferredOrganization.id !== authSession.activeOrganization.id
+  ) {
+    const switched = await switchOrganization(
+      apiBaseUrl,
+      authSession.accessToken,
+      preferredOrganization.id,
+    );
+
+    nextAuthSession = {
+      ...authSession,
+      activeOrganization: {
+        id: switched.data.id,
+        name: switched.data.name,
+        slug: switched.data.slug,
+        isInternal: switched.data.isInternal,
+        status: switched.data.status,
+      },
+      membership: {
+        id: switched.data.currentMembership.id,
+        role: switched.data.currentMembership.role,
+        status: switched.data.currentMembership.status,
+      },
+    };
+  }
+
+  const shops = await listShops(apiBaseUrl, nextAuthSession.accessToken);
   const selectedShop =
     shopId && shops.some((shop) => shop.id === shopId) ? shopId : null;
   const extensionSession = await createExtensionSession(
     apiBaseUrl,
-    authSession.accessToken,
+    nextAuthSession.accessToken,
     {
       deviceLabel: getDeviceLabel(),
       extensionVersion: EXTENSION_VERSION,
@@ -377,13 +465,16 @@ async function createSessionBundle(
 
   await patchExtensionState({
     apiBaseUrl,
-    authSession,
+    authSession: nextAuthSession,
     shops,
     selectedShopId: selectedShop,
     extensionSession,
     lastSync: {
       status: 'idle',
-      message: 'Login extension berhasil. Siap untuk sync.',
+      message:
+        preferredOrganization && preferredOrganization.id !== authSession.activeOrganization.id
+          ? `Login extension berhasil. Workspace aktif dialihkan ke ${preferredOrganization.name}.`
+          : 'Login extension berhasil. Siap untuk sync.',
       at: new Date().toISOString(),
     },
   });
@@ -536,6 +627,9 @@ function buildSyncPayload(
               monthlySoldHint: snapshot.productDetail?.monthlySoldHint,
               ratingHint: snapshot.productDetail?.ratingHint,
               reviewCountHint: snapshot.productDetail?.reviewCountHint,
+              totalRevenueHint: snapshot.productDetail?.totalRevenueHint,
+              monthlyRevenueHint: snapshot.productDetail?.monthlyRevenueHint,
+              listingAgeHint: snapshot.productDetail?.listingAgeHint,
             },
             highlights: snapshot.productDetail?.highlights ?? [],
           }
@@ -560,6 +654,7 @@ function buildSyncPayload(
               ratingHint: result.ratingHint,
               reviewCountHint: result.reviewCountHint,
               monthlyRevenueHint: result.monthlyRevenueHint,
+              listingAgeHint: result.listingAgeHint,
             })),
           }
         : {
@@ -703,7 +798,9 @@ async function handleSyncProductUrl(
   }
 }
 
-async function handleGetMarketplaceCategoryFees() {
+async function handleGetMarketplaceCategoryFees(
+  filters?: MarketplaceCategoryFeeFilters,
+) {
   const state = await getExtensionState();
   if (!state.authSession) {
     throw new Error('Login dashboard diperlukan untuk memuat master fee kategori.');
@@ -712,11 +809,10 @@ async function handleGetMarketplaceCategoryFees() {
   const fees = await listMarketplaceCategoryFees(
     state.apiBaseUrl,
     state.authSession.accessToken,
+    filters,
   );
 
-  return fees.filter(
-    (fee) => fee.isActive && fee.marketplace.code.toUpperCase() === 'SHOPEE',
-  );
+  return fees;
 }
 
 async function handleOpenExtensionLogin() {
@@ -825,7 +921,7 @@ chrome.runtime.onMessage.addListener((message: BackgroundMessage, _sender, sendR
       case 'OPEN_EXTENSION_LOGIN':
         return handleOpenExtensionLogin();
       case 'GET_MARKETPLACE_CATEGORY_FEES':
-        return handleGetMarketplaceCategoryFees();
+        return handleGetMarketplaceCategoryFees(message.payload);
       case 'LOGIN':
         return handleLogin(message);
       case 'LOGOUT':

@@ -248,6 +248,22 @@ button.ghost {
   gap: 10px;
 }
 
+.dashboard-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.dashboard-action-row {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.dashboard-action-row button {
+  flex: 1 1 150px;
+}
+
 .row {
   display: flex;
   align-items: center;

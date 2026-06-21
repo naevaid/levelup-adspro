@@ -1,16 +1,22 @@
 import type {
+  AdsDashboardMetricSnapshot,
   CaptureMode,
   Marketplace,
   PageSnapshot,
   PageType,
   ProductDetailSnapshot,
   SearchResultPreview,
+  ShopeeAdsDashboardSnapshot,
 } from './types';
 
 const MAX_SEARCH_RESULTS_PREVIEW = 120;
 
 function normalizeText(rawValue?: string | null) {
   return rawValue?.replace(/\s+/g, ' ').trim() ?? '';
+}
+
+function isLevelupManagedElement(element: Element | null | undefined) {
+  return Boolean(element?.closest('[data-levelup-ads-managed="true"]'));
 }
 
 function parsePriceRange(rawValue: string) {
@@ -122,7 +128,9 @@ function collectTextCandidates(root: Element) {
       root.querySelectorAll<HTMLElement>(
         'img[alt], h1, h2, h3, h4, [aria-label], [title], span, div, p',
       ),
-    ).flatMap((element) => {
+    )
+      .filter((element) => !isLevelupManagedElement(element))
+      .flatMap((element) => {
       const imageAlt =
         element instanceof HTMLImageElement ? element.getAttribute('alt') : null;
 
@@ -132,7 +140,7 @@ function collectTextCandidates(root: Element) {
         element.getAttribute('title'),
         element.textContent,
       ];
-    }),
+      }),
   ];
 
   const uniqueCandidates: string[] = [];
@@ -153,6 +161,7 @@ function collectTextCandidates(root: Element) {
 
 function collectLeafTextCandidates(root: Element) {
   const candidates = Array.from(root.querySelectorAll<HTMLElement>('span, div, p'))
+    .filter((element) => !isLevelupManagedElement(element))
     .map((element) => normalizeText(element.textContent))
     .filter((value) => value.length > 0 && value.length <= 80);
 
@@ -541,6 +550,382 @@ function parseNumericLike(value?: string | number | null) {
   return undefined;
 }
 
+const SHOPEE_ADS_METRIC_LABELS = {
+  impressions: ['iklan dilihat'],
+  clicks: ['jumlah klik'],
+  ctr: ['persentase klik', 'ctr'],
+  orders: ['pesanan'],
+  unitsSold: ['produk terjual'],
+  revenue: ['penjualan dari iklan'],
+  adSpend: ['biaya iklan'],
+  roas: ['roas'],
+} as const;
+
+type ShopeeAdsMetricKey = keyof typeof SHOPEE_ADS_METRIC_LABELS;
+
+const SHOPEE_ADS_DASHBOARD_REQUIRED_METRIC_KEYS: ShopeeAdsMetricKey[] = [
+  'impressions',
+  'clicks',
+  'orders',
+  'revenue',
+  'adSpend',
+  'roas',
+];
+
+const SHOPEE_ADS_PRODUCT_DETAIL_REQUIRED_METRIC_KEYS: ShopeeAdsMetricKey[] = [
+  'impressions',
+  'clicks',
+  'unitsSold',
+  'revenue',
+  'adSpend',
+  'roas',
+];
+
+function parseCompactMetricNumber(rawValue: string) {
+  const normalized = normalizeText(rawValue).toLowerCase();
+  if (!/\d/.test(normalized)) {
+    return undefined;
+  }
+
+  let multiplier = 1;
+  if (/\bjt\b|\bjuta\b|\bmn\b|[\d.,]+m\b/.test(normalized)) {
+    multiplier = 1_000_000;
+  } else if (/\b(?:rb|ribu|k)\b/.test(normalized) || /[\d.,]+k\b/.test(normalized)) {
+    multiplier = 1_000;
+  }
+
+  const numericPortion = normalized.replace(/[^\d.,-]/g, '');
+  if (!numericPortion) {
+    return undefined;
+  }
+
+  const separatorIndexes = [...numericPortion.matchAll(/[.,]/g)].map((match) => match.index ?? -1);
+  if (separatorIndexes.length === 0) {
+    const parsed = Number.parseFloat(numericPortion);
+    return Number.isFinite(parsed) ? parsed * multiplier : undefined;
+  }
+
+  const lastSeparatorIndex = separatorIndexes[separatorIndexes.length - 1];
+  const digitsAfterSeparator = numericPortion
+    .slice(lastSeparatorIndex + 1)
+    .replace(/[^\d]/g, '').length;
+
+  const normalizedNumber =
+    digitsAfterSeparator > 0 && digitsAfterSeparator <= 2
+      ? `${numericPortion.slice(0, lastSeparatorIndex).replace(/[.,]/g, '')}.${numericPortion
+          .slice(lastSeparatorIndex + 1)
+          .replace(/[.,]/g, '')}`
+      : numericPortion.replace(/[.,]/g, '');
+
+  const parsed = Number.parseFloat(normalizedNumber);
+  return Number.isFinite(parsed) ? parsed * multiplier : undefined;
+}
+
+function parseShopeeAdsMetricValue(key: ShopeeAdsMetricKey, rawValue: string) {
+  const parsed = parseCompactMetricNumber(rawValue);
+  if (typeof parsed !== 'number' || !Number.isFinite(parsed)) {
+    return undefined;
+  }
+
+  if (key === 'ctr') {
+    return parsed;
+  }
+
+  if (key === 'roas') {
+    return Number.parseFloat(parsed.toFixed(2));
+  }
+
+  return Math.round(parsed);
+}
+
+function countShopeeAdsMetricMatches(rawValue?: string | null) {
+  const normalized = normalizeText(rawValue).toLowerCase();
+  if (!normalized) {
+    return 0;
+  }
+
+  return Object.values(SHOPEE_ADS_METRIC_LABELS).reduce((total, aliases) => {
+    return total + Number(aliases.some((alias) => normalized.includes(alias)));
+  }, 0);
+}
+
+function hasShopeeAdsSummarySignature(
+  rawValue: string | null | undefined,
+  requiredKeys: readonly ShopeeAdsMetricKey[],
+) {
+  const normalized = normalizeText(rawValue).toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  return requiredKeys.every((key) =>
+    SHOPEE_ADS_METRIC_LABELS[key].some((alias) => normalized.includes(alias)),
+  );
+}
+
+function findShopeeAdsSummaryHeading(document: Document, pattern: RegExp) {
+  const headingCandidates = Array.from(
+    document.querySelectorAll<HTMLElement>('h1, h2, h3, h4'),
+  ).filter(
+    (element) =>
+      !isLevelupManagedElement(element) &&
+      pattern.test(normalizeText(element.textContent)),
+  );
+
+  if (headingCandidates[0]) {
+    return headingCandidates[0];
+  }
+
+  return Array.from(document.querySelectorAll<HTMLElement>('div, span, p')).find(
+    (element) =>
+      !isLevelupManagedElement(element) &&
+      pattern.test(normalizeText(element.textContent)),
+  );
+}
+
+function findShopeeAdsSummaryRoot(
+  document: Document,
+  pattern: RegExp,
+  requiredKeys: readonly ShopeeAdsMetricKey[],
+) {
+  const heading = findShopeeAdsSummaryHeading(document, pattern);
+  if (heading) {
+    let current: HTMLElement | null = heading.parentElement;
+    while (current && current !== document.body) {
+      const text = normalizeText(current.textContent);
+      if (
+        text.length >= 80 &&
+        text.length <= 7000 &&
+        hasShopeeAdsSummarySignature(text, requiredKeys)
+      ) {
+        return current;
+      }
+
+      current = current.parentElement;
+    }
+  }
+
+  let bestCandidate: HTMLElement | null = null;
+  let bestScore = -1;
+  let bestTextLength = Number.POSITIVE_INFINITY;
+
+  for (const candidate of Array.from(document.querySelectorAll<HTMLElement>('main, section, div'))) {
+    if (isLevelupManagedElement(candidate)) {
+      continue;
+    }
+
+    const text = normalizeText(candidate.textContent);
+    if (text.length < 80 || text.length > 7000) {
+      continue;
+    }
+
+    const score = countShopeeAdsMetricMatches(text);
+    if (
+      score > bestScore ||
+      (score === bestScore &&
+        hasShopeeAdsSummarySignature(text, requiredKeys) &&
+        text.length < bestTextLength)
+    ) {
+      bestCandidate = candidate;
+      bestScore = score;
+      bestTextLength = text.length;
+    }
+  }
+
+  return bestCandidate && hasShopeeAdsSummarySignature(bestCandidate.textContent, requiredKeys)
+    ? bestCandidate
+    : null;
+}
+
+function isAdsMetricValueText(value: string, aliases: readonly string[]) {
+  const normalized = normalizeText(value).toLowerCase();
+  if (!normalized || aliases.includes(normalized)) {
+    return false;
+  }
+
+  if (!/\d/.test(normalized) || normalized.length > 32) {
+    return false;
+  }
+
+  if (/^\d{2}:\d{2}$/.test(normalized)) {
+    return false;
+  }
+
+  return true;
+}
+
+function resolveAdsMetricCardElement(
+  labelElement: HTMLElement,
+  boundaryRoot: HTMLElement,
+  aliases: readonly string[],
+) {
+  let current: HTMLElement | null = labelElement;
+
+  while (current && current !== boundaryRoot) {
+    const texts = collectLeafTextCandidates(current);
+    const hasLabel = texts.some((text) => aliases.includes(text.toLowerCase()));
+    const hasValue = texts.some((text) => isAdsMetricValueText(text, aliases));
+    const textLength = normalizeText(current.textContent).length;
+
+    if (hasLabel && hasValue && textLength >= 12 && textLength <= 240) {
+      return current;
+    }
+
+    current = current.parentElement;
+  }
+
+  return labelElement.parentElement ?? labelElement;
+}
+
+function extractAdsMetricValueText(cardElement: HTMLElement, aliases: readonly string[]) {
+  const candidates = collectLeafTextCandidates(cardElement).filter((text) =>
+    isAdsMetricValueText(text, aliases),
+  );
+
+  return candidates.find((candidate) => /rp|%|k\b|m\b|jt\b|\d/i.test(candidate)) ?? candidates[0];
+}
+
+function detectShopeeAdsMetric(
+  summaryRoot: HTMLElement,
+  key: ShopeeAdsMetricKey,
+): AdsDashboardMetricSnapshot | undefined {
+  const aliases = SHOPEE_ADS_METRIC_LABELS[key];
+  const labelCandidates = Array.from(
+    summaryRoot.querySelectorAll<HTMLElement>('div, span, p, h1, h2, h3, h4, h5, h6'),
+  )
+    .filter((element) => !isLevelupManagedElement(element))
+    .map((element) => ({
+      element,
+      text: normalizeText(element.textContent).toLowerCase(),
+    }))
+    .filter(({ text }) => aliases.some((alias) => text === alias))
+    .sort((left, right) => left.text.length - right.text.length);
+
+  for (const candidate of labelCandidates) {
+    const cardElement = resolveAdsMetricCardElement(candidate.element, summaryRoot, aliases);
+    const rawValue = extractAdsMetricValueText(cardElement, aliases);
+    if (!rawValue) {
+      continue;
+    }
+
+    return {
+      label: normalizeText(candidate.element.textContent),
+      rawValue,
+      numericValue: parseShopeeAdsMetricValue(key, rawValue),
+    };
+  }
+
+  return undefined;
+}
+
+function detectShopeeAdsSummary(
+  document: Document,
+  options: {
+    headingPattern: RegExp;
+    requiredKeys: readonly ShopeeAdsMetricKey[];
+    metricKeys: readonly ShopeeAdsMetricKey[];
+  },
+): ShopeeAdsDashboardSnapshot | undefined {
+  const summaryRoot = findShopeeAdsSummaryRoot(
+    document,
+    options.headingPattern,
+    options.requiredKeys,
+  );
+  if (!summaryRoot) {
+    return undefined;
+  }
+
+  const snapshot: ShopeeAdsDashboardSnapshot = {};
+  for (const key of options.metricKeys) {
+    const metric = detectShopeeAdsMetric(summaryRoot, key);
+    if (metric) {
+      snapshot[key] = metric;
+    }
+  }
+
+  return Object.values(snapshot).some(Boolean) ? snapshot : undefined;
+}
+
+function detectShopeeAdsDashboard(document: Document): ShopeeAdsDashboardSnapshot | undefined {
+  return detectShopeeAdsSummary(document, {
+    headingPattern: /semua performa iklan produk|performa iklan/i,
+    requiredKeys: SHOPEE_ADS_DASHBOARD_REQUIRED_METRIC_KEYS,
+    metricKeys: ['impressions', 'clicks', 'orders', 'revenue', 'adSpend', 'roas'],
+  });
+}
+
+function detectShopeeAdsProductTitle(document: Document) {
+  const excludedPatterns = [
+    /^rincian iklan produk$/i,
+    /^riwayat pengaturan iklan$/i,
+    /^performa$/i,
+    /^rincian performa$/i,
+    /^diagnosis$/i,
+    /^proteksi roas$/i,
+    /^modal$/i,
+    /^mode bidding$/i,
+    /^akselerasi performa$/i,
+    /^hari ini/i,
+    /^tidak terbatas$/i,
+    /^tak terbatas$/i,
+  ];
+
+  const isValidCandidate = (text: string) =>
+    text.length >= 8 &&
+    text.length <= 160 &&
+    !excludedPatterns.some((pattern) => pattern.test(text)) &&
+    !/rp\d|%|\+\d|gmt\+7/i.test(text) &&
+    !/(beranda|iklan shopee|rincian iklan produk)/i.test(text);
+
+  const linkedProductTitle = Array.from(
+    document.querySelectorAll<HTMLAnchorElement>('a[href*="/portal/product/"]'),
+  )
+    .map((element) => normalizeText(element.textContent))
+    .find(isValidCandidate);
+
+  if (linkedProductTitle) {
+    return linkedProductTitle;
+  }
+
+  const candidates = Array.from(document.querySelectorAll<HTMLElement>('h1, h2, h3, div, span, p'))
+    .filter((element) => !isLevelupManagedElement(element))
+    .map((element) => normalizeText(element.textContent))
+    .filter(isValidCandidate);
+
+  return candidates[0];
+}
+
+function detectShopeeAdsProductDetail(
+  document: Document,
+  url: URL,
+): {
+  productDetail?: ProductDetailSnapshot;
+  adsDashboard?: ShopeeAdsDashboardSnapshot;
+} {
+  const adsDashboard = detectShopeeAdsSummary(document, {
+    headingPattern: /^performa$|performa/i,
+    requiredKeys: SHOPEE_ADS_PRODUCT_DETAIL_REQUIRED_METRIC_KEYS,
+    metricKeys: ['impressions', 'clicks', 'ctr', 'unitsSold', 'revenue', 'adSpend', 'roas'],
+  });
+  const productLink = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href]')).find((link) =>
+    /\/portal\/product\//i.test(link.getAttribute('href') || ''),
+  );
+  const productUrl = productLink
+    ? new URL(productLink.getAttribute('href') || '', url.origin).toString()
+    : url.toString();
+  const productTitle = detectShopeeAdsProductTitle(document) ?? 'Produk Shopee';
+
+  return {
+    productDetail: {
+      productTitle,
+      productUrl,
+      shopName: null,
+      highlights: [],
+    },
+    adsDashboard,
+  };
+}
+
 function firstNonEmpty(...values: Array<string | null | undefined>) {
   for (const value of values) {
     const normalized = normalizeText(value);
@@ -563,6 +948,63 @@ function normalizeShopeePriceValue(value?: number) {
 
 function formatCountHint(value: number, suffix: string) {
   return `${value.toLocaleString('id-ID')} ${suffix}`;
+}
+
+function formatCompactCurrencyLabel(value?: number | null) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    return undefined;
+  }
+
+  if (value >= 1_000_000_000) {
+    return `Rp${(value / 1_000_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+  }
+
+  if (value >= 1_000_000) {
+    return `Rp${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}JT`;
+  }
+
+  return `Rp${Math.round(value).toLocaleString('id-ID')}`;
+}
+
+function formatListingAgeHint(timestampSeconds?: number) {
+  if (
+    typeof timestampSeconds !== 'number' ||
+    !Number.isFinite(timestampSeconds) ||
+    timestampSeconds <= 0
+  ) {
+    return undefined;
+  }
+
+  const ageMs = Date.now() - timestampSeconds * 1000;
+  if (!Number.isFinite(ageMs) || ageMs < 0) {
+    return undefined;
+  }
+
+  const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+  if (ageDays <= 0) {
+    return 'Hari ini';
+  }
+
+  if (ageDays < 30) {
+    if (ageDays < 7) {
+      return `${ageDays} hari`;
+    }
+
+    const ageWeeks = Math.floor(ageDays / 7);
+    const remainingDays = ageDays % 7;
+    return remainingDays > 0
+      ? `${ageWeeks} minggu ${remainingDays} hari`
+      : `${ageWeeks} minggu`;
+  }
+
+  const ageMonths = Math.floor(ageDays / 30.4375);
+  if (ageMonths < 12) {
+    return `${ageMonths} bulan`;
+  }
+
+  const years = Math.floor(ageMonths / 12);
+  const remainingMonths = ageMonths % 12;
+  return remainingMonths > 0 ? `${years} tahun ${remainingMonths} bulan` : `${years} tahun`;
 }
 
 function decodeScriptString(rawValue: string) {
@@ -627,6 +1069,10 @@ function extractShopeeProductDataFromScripts(document: Document, url: URL) {
     /"rating_star"\s*:\s*([0-9.]+)/i,
     /"ratingValue"\s*:\s*"?([0-9.]+)"?/i,
   ]);
+  const createdAtRaw = matchScriptValue(scriptText, [
+    /"ctime"\s*:\s*(\d+)/i,
+    /"create_time"\s*:\s*(\d+)/i,
+  ]);
   const fullImageUrl = matchScriptValue(scriptText, [
     /"image"\s*:\s*"(https?:[^"]+)"/i,
     /"image_url"\s*:\s*"(https?:[^"]+)"/i,
@@ -648,6 +1094,19 @@ function extractShopeeProductDataFromScripts(document: Document, url: URL) {
   const monthlySoldValue = parseNumericLike(monthlySoldRaw);
   const reviewCount = parseNumericLike(reviewCountRaw);
   const ratingValue = ratingRaw ? Number.parseFloat(ratingRaw.replace(',', '.')) : undefined;
+  const createdAt = parseNumericLike(createdAtRaw);
+  const representativePrice =
+    typeof priceMin === 'number' && typeof priceMax === 'number'
+      ? Math.round((priceMin + priceMax) / 2)
+      : priceMin ?? priceMax;
+  const monthlyRevenue =
+    typeof representativePrice === 'number' && typeof monthlySoldValue === 'number'
+      ? representativePrice * monthlySoldValue
+      : null;
+  const totalRevenue =
+    typeof representativePrice === 'number' && typeof soldValue === 'number'
+      ? representativePrice * soldValue
+      : null;
 
   return {
     shopName: shopName ? decodeScriptString(shopName) : undefined,
@@ -658,7 +1117,7 @@ function extractShopeeProductDataFromScripts(document: Document, url: URL) {
       typeof soldValue === 'number' ? formatCountHint(soldValue, 'terjual') : undefined,
     monthlySoldHint:
       typeof monthlySoldValue === 'number'
-        ? formatCountHint(monthlySoldValue, 'terjual/bln')
+        ? formatCountHint(monthlySoldValue, 'terjual/30 hari')
         : undefined,
     reviewCountHint:
       typeof reviewCount === 'number'
@@ -668,6 +1127,14 @@ function extractShopeeProductDataFromScripts(document: Document, url: URL) {
       typeof ratingValue === 'number' && Number.isFinite(ratingValue)
         ? `${ratingValue.toString().replace('.', ',')} dari 5`
         : undefined,
+    totalRevenueHint: totalRevenue
+      ? `± ${formatCompactCurrencyLabel(totalRevenue)} Total`
+      : undefined,
+    monthlyRevenueHint: monthlyRevenue
+      ? `± ${formatCompactCurrencyLabel(monthlyRevenue)} /30 Hari`
+      : undefined,
+    listingAgeHint:
+      typeof createdAt === 'number' ? formatListingAgeHint(createdAt) : undefined,
   };
 }
 
@@ -874,6 +1341,8 @@ function detectShopeePublicProduct(
     compactCandidates.find((candidate) => /^\d(?:[.,]\d)?$/.test(candidate));
   const normalizedSalesHint = scriptedData?.salesHint ?? salesHint;
   const monthlySoldHint = scriptedData?.monthlySoldHint;
+  const monthlyRevenueHint = scriptedData?.monthlyRevenueHint;
+  const listingAgeHint = scriptedData?.listingAgeHint;
 
   const highlights = compactCandidates
     .filter(
@@ -899,6 +1368,8 @@ function detectShopeePublicProduct(
     monthlySoldHint,
     ratingHint,
     reviewCountHint,
+    monthlyRevenueHint,
+    listingAgeHint,
     highlights,
   };
 }
@@ -989,9 +1460,18 @@ function detectPageType(url: URL): {
       };
     }
 
+    if (hostname.includes('seller') && pathname.includes('/portal/marketing/pas/product/')) {
+      return {
+        pageType: 'shopee_ads_product_detail',
+        captureMode: 'owned',
+        marketplace: 'shopee',
+        statusMessage: 'Shopee ads product detail terdeteksi.',
+      };
+    }
+
     if (
       hostname.includes('seller') &&
-      (pathname.includes('/portal/product') || pathname.includes('/product'))
+      (pathname.startsWith('/portal/product') || pathname.startsWith('/product'))
     ) {
       return {
         pageType: 'shopee_seller_product_page',
@@ -1076,6 +1556,27 @@ export function detectPageSnapshot(document: Document) {
       snapshot.statusMessage = detail.shopName
         ? `Produk Shopee terdeteksi dari toko ${detail.shopName}.`
         : 'Produk Shopee publik terdeteksi.';
+    }
+  }
+
+  if (baseDetection.pageType === 'shopee_ads_dashboard') {
+    const adsDashboard = detectShopeeAdsDashboard(document);
+    if (adsDashboard) {
+      const detectedMetricCount = Object.values(adsDashboard).filter(Boolean).length;
+      snapshot.adsDashboard = adsDashboard;
+      snapshot.statusMessage = `Shopee ads dashboard terdeteksi dengan ${detectedMetricCount} metrik ringkasan.`;
+    }
+  }
+
+  if (baseDetection.pageType === 'shopee_ads_product_detail') {
+    const detail = detectShopeeAdsProductDetail(document, url);
+    if (detail.productDetail) {
+      snapshot.productDetail = detail.productDetail;
+    }
+    if (detail.adsDashboard) {
+      const detectedMetricCount = Object.values(detail.adsDashboard).filter(Boolean).length;
+      snapshot.adsDashboard = detail.adsDashboard;
+      snapshot.statusMessage = `Shopee ads product detail terdeteksi dengan ${detectedMetricCount} metrik performa.`;
     }
   }
 
