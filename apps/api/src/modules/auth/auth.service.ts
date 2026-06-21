@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   UnauthorizedException,
@@ -17,7 +18,10 @@ import { createHash, randomBytes } from 'crypto';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
+import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SignupDto } from './dto/signup.dto';
+import { AuthMailService } from './auth-mail.service';
 
 const INTERNAL_PLAN_CODE = 'internal-unlimited';
 const INTERNAL_WORKSPACE_SLUG = 'internal-platform-admin';
@@ -28,6 +32,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly authMailService: AuthMailService,
   ) {}
 
   async signup(dto: SignupDto) {
@@ -178,6 +183,113 @@ export class AuthService {
     return this.serializeAuthPayload(result);
   }
 
+  async requestPasswordReset(dto: RequestPasswordResetDto) {
+    const email = dto.email.trim().toLowerCase();
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+    const successMessage =
+      'Jika email terdaftar, kami akan mengirimkan tautan untuk mengatur ulang password.';
+
+    if (!user || user.status !== UserStatus.ACTIVE) {
+      return {
+        ok: true,
+        message: successMessage,
+      };
+    }
+
+    const rawToken = randomBytes(32).toString('hex');
+    const tokenHash = this.hashToken(rawToken);
+    const expiresAt = new Date(
+      Date.now() +
+        this.configService.get<number>('PASSWORD_RESET_TTL_MINUTES', 60) *
+          60 *
+          1000,
+    );
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.passwordResetToken.deleteMany({
+        where: { userId: user.id },
+      });
+
+      await tx.passwordResetToken.create({
+        data: {
+          userId: user.id,
+          tokenHash,
+          expiresAt,
+        },
+      });
+    });
+
+    const appBaseUrl = this.configService
+      .get<string>('APP_BASE_URL', 'http://localhost:3000')
+      .replace(/\/+$/, '');
+    const resetUrl = `${appBaseUrl}/reset-password?token=${rawToken}`;
+
+    await this.authMailService.sendPasswordResetEmail({
+      email: user.email,
+      name: user.name,
+      resetUrl,
+    });
+
+    return {
+      ok: true,
+      message: successMessage,
+    };
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const tokenHash = this.hashToken(dto.token.trim());
+    const resetToken = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash },
+    });
+
+    if (!resetToken || resetToken.usedAt || resetToken.expiresAt <= new Date()) {
+      throw new BadRequestException(
+        'Tautan reset password tidak valid atau sudah kedaluwarsa.',
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+    const usedAt = new Date();
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: resetToken.userId },
+        data: {
+          passwordHash,
+        },
+      });
+
+      await tx.passwordResetToken.update({
+        where: { id: resetToken.id },
+        data: { usedAt },
+      });
+
+      await tx.passwordResetToken.deleteMany({
+        where: {
+          userId: resetToken.userId,
+          id: {
+            not: resetToken.id,
+          },
+        },
+      });
+
+      await tx.userSession.deleteMany({
+        where: { userId: resetToken.userId },
+      });
+
+      await tx.extensionSession.deleteMany({
+        where: { userId: resetToken.userId },
+      });
+    });
+
+    return {
+      ok: true,
+      message: 'Password berhasil diperbarui. Silakan login kembali.',
+    };
+  }
+
   async logout(sessionId: string) {
     await this.prisma.userSession.delete({ where: { id: sessionId } });
 
@@ -254,6 +366,10 @@ export class AuthService {
       accessToken,
       expiresAt,
     };
+  }
+
+  private hashToken(value: string) {
+    return createHash('sha256').update(value).digest('hex');
   }
 
   private serializeAuthPayload(input: {

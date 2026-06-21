@@ -10,12 +10,15 @@ type BackgroundResponse<T> = {
 const loginPanel = document.querySelector<HTMLElement>('#login-panel');
 const dashboardPanel = document.querySelector<HTMLElement>('#dashboard-panel');
 const loginForm = document.querySelector<HTMLFormElement>('#login-form');
-const apiBaseUrlInput = document.querySelector<HTMLInputElement>('#api-base-url');
 const emailInput = document.querySelector<HTMLInputElement>('#email');
 const passwordInput = document.querySelector<HTMLInputElement>('#password');
 const togglePasswordButton = document.querySelector<HTMLButtonElement>(
   '#toggle-password-button',
 );
+const forgotPasswordButton = document.querySelector<HTMLButtonElement>(
+  '#forgot-password-button',
+);
+const registerButton = document.querySelector<HTMLButtonElement>('#register-button');
 const authSummary = document.querySelector<HTMLElement>('#auth-summary');
 const organizationName = document.querySelector<HTMLElement>('#organization-name');
 const userEmail = document.querySelector<HTMLElement>('#user-email');
@@ -33,6 +36,7 @@ const activityMessage = document.querySelector<HTMLElement>('#activity-message')
 const logoutButton = document.querySelector<HTMLButtonElement>('#logout-button');
 const refreshPageButton = document.querySelector<HTMLButtonElement>('#refresh-page-button');
 const syncNowButton = document.querySelector<HTMLButtonElement>('#sync-now-button');
+let currentAppBaseUrl = DEFAULT_API_BASE_URL;
 
 async function sendMessage<T>(message: BackgroundMessage) {
   const response = (await chrome.runtime.sendMessage(
@@ -53,6 +57,8 @@ function setBusyState(busy: boolean) {
     refreshPageButton,
     syncNowButton,
     shopSelect,
+    forgotPasswordButton,
+    registerButton,
   ]) {
     if (!element) {
       continue;
@@ -62,6 +68,16 @@ function setBusyState(busy: boolean) {
       element.disabled = busy;
     }
   }
+}
+
+function getAppBaseUrl(apiBaseUrl: string) {
+  const normalized = apiBaseUrl.trim().replace(/\/+$/, '');
+
+  if (normalized.endsWith('/api')) {
+    return normalized.slice(0, -4);
+  }
+
+  return normalized || DEFAULT_API_BASE_URL;
 }
 
 function renderShopOptions(shops: ShopSummary[], selectedShopId: string | null) {
@@ -122,9 +138,7 @@ function renderResultsList(state: ExtensionState) {
 }
 
 function renderState(state: ExtensionState) {
-  if (apiBaseUrlInput) {
-    apiBaseUrlInput.value = state.apiBaseUrl || DEFAULT_API_BASE_URL;
-  }
+  currentAppBaseUrl = getAppBaseUrl(state.apiBaseUrl || DEFAULT_API_BASE_URL);
 
   const isLoggedIn = Boolean(state.authSession && state.extensionSession);
   loginPanel?.classList.toggle('hidden', isLoggedIn);
@@ -223,7 +237,7 @@ loginForm?.addEventListener('submit', async (event) => {
     const state = await sendMessage<ExtensionState>({
       type: 'LOGIN',
       payload: {
-        apiBaseUrl: apiBaseUrlInput?.value.trim() || DEFAULT_API_BASE_URL,
+        apiBaseUrl: DEFAULT_API_BASE_URL,
         email: emailInput?.value.trim() ?? '',
         password: passwordInput?.value ?? '',
       },
@@ -245,6 +259,20 @@ togglePasswordButton?.addEventListener('click', () => {
   }
 
   setPasswordVisibility(passwordInput.type === 'password');
+});
+
+forgotPasswordButton?.addEventListener('click', async () => {
+  await chrome.tabs.create({
+    url: `${currentAppBaseUrl}/forgot-password`,
+    active: true,
+  });
+});
+
+registerButton?.addEventListener('click', async () => {
+  await chrome.tabs.create({
+    url: `${currentAppBaseUrl}/signup`,
+    active: true,
+  });
 });
 
 logoutButton?.addEventListener('click', async () => {

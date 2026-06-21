@@ -32,21 +32,21 @@ export function AuthShell({
 
           <div className="mt-8 grid gap-4 sm:grid-cols-2">
             <div className="rounded-[1.5rem] border border-white/14 bg-white/8 p-5">
-              <p className="text-sm text-sky-100/75">Tenant-aware</p>
+              <p className="text-sm text-sky-100/75">Akses Aman</p>
               <p className="mt-2 text-base font-semibold text-white sm:text-lg">
-                Satu session, satu organization aktif
+                Satu akun, akses sesuai workspace
               </p>
               <p className="mt-2 text-sm leading-6 muted-text">
-                Semua request private memakai konteks tenant dari session aktif.
+                Login Anda langsung mengikuti workspace yang sedang aktif.
               </p>
             </div>
             <div className="rounded-[1.5rem] border border-white/14 bg-white/8 p-5">
-              <p className="text-sm text-sky-100/75">Wave 1</p>
+              <p className="text-sm text-sky-100/75">Siap Digunakan</p>
               <p className="mt-2 text-base font-semibold text-white sm:text-lg">
-                Login, signup, dashboard shell
+                Login, daftar, dan kelola akses
               </p>
               <p className="mt-2 text-sm leading-6 muted-text">
-                Fondasi UI siap untuk melanjut ke dashboard, shops, dan team.
+                Semua alur akun utama tersedia untuk mulai memakai produk.
               </p>
             </div>
           </div>

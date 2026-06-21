@@ -16,17 +16,22 @@
       </header>
 
       <section class="panel" id="login-panel">
-        <h2>Login Extension</h2>
         <form id="login-form" class="stack">
-          <label class="field">
-            <input id="api-base-url" name="apiBaseUrl" type="url" required />
-          </label>
           <label class="field">
             <span>Email</span>
             <input id="email" name="email" type="email" required />
           </label>
           <label class="field">
-            <span>Password</span>
+            <span class="field-row">
+              <span>Password</span>
+              <button
+                id="forgot-password-button"
+                class="inline-link"
+                type="button"
+              >
+                Lupa Password?
+              </button>
+            </span>
             <div class="password-field">
               <input id="password" name="password" type="password" required />
               <button
@@ -53,7 +58,12 @@
               </button>
             </div>
           </label>
-          <button class="primary" type="submit">Login Sekarang</button>
+          <div class="action-stack">
+            <button class="primary" type="submit">Masuk</button>
+            <button id="register-button" class="secondary" type="button">
+              Register
+            </button>
+          </div>
         </form>
       </section>
 

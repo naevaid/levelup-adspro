@@ -21,6 +21,18 @@ export const apiEnvValidationSchema = Joi.object({
   MINIO_BUCKET_EXPORTS: Joi.string().default('exports'),
   JWT_SECRET: Joi.string().min(8).default('replace-me-in-local'),
   SESSION_TTL_HOURS: Joi.number().integer().min(1).default(168),
+  APP_BASE_URL: Joi.string()
+    .uri({ scheme: ['http', 'https'] })
+    .default('http://localhost:3000'),
+  PASSWORD_RESET_TTL_MINUTES: Joi.number().integer().min(5).default(60),
+  MAIL_MAILER: Joi.string().default('smtp'),
+  MAIL_HOST: Joi.string().default('localhost'),
+  MAIL_PORT: Joi.number().port().default(465),
+  MAIL_USERNAME: Joi.string().allow('').default(''),
+  MAIL_PASSWORD: Joi.string().allow('').default(''),
+  MAIL_ENCRYPTION: Joi.string().valid('ssl', 'tls', 'starttls', 'none').default('ssl'),
+  MAIL_FROM_ADDRESS: Joi.string().email().default('no-reply@example.com'),
+  MAIL_FROM_NAME: Joi.string().default('LevelUP adsPRO'),
   PAYMENT_BASE_URL: Joi.string()
     .uri({ scheme: ['http', 'https'] })
     .default('https://payment.naeva.id/api/v1'),
