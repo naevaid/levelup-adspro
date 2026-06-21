@@ -138,61 +138,55 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(186,230,253,0.16),_transparent_24%),radial-gradient(circle_at_top_right,_rgba(191,219,254,0.12),_transparent_18%),linear-gradient(180deg,_rgba(25,49,78,0.98)_0%,_rgba(40,72,108,1)_100%)]">
       <div className="mx-auto grid min-h-screen w-full max-w-[1560px] gap-5 px-4 py-4 lg:grid-cols-[270px_minmax(0,1fr)] lg:px-5 lg:py-5">
         <aside className="glass-card rounded-[1.8rem] border border-white/14 p-4 lg:sticky lg:top-5 lg:flex lg:h-[calc(100vh-2.5rem)] lg:flex-col lg:overflow-hidden">
-          <div className="shrink-0">
+          <div className="shrink-0 rounded-[1.35rem] border border-white/14 bg-white/8 p-4">
             <div className="flex items-center gap-3">
               <span className="status-dot" />
               <div>
                 <p className="text-[11px] uppercase tracking-[0.24em] text-sky-100/70">
                   LevelUP adsPRO
                 </p>
-                <p className="mt-1 text-base font-semibold text-white">
-                  {activeOrganization.name}
-                </p>
+                <p className="mt-1 text-base font-semibold text-white">Workspace</p>
               </div>
             </div>
 
-            <div className="mt-5 rounded-[1.35rem] border border-white/14 bg-white/8 p-4">
-              <p className="text-[11px] uppercase tracking-[0.2em] text-sky-100/70">
-                Organization Context
+            <p className="mt-4 text-sm font-medium text-white">
+              {activeOrganization.name}
+            </p>
+            <p className="mt-2 text-sm muted-text">{activeOrganization.slug}</p>
+            <p className="mt-2 text-sm muted-text">
+              Role aktif: {role.toLowerCase().replace("_", " ")}
+            </p>
+            <p className="mt-2 text-sm muted-text">
+              Tipe: {activeOrganizationIsInternal ? "Internal" : "Tenant"}
+            </p>
+            {internalRole ? (
+              <p className="mt-2 text-sm text-sky-100/80">
+                Internal: {internalRole.toLowerCase().replace("_", " ")}
               </p>
-              <p className="mt-2 text-sm font-medium text-white">
-                {activeOrganization.slug}
-              </p>
-              <p className="mt-2 text-sm muted-text">
-                Role aktif: {role.toLowerCase().replace("_", " ")}
-              </p>
-              <p className="mt-2 text-sm muted-text">
-                Workspace: {activeOrganizationIsInternal ? "Internal" : "Tenant"}
-              </p>
-              {internalRole ? (
-                <p className="mt-2 text-sm text-sky-100/80">
-                  Internal: {internalRole.toLowerCase().replace("_", " ")}
-                </p>
-              ) : null}
+            ) : null}
 
-              {organizations.length > 1 ? (
-                <label className="mt-4 block">
-                  <span className="text-[11px] uppercase tracking-[0.2em] text-sky-100/70">
-                    Switch Workspace
-                  </span>
-                  <select
-                    value={activeOrganization.id}
-                    onChange={(event) => {
-                      void switchOrganization(event.target.value);
-                    }}
-                    disabled={isSwitchingOrganization}
-                    className="mt-2 w-full rounded-2xl border border-white/12 bg-slate-950/45 px-3 py-2.5 text-sm text-white outline-none transition focus:border-sky-300/35 disabled:cursor-not-allowed disabled:opacity-70"
-                  >
-                    {organizations.map((organization) => (
-                      <option key={organization.id} value={organization.id}>
-                        {organization.name}
-                        {organization.isInternal ? " (Internal)" : ""}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-            </div>
+            {organizations.length > 1 ? (
+              <label className="mt-4 block">
+                <span className="text-[11px] uppercase tracking-[0.2em] text-sky-100/70">
+                  Switch Workspace
+                </span>
+                <select
+                  value={activeOrganization.id}
+                  onChange={(event) => {
+                    void switchOrganization(event.target.value);
+                  }}
+                  disabled={isSwitchingOrganization}
+                  className="mt-2 w-full rounded-2xl border border-white/12 bg-slate-950/45 px-3 py-2.5 text-sm text-white outline-none transition focus:border-sky-300/35 disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {organizations.map((organization) => (
+                    <option key={organization.id} value={organization.id}>
+                      {organization.name}
+                      {organization.isInternal ? " (Internal)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
           </div>
 
           <div
