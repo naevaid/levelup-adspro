@@ -14,6 +14,7 @@ export type AuthSession = {
     id: string;
     name: string;
     slug: string;
+    isInternal?: boolean;
     status: string;
   };
   membership: {
@@ -53,6 +54,25 @@ export type ExtensionSession = {
     status: string;
     externalId: string;
   } | null;
+};
+
+export type BillingSubscriptionOverview = {
+  subscription: {
+    status: string;
+    plan_code: string;
+    billing_interval: string;
+    current_period_start: string | null;
+    current_period_end: string | null;
+    grace_period_end: string | null;
+  };
+  entitlements: {
+    features: Record<string, unknown>;
+    quotas: Record<string, unknown>;
+  };
+  usage: {
+    active_shops: number;
+    active_members: number;
+  };
 };
 
 export type OrganizationWorkspace = {
@@ -204,6 +224,7 @@ export type ExtensionState = {
   apiBaseUrl: string;
   authSession: AuthSession | null;
   extensionSession: ExtensionSession | null;
+  subscriptionOverview: BillingSubscriptionOverview | null;
   shops: ShopSummary[];
   selectedShopId: string | null;
   lastPage: PageSnapshot | null;

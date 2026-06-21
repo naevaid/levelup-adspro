@@ -1,5 +1,6 @@
 import type {
   AuthSession,
+  BillingSubscriptionOverview,
   ExtensionSession,
   MarketplaceCategoryFeeFilters,
   MarketplaceCategoryFeeSummary,
@@ -182,6 +183,15 @@ export async function listMarketplaceCategoryFees(
   return apiRequest<MarketplaceCategoryFeeSummary[]>(
     baseUrl,
     path,
+    undefined,
+    token,
+  );
+}
+
+export async function getSubscriptionOverview(baseUrl: string, token: string) {
+  return apiRequest<{ data: BillingSubscriptionOverview }>(
+    baseUrl,
+    '/api/v1/subscription',
     undefined,
     token,
   );

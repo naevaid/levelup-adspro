@@ -1,6 +1,7 @@
 import {
   createExtensionSession,
   createIngestionBatch,
+  getSubscriptionOverview,
   listMarketplaceCategoryFees,
   listOrganizations,
   listShops,
@@ -450,7 +451,10 @@ async function createSessionBundle(
     };
   }
 
-  const shops = await listShops(apiBaseUrl, nextAuthSession.accessToken);
+  const [shops, subscriptionResponse] = await Promise.all([
+    listShops(apiBaseUrl, nextAuthSession.accessToken),
+    getSubscriptionOverview(apiBaseUrl, nextAuthSession.accessToken).catch(() => null),
+  ]);
   const selectedShop =
     shopId && shops.some((shop) => shop.id === shopId) ? shopId : null;
   const extensionSession = await createExtensionSession(
@@ -467,6 +471,7 @@ async function createSessionBundle(
     apiBaseUrl,
     authSession: nextAuthSession,
     shops,
+    subscriptionOverview: subscriptionResponse?.data ?? null,
     selectedShopId: selectedShop,
     extensionSession,
     lastSync: {
@@ -505,6 +510,7 @@ async function clearExtensionLoginState(message: string) {
   await patchExtensionState((current) => ({
     authSession: null,
     extensionSession: null,
+    subscriptionOverview: null,
     shops: [],
     selectedShopId: null,
     lastPage: current.lastPage,
@@ -585,6 +591,52 @@ async function ensureExtensionSessionState() {
       ? 'Session extension diperbarui otomatis.'
       : 'Session extension dipulihkan otomatis.',
   );
+}
+
+async function refreshSubscriptionOverviewState() {
+  const state = await getExtensionState();
+  if (!state.authSession) {
+    return state;
+  }
+
+  try {
+    const subscriptionResponse = await getSubscriptionOverview(
+      state.apiBaseUrl,
+      state.authSession.accessToken,
+    );
+
+    return patchExtensionState({
+      subscriptionOverview: subscriptionResponse.data,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'Gagal memuat subscription.';
+
+    if (isAuthSessionExpiredError(message)) {
+      return clearExtensionLoginState(
+        'Session login berakhir. Silakan login kembali.',
+      );
+    }
+
+    return patchExtensionState((current) => ({
+      subscriptionOverview: current.subscriptionOverview,
+      authSession: current.authSession,
+      extensionSession: current.extensionSession,
+      shops: current.shops,
+      selectedShopId: current.selectedShopId,
+      lastPage: current.lastPage,
+      lastSync: current.lastSync,
+    }));
+  }
+}
+
+async function ensurePopupState() {
+  const state = await ensureExtensionSessionState();
+  if (!state.authSession) {
+    return state;
+  }
+
+  return refreshSubscriptionOverviewState();
 }
 
 async function refreshActiveTabSnapshot() {
@@ -1037,7 +1089,7 @@ chrome.runtime.onMessage.addListener((message: BackgroundMessage, _sender, sendR
   const run = async () => {
     switch (message.type) {
       case 'GET_STATE':
-        return ensureExtensionSessionState();
+        return ensurePopupState();
       case 'OPEN_EXTENSION_LOGIN':
         return handleOpenExtensionLogin();
       case 'GET_MARKETPLACE_CATEGORY_FEES':

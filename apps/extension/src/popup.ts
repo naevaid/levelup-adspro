@@ -25,6 +25,17 @@ const userEmail = document.querySelector<HTMLElement>('#user-email');
 const sessionStatus = document.querySelector<HTMLElement>('#session-status');
 const lastSyncAt = document.querySelector<HTMLElement>('#last-sync-at');
 const shopSelect = document.querySelector<HTMLSelectElement>('#shop-select');
+const subscriptionPlan = document.querySelector<HTMLElement>('#subscription-plan');
+const subscriptionStatusBadge = document.querySelector<HTMLElement>('#subscription-status-badge');
+const subscriptionHelper = document.querySelector<HTMLElement>('#subscription-helper');
+const subscriptionPeriod = document.querySelector<HTMLElement>('#subscription-period');
+const subscriptionPeriodEnd = document.querySelector<HTMLElement>('#subscription-period-end');
+const subscriptionShops = document.querySelector<HTMLElement>('#subscription-shops');
+const subscriptionMembers = document.querySelector<HTMLElement>('#subscription-members');
+const openDashboardButton = document.querySelector<HTMLButtonElement>('#open-dashboard-button');
+const upgradeSubscriptionButton = document.querySelector<HTMLButtonElement>(
+  '#upgrade-subscription-button',
+);
 const pageType = document.querySelector<HTMLElement>('#page-type');
 const captureMode = document.querySelector<HTMLElement>('#capture-mode');
 const marketplace = document.querySelector<HTMLElement>('#marketplace');
@@ -57,6 +68,8 @@ function setBusyState(busy: boolean) {
     refreshPageButton,
     syncNowButton,
     shopSelect,
+    openDashboardButton,
+    upgradeSubscriptionButton,
     forgotPasswordButton,
     registerButton,
   ]) {
@@ -137,6 +150,150 @@ function renderResultsList(state: ExtensionState) {
   }
 }
 
+function formatDateTime(value: string | null | undefined) {
+  if (!value) {
+    return '-';
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat('id-ID', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date);
+}
+
+function formatInterval(interval: string | null | undefined) {
+  switch (interval) {
+    case 'MONTHLY':
+      return 'Bulanan';
+    case 'YEARLY':
+      return 'Tahunan';
+    default:
+      return interval ?? '-';
+  }
+}
+
+function formatStatusLabel(status: string | null | undefined) {
+  if (!status) {
+    return '-';
+  }
+
+  return status
+    .toLowerCase()
+    .split('_')
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ');
+}
+
+function getStatusTone(status: string | null | undefined) {
+  switch (status) {
+    case 'ACTIVE':
+    case 'PAID':
+    case 'SUCCESS':
+      return 'success';
+    case 'PENDING':
+    case 'PENDING_ACTIVATION':
+    case 'TRIALING':
+      return 'warning';
+    case 'EXPIRED':
+    case 'CANCELED':
+    case 'PAST_DUE':
+      return 'danger';
+    default:
+      return '';
+  }
+}
+
+function formatPlanCode(planCode: string | null | undefined) {
+  if (!planCode) {
+    return 'Belum ada plan aktif';
+  }
+
+  return planCode
+    .split(/[-_]/g)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ');
+}
+
+function readNumericQuota(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+function formatUsageLabel(used: number, limit: unknown, unit: string) {
+  const numericLimit = readNumericQuota(limit);
+  if (numericLimit === null || numericLimit <= 0) {
+    return `${used.toLocaleString('id-ID')} ${unit}`;
+  }
+
+  return `${used.toLocaleString('id-ID')} / ${numericLimit.toLocaleString('id-ID')} ${unit}`;
+}
+
+function renderSubscriptionCard(state: ExtensionState) {
+  const overview = state.subscriptionOverview;
+  const subscription = overview?.subscription ?? null;
+  const quotas = overview?.entitlements.quotas ?? {};
+  const isInternalWorkspace = Boolean(state.authSession?.activeOrganization.isInternal);
+  const statusLabel = formatStatusLabel(subscription?.status);
+  const statusTone = getStatusTone(subscription?.status);
+
+  subscriptionPlan!.textContent = formatPlanCode(subscription?.plan_code);
+  subscriptionStatusBadge!.textContent = statusLabel;
+  subscriptionStatusBadge!.className = `status-pill${statusTone ? ` ${statusTone}` : ''}`;
+  subscriptionPeriod!.textContent = formatInterval(subscription?.billing_interval);
+  subscriptionPeriodEnd!.textContent = formatDateTime(subscription?.current_period_end);
+  subscriptionShops!.textContent = formatUsageLabel(
+    overview?.usage.active_shops ?? 0,
+    quotas.max_shops,
+    'shop',
+  );
+  subscriptionMembers!.textContent = formatUsageLabel(
+    overview?.usage.active_members ?? 0,
+    quotas.max_members,
+    'member',
+  );
+
+  if (isInternalWorkspace) {
+    subscriptionHelper!.textContent =
+      'Workspace internal tidak memakai upgrade billing tenant. Gunakan dashboard untuk pengelolaan internal.';
+    upgradeSubscriptionButton?.classList.add('hidden');
+    return;
+  }
+
+  upgradeSubscriptionButton?.classList.remove('hidden');
+
+  if (!overview || !subscription) {
+    subscriptionHelper!.textContent =
+      'Buka dashboard untuk melihat pilihan paket dan aktifkan subscription yang paling sesuai untuk workspace Anda.';
+    if (upgradeSubscriptionButton) {
+      upgradeSubscriptionButton.textContent = 'Lihat Paket';
+    }
+    return;
+  }
+
+  if (upgradeSubscriptionButton) {
+    upgradeSubscriptionButton.textContent =
+      subscription.status === 'ACTIVE' ? 'Upgrade Subscription' : 'Aktifkan Subscription';
+  }
+
+  subscriptionHelper!.textContent =
+    subscription.status === 'ACTIVE'
+      ? 'Workspace sudah aktif. Upgrade subscription untuk menambah kuota shop, member, dan membuka peluang pertumbuhan yang lebih besar.'
+      : 'Subscription workspace belum aktif penuh. Buka halaman subscription untuk melanjutkan aktivasi atau upgrade paket.';
+}
+
 function renderState(state: ExtensionState) {
   currentAppBaseUrl = getAppBaseUrl(state.apiBaseUrl || DEFAULT_API_BASE_URL);
 
@@ -167,6 +324,7 @@ function renderState(state: ExtensionState) {
   pageUrl!.textContent = state.lastPage?.url ?? '-';
   activityMessage!.textContent = state.lastSync.message;
 
+  renderSubscriptionCard(state);
   renderShopOptions(state.shops, state.selectedShopId);
   renderResultsList(state);
 }
@@ -271,6 +429,20 @@ forgotPasswordButton?.addEventListener('click', async () => {
 registerButton?.addEventListener('click', async () => {
   await chrome.tabs.create({
     url: `${currentAppBaseUrl}/signup`,
+    active: true,
+  });
+});
+
+openDashboardButton?.addEventListener('click', async () => {
+  await chrome.tabs.create({
+    url: `${currentAppBaseUrl}/app/dashboard`,
+    active: true,
+  });
+});
+
+upgradeSubscriptionButton?.addEventListener('click', async () => {
+  await chrome.tabs.create({
+    url: `${currentAppBaseUrl}/app/subscription`,
     active: true,
   });
 });
