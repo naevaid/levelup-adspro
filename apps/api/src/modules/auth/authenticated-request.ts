@@ -4,8 +4,8 @@ import { Request } from 'express';
 export type AuthenticatedRequest = Request & {
   auth: {
     sessionId: string;
-    user: Pick<User, 'id' | 'email' | 'name' | 'status'>;
-    organization: Pick<Organization, 'id' | 'name' | 'slug' | 'status'>;
+    user: Pick<User, 'id' | 'email' | 'name' | 'status' | 'internalRole'>;
+    organization: Pick<Organization, 'id' | 'name' | 'slug' | 'status' | 'isInternal'>;
     membership: Pick<Membership, 'id' | 'role' | 'status'>;
   };
 };

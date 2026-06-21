@@ -29,4 +29,10 @@ export const apiEnvValidationSchema = Joi.object({
   BILLING_CALLBACK_URL: Joi.string()
     .uri({ scheme: ['http', 'https'] })
     .default('http://localhost:3001/api/billing/payment/callback'),
+  BILLING_RENEWAL_LEAD_DAYS: Joi.number().integer().min(1).default(3),
+  BILLING_GRACE_PERIOD_DAYS: Joi.number().integer().min(1).default(7),
+  BILLING_UNSUCCESSFUL_TRANSACTION_RETENTION_HOURS: Joi.number()
+    .integer()
+    .min(1)
+    .default(24),
 });

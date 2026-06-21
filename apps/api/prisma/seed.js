@@ -29,6 +29,7 @@ const plans = [
   {
     code: 'free-monthly',
     name: 'Free',
+    isInternal: false,
     billingInterval: BillingInterval.MONTHLY,
     priceAmount: 0,
     currency: 'IDR',
@@ -46,8 +47,9 @@ const plans = [
   {
     code: 'starter-monthly',
     name: 'Starter',
+    isInternal: false,
     billingInterval: BillingInterval.MONTHLY,
-    priceAmount: 0,
+    priceAmount: 10000,
     currency: 'IDR',
     sortOrder: 10,
     shopLimit: 3,
@@ -63,8 +65,9 @@ const plans = [
   {
     code: 'pro-monthly',
     name: 'Pro',
+    isInternal: false,
     billingInterval: BillingInterval.MONTHLY,
-    priceAmount: 0,
+    priceAmount: 35000,
     currency: 'IDR',
     sortOrder: 20,
     shopLimit: 10,
@@ -80,6 +83,7 @@ const plans = [
   {
     code: 'agency-monthly',
     name: 'Agency',
+    isInternal: false,
     billingInterval: BillingInterval.MONTHLY,
     priceAmount: 0,
     currency: 'IDR',
@@ -87,12 +91,33 @@ const plans = [
     shopLimit: 50,
     memberLimit: 25,
     historyDays: 365,
+    status: PlanStatus.INACTIVE,
+    featuresJson: {
+      analytics: true,
+      recommendations: true,
+      marketResearch: true,
+      multiWorkspace: true,
+    },
+  },
+  {
+    code: 'internal-unlimited',
+    name: 'Internal Unlimited',
+    isInternal: true,
+    billingInterval: BillingInterval.MONTHLY,
+    priceAmount: 0,
+    currency: 'IDR',
+    sortOrder: 999,
+    shopLimit: 100000,
+    memberLimit: 100000,
+    historyDays: 3650,
     status: PlanStatus.ACTIVE,
     featuresJson: {
       analytics: true,
       recommendations: true,
       marketResearch: true,
       multiWorkspace: true,
+      internalAdmin: true,
+      unlimited: true,
     },
   },
 ];
@@ -521,7 +546,6 @@ async function buildShopeeCategoryFeeSeedEntries() {
 }
 
 async function upsertMarketplaceCategoryFee({
-  organizationId,
   marketplaceId,
   storeType,
   primaryCategory,
@@ -538,7 +562,6 @@ async function upsertMarketplaceCategoryFee({
   try {
     await prisma.marketplaceCategoryFee.create({
       data: {
-        organizationId,
         marketplaceId,
         storeType,
         primaryCategory,
@@ -560,7 +583,6 @@ async function upsertMarketplaceCategoryFee({
     ) {
       await prisma.marketplaceCategoryFee.updateMany({
         where: {
-          organizationId,
           marketplaceId,
           storeType,
           primaryCategory,
@@ -593,116 +615,100 @@ async function seedShopeeCategoryFees() {
     throw new Error('Marketplace Shopee belum tersedia saat proses seed fee kategori.');
   }
 
-  const organizations = await prisma.organization.findMany({
-    select: { id: true },
-    orderBy: { createdAt: 'asc' },
-  });
-
-  if (organizations.length === 0) {
-    console.log(
-      'Tidak ada organisasi yang tersedia. Seeder fee kategori Shopee dilewati.',
-    );
-    return;
-  }
-
   const feeEntries = await buildShopeeCategoryFeeSeedEntries();
   console.log(
-    `Menyiapkan ${feeEntries.length} fee kategori Shopee untuk ${organizations.length} organisasi.`,
+    `Menyiapkan ${feeEntries.length} fee kategori Shopee untuk katalog global.`,
   );
 
-  for (const organization of organizations) {
-    const existingFees = await prisma.marketplaceCategoryFee.findMany({
-      where: {
-        organizationId: organization.id,
-        marketplaceId: shopeeMarketplace.id,
-      },
-      select: {
-        id: true,
-        storeType: true,
-        primaryCategory: true,
-        secondaryCategory: true,
-        categoryName: true,
-        gratisOngkirPctRegular: true,
-        gratisOngkirCapRegular: true,
-        gratisOngkirPctSpecial: true,
-        gratisOngkirCapSpecial: true,
-      },
-    });
-    const existingFeeMap = new Map(
-      existingFees.map((fee) => [
-        [
-          fee.storeType,
-          fee.primaryCategory.trim().toLowerCase(),
-          (fee.secondaryCategory || '').trim().toLowerCase(),
-          fee.categoryName.trim().toLowerCase(),
-        ].join('|||'),
-        fee,
-      ]),
-    );
-    const existingBucketKeys = new Set(
-      existingFees.map((fee) =>
-        [
-          fee.storeType,
-          fee.primaryCategory.trim().toLowerCase(),
-          (fee.secondaryCategory || '').trim().toLowerCase(),
-        ].join('|||'),
-      ),
-    );
+  const existingFees = await prisma.marketplaceCategoryFee.findMany({
+    where: {
+      marketplaceId: shopeeMarketplace.id,
+    },
+    select: {
+      id: true,
+      storeType: true,
+      primaryCategory: true,
+      secondaryCategory: true,
+      categoryName: true,
+      gratisOngkirPctRegular: true,
+      gratisOngkirCapRegular: true,
+      gratisOngkirPctSpecial: true,
+      gratisOngkirCapSpecial: true,
+    },
+  });
+  const existingFeeMap = new Map(
+    existingFees.map((fee) => [
+      [
+        fee.storeType,
+        fee.primaryCategory.trim().toLowerCase(),
+        (fee.secondaryCategory || '').trim().toLowerCase(),
+        fee.categoryName.trim().toLowerCase(),
+      ].join('|||'),
+      fee,
+    ]),
+  );
+  const existingBucketKeys = new Set(
+    existingFees.map((fee) =>
+      [
+        fee.storeType,
+        fee.primaryCategory.trim().toLowerCase(),
+        (fee.secondaryCategory || '').trim().toLowerCase(),
+      ].join('|||'),
+    ),
+  );
 
-    for (const entry of feeEntries) {
-      const bucketKey = [
+  for (const entry of feeEntries) {
+    const bucketKey = [
+      entry.storeType,
+      entry.primaryCategory.trim().toLowerCase(),
+      (entry.secondaryCategory || '').trim().toLowerCase(),
+    ].join('|||');
+    const existingFee = existingFeeMap.get(
+      [
         entry.storeType,
         entry.primaryCategory.trim().toLowerCase(),
         (entry.secondaryCategory || '').trim().toLowerCase(),
-      ].join('|||');
-      const existingFee = existingFeeMap.get(
-        [
-          entry.storeType,
-          entry.primaryCategory.trim().toLowerCase(),
-          (entry.secondaryCategory || '').trim().toLowerCase(),
-          entry.categoryName.trim().toLowerCase(),
-        ].join('|||'),
-      );
+        entry.categoryName.trim().toLowerCase(),
+      ].join('|||'),
+    );
 
-      if (
-        existingFee &&
-        existingFee.gratisOngkirPctRegular === 0 &&
-        existingFee.gratisOngkirCapRegular === 0 &&
-        existingFee.gratisOngkirPctSpecial === 0 &&
-        existingFee.gratisOngkirCapSpecial === 0 &&
-        (entry.gratisOngkirPctRegular > 0 || entry.gratisOngkirPctSpecial > 0)
-      ) {
-        await prisma.marketplaceCategoryFee.update({
-          where: { id: existingFee.id },
-          data: {
-            gratisOngkirPctRegular: entry.gratisOngkirPctRegular,
-            gratisOngkirCapRegular: entry.gratisOngkirCapRegular,
-            gratisOngkirPctSpecial: entry.gratisOngkirPctSpecial,
-            gratisOngkirCapSpecial: entry.gratisOngkirCapSpecial,
-          },
-        });
-      }
-
-      if (existingBucketKeys.has(bucketKey)) {
-        continue;
-      }
-
-      await upsertMarketplaceCategoryFee({
-        organizationId: organization.id,
-        marketplaceId: shopeeMarketplace.id,
-        storeType: entry.storeType,
-        primaryCategory: entry.primaryCategory,
-        secondaryCategory: entry.secondaryCategory,
-        categoryName: entry.categoryName,
-        feePercent: entry.feePercent,
-        gratisOngkirPctRegular: entry.gratisOngkirPctRegular,
-        gratisOngkirCapRegular: entry.gratisOngkirCapRegular,
-        gratisOngkirPctSpecial: entry.gratisOngkirPctSpecial,
-        gratisOngkirCapSpecial: entry.gratisOngkirCapSpecial,
-        isActive: true,
-        notes: entry.notes,
+    if (
+      existingFee &&
+      existingFee.gratisOngkirPctRegular === 0 &&
+      existingFee.gratisOngkirCapRegular === 0 &&
+      existingFee.gratisOngkirPctSpecial === 0 &&
+      existingFee.gratisOngkirCapSpecial === 0 &&
+      (entry.gratisOngkirPctRegular > 0 || entry.gratisOngkirPctSpecial > 0)
+    ) {
+      await prisma.marketplaceCategoryFee.update({
+        where: { id: existingFee.id },
+        data: {
+          gratisOngkirPctRegular: entry.gratisOngkirPctRegular,
+          gratisOngkirCapRegular: entry.gratisOngkirCapRegular,
+          gratisOngkirPctSpecial: entry.gratisOngkirPctSpecial,
+          gratisOngkirCapSpecial: entry.gratisOngkirCapSpecial,
+        },
       });
     }
+
+    if (existingBucketKeys.has(bucketKey)) {
+      continue;
+    }
+
+    await upsertMarketplaceCategoryFee({
+      marketplaceId: shopeeMarketplace.id,
+      storeType: entry.storeType,
+      primaryCategory: entry.primaryCategory,
+      secondaryCategory: entry.secondaryCategory,
+      categoryName: entry.categoryName,
+      feePercent: entry.feePercent,
+      gratisOngkirPctRegular: entry.gratisOngkirPctRegular,
+      gratisOngkirCapRegular: entry.gratisOngkirCapRegular,
+      gratisOngkirPctSpecial: entry.gratisOngkirPctSpecial,
+      gratisOngkirCapSpecial: entry.gratisOngkirCapSpecial,
+      isActive: true,
+      notes: entry.notes,
+    });
   }
 }
 

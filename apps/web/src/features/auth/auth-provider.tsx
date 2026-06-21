@@ -18,6 +18,8 @@ import {
 import type {
   CurrentOrganizationResponse,
   MeResponse,
+  OrganizationListResponse,
+  OrganizationWorkspace,
   StoredAuthSession,
 } from "./types";
 
@@ -26,11 +28,14 @@ type AuthContextValue = {
   session: StoredAuthSession | null;
   profile: MeResponse | null;
   currentOrganization: CurrentOrganizationResponse | null;
+  organizations: OrganizationWorkspace[];
   isRefreshingProfile: boolean;
+  isSwitchingOrganization: boolean;
   profileError: string | null;
   saveSession: (session: StoredAuthSession) => void;
   clearSession: () => void;
   refreshProfile: () => Promise<void>;
+  switchOrganization: (organizationId: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -41,7 +46,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<MeResponse | null>(null);
   const [currentOrganization, setCurrentOrganization] =
     useState<CurrentOrganizationResponse | null>(null);
+  const [organizations, setOrganizations] = useState<OrganizationWorkspace[]>([]);
   const [isRefreshingProfile, setIsRefreshingProfile] = useState(false);
+  const [isSwitchingOrganization, setIsSwitchingOrganization] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -72,6 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
     setProfile(null);
     setCurrentOrganization(null);
+    setOrganizations([]);
     setProfileError(null);
   }, []);
 
@@ -80,8 +88,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(nextSession);
     setProfile(null);
     setCurrentOrganization(null);
+    setOrganizations([]);
     setProfileError(null);
   }, []);
+
+  const syncSessionFromProfile = useCallback(
+    (me: MeResponse) => {
+      setSession((currentSession) => {
+        if (!currentSession) {
+          return currentSession;
+        }
+
+        const nextSession: StoredAuthSession = {
+          ...currentSession,
+          user: me.user,
+          activeOrganization: me.activeOrganization,
+          membership: me.membership,
+        };
+
+        writeStoredSession(nextSession);
+        return nextSession;
+      });
+    },
+    [],
+  );
 
   const refreshProfile = useCallback(async () => {
     if (!session) {
@@ -93,7 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const authorization = `${session.tokenType} ${session.accessToken}`;
-      const [me, organization] = await Promise.all([
+      const [me, organization, workspaces] = await Promise.all([
         apiFetch<MeResponse>("/api/v1/me", {
           headers: {
             Authorization: authorization,
@@ -104,10 +134,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             Authorization: authorization,
           },
         }),
+        apiFetch<OrganizationListResponse>("/api/v1/organizations", {
+          headers: {
+            Authorization: authorization,
+          },
+        }),
       ]);
 
+      syncSessionFromProfile(me);
       setProfile(me);
       setCurrentOrganization(organization);
+      setOrganizations(workspaces.data);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Gagal memuat profil user.";
@@ -123,7 +160,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsRefreshingProfile(false);
     }
-  }, [clearSessionState, session]);
+  }, [clearSessionState, session, syncSessionFromProfile]);
+
+  const switchOrganization = useCallback(
+    async (organizationId: string) => {
+      if (!session) {
+        return;
+      }
+
+      if (session.activeOrganization.id === organizationId) {
+        return;
+      }
+
+      setIsSwitchingOrganization(true);
+      setProfileError(null);
+
+      try {
+        const authorization = `${session.tokenType} ${session.accessToken}`;
+        await apiFetch("/api/v1/organizations/switch", {
+          method: "POST",
+          headers: {
+            Authorization: authorization,
+          },
+          body: JSON.stringify({
+            organizationId,
+          }),
+        });
+
+        await refreshProfile();
+      } finally {
+        setIsSwitchingOrganization(false);
+      }
+    },
+    [refreshProfile, session],
+  );
 
   useEffect(() => {
     if (!session) {
@@ -143,22 +213,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       profile,
       currentOrganization,
+      organizations,
       isRefreshingProfile,
+      isSwitchingOrganization,
       profileError,
       saveSession,
       clearSession: clearSessionState,
       refreshProfile,
+      switchOrganization,
     }),
     [
+      organizations,
       currentOrganization,
       clearSessionState,
       isReady,
       isRefreshingProfile,
+      isSwitchingOrganization,
       profile,
       profileError,
       refreshProfile,
       session,
       saveSession,
+      switchOrganization,
     ],
   );
 

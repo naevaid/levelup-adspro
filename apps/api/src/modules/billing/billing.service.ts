@@ -51,6 +51,11 @@ type CallbackPayload = {
   transaction_time?: unknown;
 };
 
+type BillingActor = {
+  email: string;
+  name: string;
+};
+
 @Injectable()
 export class BillingService {
   constructor(
@@ -62,7 +67,7 @@ export class BillingService {
 
   async listPlans() {
     const plans = await this.prisma.plan.findMany({
-      where: { status: PlanStatus.ACTIVE },
+      where: { status: PlanStatus.ACTIVE, isInternal: false },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
     });
 
@@ -126,19 +131,284 @@ export class BillingService {
     };
   }
 
+  async processRenewalBilling(referenceDate = new Date()) {
+    const renewalWindowEnd = this.calculateRenewalWindowEnd(referenceDate);
+    const subscriptions = await this.prisma.subscription.findMany({
+      where: {
+        status: SubscriptionStatus.ACTIVE,
+        autoRenew: true,
+        cancelAtPeriodEnd: false,
+        currentPeriodEnd: {
+          gte: referenceDate,
+          lte: renewalWindowEnd,
+        },
+      },
+      include: {
+        plan: true,
+        organization: {
+          include: {
+            ownerUser: true,
+          },
+        },
+      },
+    });
+
+    const renewableSubscriptions = subscriptions.filter(
+      (subscription) =>
+        subscription.currentPeriodEnd &&
+        subscription.plan.status === PlanStatus.ACTIVE &&
+        !subscription.plan.isInternal &&
+        subscription.plan.priceAmount > 0,
+    );
+
+    if (renewableSubscriptions.length === 0) {
+      return { created: 0, failed: 0, skipped: 0 };
+    }
+
+    await this.paymentClientService.ensureReadiness();
+
+    let created = 0;
+    let failed = 0;
+    let skipped = 0;
+
+    for (const subscription of renewableSubscriptions) {
+      const renewalDueAt = subscription.currentPeriodEnd;
+      if (!renewalDueAt) {
+        skipped += 1;
+        continue;
+      }
+
+      const existingInvoice = await this.prisma.billingInvoice.findFirst({
+        where: {
+          subscriptionId: subscription.id,
+          dueAt: renewalDueAt,
+          status: {
+            in: [
+              InvoiceStatus.DRAFT,
+              InvoiceStatus.ISSUED,
+              InvoiceStatus.PENDING_PAYMENT,
+              InvoiceStatus.PAID,
+            ],
+          },
+        },
+      });
+
+      if (existingInvoice) {
+        skipped += 1;
+        continue;
+      }
+
+      const invoiceNumber = this.generateInvoiceNumber(referenceDate);
+      const orderId = invoiceNumber;
+      const actor: BillingActor = {
+        email: subscription.organization.ownerUser.email,
+        name: subscription.organization.ownerUser.name,
+      };
+      const invoice = await this.prisma.billingInvoice.create({
+        data: {
+          invoiceNumber,
+          organizationId: subscription.organizationId,
+          subscriptionId: subscription.id,
+          planId: subscription.planId,
+          billingInterval: subscription.plan.billingInterval,
+          amount: subscription.plan.priceAmount,
+          currency: subscription.plan.currency,
+          status: InvoiceStatus.DRAFT,
+          orderId,
+          description: this.buildRenewalDescription(subscription.plan),
+          issuedAt: referenceDate,
+          dueAt: renewalDueAt,
+          metadataJson: {
+            organization_id: subscription.organizationId,
+            plan_code: subscription.plan.code,
+            subscription_id: subscription.id,
+            source: 'levelup-adspro',
+            billing_cycle: 'renewal',
+            renewal_period_start: renewalDueAt.toISOString(),
+          },
+        },
+      });
+
+      try {
+        const customerDetails = this.buildPaymentCustomerDetails(actor);
+        const charge = await this.paymentClientService.createCharge({
+          order_id: orderId,
+          gross_amount: subscription.plan.priceAmount,
+          currency: subscription.plan.currency,
+          expires_at: renewalDueAt.toISOString(),
+          customer_details: customerDetails,
+          item_details: [
+            {
+              id: subscription.plan.code,
+              price: subscription.plan.priceAmount,
+              quantity: 1,
+              name: `LevelUP adsPRO ${subscription.plan.name} ${subscription.plan.billingInterval.toLowerCase()} renewal`,
+            },
+          ],
+          custom_callback_url:
+            this.configService.getOrThrow<string>('BILLING_CALLBACK_URL'),
+          metadata: {
+            organization_id: subscription.organizationId,
+            subscription_id: subscription.id,
+            invoice_id: invoice.id,
+            plan_code: subscription.plan.code,
+            billing_interval: subscription.plan.billingInterval.toLowerCase(),
+            source: 'levelup-adspro',
+            billing_cycle: 'renewal',
+          },
+        });
+
+        await this.prisma.billingInvoice.update({
+          where: { id: invoice.id },
+          data: {
+            status: InvoiceStatus.PENDING_PAYMENT,
+            gatewayOrderId: charge.gatewayOrderId,
+          },
+        });
+
+        await this.prisma.billingPaymentTransaction.upsert({
+          where: { invoiceId: invoice.id },
+          update: {
+            provider: 'midtrans',
+            paymentService: 'payment.naeva.id',
+            orderId,
+            gatewayOrderId: charge.gatewayOrderId,
+            redirectUrl: charge.redirectUrl,
+            snapToken: charge.snapToken,
+            rawChargeResponseJson:
+              charge.rawResponse as Prisma.InputJsonValue,
+            transactionStatus: charge.status,
+          },
+          create: {
+            invoiceId: invoice.id,
+            provider: 'midtrans',
+            paymentService: 'payment.naeva.id',
+            orderId,
+            gatewayOrderId: charge.gatewayOrderId,
+            redirectUrl: charge.redirectUrl,
+            snapToken: charge.snapToken,
+            rawChargeResponseJson:
+              charge.rawResponse as Prisma.InputJsonValue,
+            transactionStatus: charge.status,
+          },
+        });
+
+        created += 1;
+      } catch (error) {
+        await this.prisma.billingInvoice.update({
+          where: { id: invoice.id },
+          data: {
+            status: InvoiceStatus.FAILED,
+            failedAt: new Date(),
+          },
+        });
+        failed += 1;
+      }
+    }
+
+    return { created, failed, skipped };
+  }
+
+  async reconcileSubscriptionLifecycle(referenceDate = new Date()) {
+    const subscriptions = await this.prisma.subscription.findMany({
+      where: {
+        OR: [
+          {
+            status: SubscriptionStatus.ACTIVE,
+            currentPeriodEnd: { lt: referenceDate },
+          },
+          {
+            status: SubscriptionStatus.PAST_DUE,
+            currentPeriodEnd: { lt: referenceDate },
+          },
+          {
+            status: SubscriptionStatus.GRACE_PERIOD,
+            gracePeriodEnd: { lt: referenceDate },
+          },
+        ],
+      },
+      include: { plan: true },
+    });
+
+    let transitioned = 0;
+
+    for (const subscription of subscriptions) {
+      let data: Prisma.SubscriptionUpdateInput | null = null;
+
+      if (
+        subscription.status === SubscriptionStatus.GRACE_PERIOD &&
+        subscription.gracePeriodEnd &&
+        subscription.gracePeriodEnd < referenceDate
+      ) {
+        data = {
+          status: SubscriptionStatus.EXPIRED,
+          expiredAt: referenceDate,
+          endsAt: subscription.currentPeriodEnd ?? referenceDate,
+        };
+      } else if (
+        (subscription.status === SubscriptionStatus.ACTIVE ||
+          subscription.status === SubscriptionStatus.PAST_DUE) &&
+        subscription.currentPeriodEnd &&
+        subscription.currentPeriodEnd < referenceDate
+      ) {
+        if (subscription.cancelAtPeriodEnd) {
+          data = {
+            status: SubscriptionStatus.CANCELED,
+            canceledAt: subscription.currentPeriodEnd,
+            endsAt: subscription.currentPeriodEnd,
+            gracePeriodEnd: null,
+            expiredAt: null,
+          };
+        } else {
+          data = {
+            status: SubscriptionStatus.GRACE_PERIOD,
+            gracePeriodEnd: this.calculateGracePeriodEnd(
+              subscription.currentPeriodEnd,
+            ),
+            endsAt: subscription.currentPeriodEnd,
+            expiredAt: null,
+          };
+        }
+      }
+
+      if (!data) {
+        continue;
+      }
+
+      const nextSubscription = await this.prisma.subscription.update({
+        where: { id: subscription.id },
+        data,
+        include: { plan: true },
+      });
+
+      await this.refreshEntitlementSnapshot(
+        subscription.organizationId,
+        nextSubscription,
+      );
+      transitioned += 1;
+    }
+
+    return { transitioned };
+  }
+
   async checkout(
     organizationId: string,
     membershipRole: MembershipRole,
-    actor: {
-      email: string;
-      name: string;
-    },
+    actor: BillingActor,
     dto: CheckoutDto,
   ) {
     this.assertOwner(membershipRole);
 
     const plan = await this.resolvePlan(dto);
+    const customerDetails = this.buildPaymentCustomerDetails(actor);
     const currentSubscription = await this.ensureSubscriptionWithPlan(organizationId);
+
+    if (currentSubscription.plan.isInternal) {
+      throw new ForbiddenException(
+        'Workspace internal tidak memakai checkout subscription tenant.',
+      );
+    }
+
     const isFreePlan = plan.code.startsWith('free');
 
     if (plan.priceAmount <= 0 && !isFreePlan) {
@@ -164,6 +434,7 @@ export class BillingService {
             ? SubscriptionStatus.PENDING_ACTIVATION
             : SubscriptionStatus.ACTIVE,
         provider: plan.priceAmount > 0 ? 'payment.naeva.id' : 'internal-free',
+        autoRenew: plan.priceAmount > 0,
         cancelAtPeriodEnd: false,
         canceledAt: null,
         expiredAt: null,
@@ -191,6 +462,7 @@ export class BillingService {
           plan_code: plan.code,
           subscription_id: subscription.id,
           source: 'levelup-adspro',
+          billing_cycle: 'checkout',
         },
       },
     });
@@ -201,6 +473,7 @@ export class BillingService {
         plan,
         now,
         null,
+        invoice.metadataJson,
       );
       await this.refreshEntitlementSnapshot(organizationId, activatedSubscription);
 
@@ -219,10 +492,7 @@ export class BillingService {
         order_id: orderId,
         gross_amount: plan.priceAmount,
         currency: plan.currency,
-        customer_details: {
-          first_name: actor.name.trim() || 'Owner',
-          email: actor.email,
-        },
+        customer_details: customerDetails,
         item_details: [
           {
             id: plan.code,
@@ -586,6 +856,20 @@ export class BillingService {
     }
   }
 
+  private buildPaymentCustomerDetails(actor: { email: string; name: string }) {
+    const normalizedName = actor.name.trim();
+    const [firstName = 'Owner', ...restNameParts] = normalizedName
+      ? normalizedName.split(/\s+/)
+      : [];
+    const lastName = restNameParts.join(' ').trim();
+
+    return {
+      first_name: firstName,
+      ...(lastName ? { last_name: lastName } : {}),
+      ...(actor.email ? { email: actor.email } : {}),
+    };
+  }
+
   private async resolvePlan(dto: CheckoutDto) {
     const requestCode = dto.planCode.trim().toLowerCase();
     const baseCode = requestCode.replace(/-(monthly|yearly)$/i, '');
@@ -593,6 +877,7 @@ export class BillingService {
     const plan = await this.prisma.plan.findFirst({
       where: {
         status: PlanStatus.ACTIVE,
+        isInternal: false,
         billingInterval: dto.billingInterval,
         code: {
           in: [requestCode, `${baseCode}-${intervalSuffix}`],
@@ -622,7 +907,7 @@ export class BillingService {
         where: { code: 'free-monthly' },
       })) ??
       (await this.prisma.plan.findFirst({
-        where: { status: PlanStatus.ACTIVE },
+        where: { status: PlanStatus.ACTIVE, isInternal: false },
         orderBy: { createdAt: 'asc' },
       }));
 
@@ -666,20 +951,44 @@ export class BillingService {
     plan: Plan,
     activatedAt: Date,
     providerReference: string | null,
+    invoiceMetadata?: Prisma.JsonValue,
   ) {
-    const periodEnd = this.calculatePeriodEnd(activatedAt, plan.billingInterval);
+    const currentSubscription = await this.prisma.subscription.findUnique({
+      where: { id: subscriptionId },
+    });
+
+    if (!currentSubscription) {
+      throw new NotFoundException('Subscription tidak ditemukan.');
+    }
+
+    const invoiceCycle = this.extractInvoiceCycle(invoiceMetadata);
+    const nextPeriodStart =
+      invoiceCycle === 'renewal' &&
+      currentSubscription.currentPeriodEnd &&
+      currentSubscription.currentPeriodEnd > activatedAt
+        ? currentSubscription.currentPeriodEnd
+        : activatedAt;
+    const periodEnd = this.calculatePeriodEnd(nextPeriodStart, plan.billingInterval);
 
     return this.prisma.subscription.update({
       where: { id: subscriptionId },
       data: {
         planId: plan.id,
         status: SubscriptionStatus.ACTIVE,
-        startsAt: activatedAt,
-        currentPeriodStart: activatedAt,
+        startsAt:
+          invoiceCycle === 'renewal'
+            ? currentSubscription.startsAt
+            : activatedAt,
+        endsAt: null,
+        currentPeriodStart: nextPeriodStart,
         currentPeriodEnd: periodEnd,
-        activatedAt,
+        activatedAt:
+          invoiceCycle === 'renewal'
+            ? (currentSubscription.activatedAt ?? activatedAt)
+            : activatedAt,
         provider: providerReference ? 'payment.naeva.id' : 'internal-free',
         providerReference,
+        autoRenew: plan.priceAmount > 0 ? currentSubscription.autoRenew : false,
         canceledAt: null,
         expiredAt: null,
         gracePeriodEnd: null,
@@ -816,6 +1125,7 @@ export class BillingService {
         invoice.plan,
         transitionedAt,
         snapshot.gatewayOrderId,
+        invoice.metadataJson,
       );
     }
 
@@ -847,8 +1157,33 @@ export class BillingService {
 
   private calculateGracePeriodEnd(referenceDate: Date) {
     const grace = new Date(referenceDate);
-    grace.setUTCDate(grace.getUTCDate() + 7);
+    grace.setUTCDate(
+      grace.getUTCDate() +
+        this.configService.get<number>('BILLING_GRACE_PERIOD_DAYS', 7),
+    );
     return grace;
+  }
+
+  private calculateRenewalWindowEnd(referenceDate: Date) {
+    const renewalWindowEnd = new Date(referenceDate);
+    renewalWindowEnd.setUTCDate(
+      renewalWindowEnd.getUTCDate() +
+        this.configService.get<number>('BILLING_RENEWAL_LEAD_DAYS', 3),
+    );
+    return renewalWindowEnd;
+  }
+
+  private buildRenewalDescription(plan: Plan) {
+    return `${plan.name} ${plan.billingInterval.toLowerCase()} renewal`;
+  }
+
+  private extractInvoiceCycle(metadataJson?: Prisma.JsonValue) {
+    if (!metadataJson || typeof metadataJson !== 'object') {
+      return 'checkout';
+    }
+
+    const metadata = this.toPlainObject(metadataJson);
+    return metadata.billing_cycle === 'renewal' ? 'renewal' : 'checkout';
   }
 
   private mapInvoiceStatusFromTransaction(status: string | null) {

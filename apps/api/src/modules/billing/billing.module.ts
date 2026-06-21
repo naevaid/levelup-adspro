@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
+import { BillingCleanupService } from './billing-cleanup.service';
 import { BillingCallbackController } from './billing-callback.controller';
 import { BillingController } from './billing.controller';
 import { BillingService } from './billing.service';
@@ -9,6 +10,11 @@ import { PaymentSignatureService } from './payment-signature.service';
 @Module({
   imports: [AuthModule],
   controllers: [BillingController, BillingCallbackController],
-  providers: [BillingService, PaymentClientService, PaymentSignatureService],
+  providers: [
+    BillingService,
+    BillingCleanupService,
+    PaymentClientService,
+    PaymentSignatureService,
+  ],
 })
 export class BillingModule {}

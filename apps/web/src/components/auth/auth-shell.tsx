@@ -19,33 +19,33 @@ export function AuthShell({
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col justify-center px-6 py-10 sm:px-10">
       <section className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="glass-card rounded-[2rem] border border-white/10 p-8 sm:p-10">
-          <p className="text-xs uppercase tracking-[0.3em] text-sky-200/65">
+        <div className="glass-card rounded-[2rem] border border-white/14 p-7 sm:p-8">
+          <p className="text-[11px] uppercase tracking-[0.24em] text-sky-100/70">
             {eyebrow}
           </p>
-          <h1 className="mt-5 max-w-2xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">
+          <h1 className="mt-4 max-w-2xl text-3xl font-semibold tracking-tight text-white sm:text-4xl">
             {title}
           </h1>
-          <p className="mt-5 max-w-2xl text-sm leading-8 muted-text sm:text-base">
+          <p className="mt-4 max-w-2xl text-sm leading-7 muted-text">
             {description}
           </p>
 
           <div className="mt-8 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-5">
-              <p className="text-sm text-sky-200/70">Tenant-aware</p>
-              <p className="mt-2 text-lg font-semibold text-white">
+            <div className="rounded-[1.5rem] border border-white/14 bg-white/8 p-5">
+              <p className="text-sm text-sky-100/75">Tenant-aware</p>
+              <p className="mt-2 text-base font-semibold text-white sm:text-lg">
                 Satu session, satu organization aktif
               </p>
-              <p className="mt-2 text-sm leading-7 muted-text">
+              <p className="mt-2 text-sm leading-6 muted-text">
                 Semua request private memakai konteks tenant dari session aktif.
               </p>
             </div>
-            <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-5">
-              <p className="text-sm text-sky-200/70">Wave 1</p>
-              <p className="mt-2 text-lg font-semibold text-white">
+            <div className="rounded-[1.5rem] border border-white/14 bg-white/8 p-5">
+              <p className="text-sm text-sky-100/75">Wave 1</p>
+              <p className="mt-2 text-base font-semibold text-white sm:text-lg">
                 Login, signup, dashboard shell
               </p>
-              <p className="mt-2 text-sm leading-7 muted-text">
+              <p className="mt-2 text-sm leading-6 muted-text">
                 Fondasi UI siap untuk melanjut ke dashboard, shops, dan team.
               </p>
             </div>
@@ -53,15 +53,15 @@ export function AuthShell({
 
           <Link
             href="/"
-            className="mt-8 inline-flex rounded-full border border-white/12 px-5 py-3 text-sm font-medium text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100"
+            className="mt-8 inline-flex rounded-full border border-white/16 bg-white/6 px-5 py-2.5 text-sm font-medium text-slate-50 transition hover:border-sky-200/55 hover:bg-white/10 hover:text-white"
           >
             Kembali ke Landing
           </Link>
         </div>
 
-        <div className="glass-card rounded-[2rem] border border-white/10 p-8 sm:p-10">
+        <div className="glass-card rounded-[2rem] border border-white/14 p-7 sm:p-8">
           {children}
-          <div className="mt-8 border-t border-white/10 pt-6 text-sm muted-text">
+          <div className="mt-8 border-t border-white/12 pt-6 text-sm muted-text">
             {footer}
           </div>
         </div>

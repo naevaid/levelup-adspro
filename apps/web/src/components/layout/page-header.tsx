@@ -14,21 +14,21 @@ export function PageHeader({
   actions,
 }: PageHeaderProps) {
   return (
-    <header className="flex flex-col gap-5 rounded-[1.75rem] border border-white/10 bg-white/5 p-6 sm:flex-row sm:items-start sm:justify-between sm:p-7">
+    <header className="flex flex-col gap-4 rounded-[1.75rem] border border-white/14 bg-white/8 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
       <div className="max-w-3xl">
         {eyebrow ? (
-          <p className="text-xs uppercase tracking-[0.28em] text-sky-200/65">
+          <p className="text-[11px] uppercase tracking-[0.24em] text-sky-100/70">
             {eyebrow}
           </p>
         ) : null}
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+        <h1 className="mt-2.5 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
           {title}
         </h1>
-        <p className="mt-3 text-sm leading-7 muted-text sm:text-base">
+        <p className="mt-2.5 max-w-2xl text-sm leading-6 muted-text">
           {description}
         </p>
       </div>
-      {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}
+      {actions ? <div className="flex flex-wrap gap-2.5">{actions}</div> : null}
     </header>
   );
 }

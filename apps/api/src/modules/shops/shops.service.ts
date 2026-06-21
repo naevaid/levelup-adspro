@@ -216,7 +216,7 @@ export class ShopsService {
         where: { code: 'free-monthly' },
       })) ??
       (await this.prisma.plan.findFirst({
-        where: { status: 'ACTIVE' },
+        where: { status: 'ACTIVE', isInternal: false },
         orderBy: { createdAt: 'asc' },
       }));
 

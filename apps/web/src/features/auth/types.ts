@@ -1,4 +1,5 @@
 export type MembershipRole = "OWNER" | "MANAGER" | "STAFF" | "AGENCY_ADMIN";
+export type InternalUserRole = "PLATFORM_ADMIN";
 
 export type StoredAuthSession = {
   accessToken: string;
@@ -7,6 +8,7 @@ export type StoredAuthSession = {
   user: {
     id: string;
     email: string;
+    internalRole: InternalUserRole | null;
     name: string;
     status: string;
   };
@@ -14,6 +16,7 @@ export type StoredAuthSession = {
     id: string;
     name: string;
     slug: string;
+    isInternal: boolean;
     status: string;
   };
   membership: {
@@ -33,10 +36,18 @@ export type CurrentOrganizationResponse = {
   id: string;
   name: string;
   slug: string;
+  isInternal: boolean;
   status: string;
+  isActive?: boolean;
   currentMembership: {
     id: string;
     role: MembershipRole;
     status: string;
   };
+};
+
+export type OrganizationWorkspace = CurrentOrganizationResponse;
+
+export type OrganizationListResponse = {
+  data: OrganizationWorkspace[];
 };

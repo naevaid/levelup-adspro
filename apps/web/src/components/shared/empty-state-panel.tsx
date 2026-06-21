@@ -20,25 +20,25 @@ export function EmptyStatePanel({
   secondaryAction,
 }: EmptyStatePanelProps) {
   return (
-    <section className="glass-card rounded-[1.75rem] border border-white/10 p-6 sm:p-7">
+    <section className="glass-card rounded-[1.75rem] border border-white/14 p-5 sm:p-6">
       <div className="max-w-2xl">
-        <p className="text-xs uppercase tracking-[0.28em] text-sky-200/65">
+        <p className="text-[11px] uppercase tracking-[0.24em] text-sky-100/70">
           Empty State
         </p>
-        <h2 className="mt-3 text-2xl font-semibold tracking-tight text-white">
+        <h2 className="mt-2.5 text-xl font-semibold tracking-tight text-white sm:text-2xl">
           {title}
         </h2>
-        <p className="mt-3 text-sm leading-7 muted-text sm:text-base">
+        <p className="mt-2.5 text-sm leading-6 muted-text">
           {description}
         </p>
       </div>
 
       {(primaryAction || secondaryAction) && (
-        <div className="mt-6 flex flex-wrap gap-3">
+        <div className="mt-5 flex flex-wrap gap-2.5">
           {primaryAction ? (
             <Link
               href={primaryAction.href}
-              className="rounded-full bg-sky-400 px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-sky-300"
+              className="rounded-full bg-sky-300 px-5 py-2.5 text-sm font-medium text-slate-950 transition hover:bg-sky-200"
             >
               {primaryAction.label}
             </Link>
@@ -46,7 +46,7 @@ export function EmptyStatePanel({
           {secondaryAction ? (
             <Link
               href={secondaryAction.href}
-              className="rounded-full border border-white/12 px-5 py-3 text-sm font-medium text-slate-100 transition hover:border-sky-300/45 hover:text-sky-100"
+              className="rounded-full border border-white/16 bg-white/6 px-5 py-2.5 text-sm font-medium text-slate-50 transition hover:border-sky-200/55 hover:bg-white/10 hover:text-white"
             >
               {secondaryAction.label}
             </Link>

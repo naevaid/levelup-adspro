@@ -1,16 +1,45 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { CategoryFeeStoreType, Prisma } from '@prisma/client';
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  CategoryFeeStoreType,
+  InternalUserRole,
+  Prisma,
+} from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateMarketplaceCategoryFeeDto } from './dto/create-marketplace-category-fee.dto';
+import { ListMarketplaceCategoryFeesDto } from './dto/list-marketplace-category-fees.dto';
 import { UpdateMarketplaceCategoryFeeDto } from './dto/update-marketplace-category-fee.dto';
 
 @Injectable()
 export class MarketplaceCategoryFeesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async listForOrganization(organizationId: string) {
+  assertAccess(internalRole: InternalUserRole | null) {
+    if (internalRole !== InternalUserRole.PLATFORM_ADMIN) {
+      throw new ForbiddenException(
+        'Master fee kategori marketplace hanya bisa diakses internal platform admin.',
+      );
+    }
+  }
+
+  async listGlobal(filters: ListMarketplaceCategoryFeesDto = {}) {
+    const where: Prisma.MarketplaceCategoryFeeWhereInput = {
+      marketplaceId: filters.marketplaceId,
+      storeType: filters.storeType,
+      isActive: filters.isActive,
+      marketplace: filters.marketplaceCode
+        ? {
+            code: filters.marketplaceCode,
+          }
+        : undefined,
+    };
+
     const fees = await this.prisma.marketplaceCategoryFee.findMany({
-      where: { organizationId },
+      where,
       include: { marketplace: true },
       orderBy: [
         { marketplace: { createdAt: 'asc' } },
@@ -24,17 +53,15 @@ export class MarketplaceCategoryFeesService {
     return fees.map((fee) => this.toSummary(fee));
   }
 
-  async createForOrganization(
-    organizationId: string,
-    dto: CreateMarketplaceCategoryFeeDto,
-  ) {
+  async createGlobal(dto: CreateMarketplaceCategoryFeeDto) {
     await this.ensureMarketplaceExists(dto.marketplaceId);
 
     try {
       const created = await this.prisma.marketplaceCategoryFee.create({
         data: {
-          organizationId,
-          marketplaceId: dto.marketplaceId,
+          marketplace: {
+            connect: { id: dto.marketplaceId },
+          },
           storeType: dto.storeType,
           primaryCategory: dto.primaryCategory.trim(),
           secondaryCategory: dto.secondaryCategory?.trim() || null,
@@ -47,23 +74,18 @@ export class MarketplaceCategoryFeesService {
           isActive: dto.isActive ?? true,
           notes: dto.notes?.trim() || null,
         },
-        include: { marketplace: true },
       });
 
-      return this.toSummary(created);
+      return this.getSummaryById(created.id);
     } catch (error) {
       this.handleConflict(error);
       throw error;
     }
   }
 
-  async updateForOrganization(
-    organizationId: string,
-    id: string,
-    dto: UpdateMarketplaceCategoryFeeDto,
-  ) {
-    const existing = await this.prisma.marketplaceCategoryFee.findFirst({
-      where: { id, organizationId },
+  async updateGlobal(id: string, dto: UpdateMarketplaceCategoryFeeDto) {
+    const existing = await this.prisma.marketplaceCategoryFee.findUnique({
+      where: { id },
     });
 
     if (!existing) {
@@ -78,7 +100,11 @@ export class MarketplaceCategoryFeesService {
       const updated = await this.prisma.marketplaceCategoryFee.update({
         where: { id: existing.id },
         data: {
-          marketplaceId: dto.marketplaceId,
+          marketplace: dto.marketplaceId
+            ? {
+                connect: { id: dto.marketplaceId },
+              }
+            : undefined,
           storeType: dto.storeType,
           primaryCategory:
             typeof dto.primaryCategory === 'string' ? dto.primaryCategory.trim() : undefined,
@@ -101,19 +127,18 @@ export class MarketplaceCategoryFeesService {
                 ? null
                 : undefined,
         },
-        include: { marketplace: true },
       });
 
-      return this.toSummary(updated);
+      return this.getSummaryById(updated.id);
     } catch (error) {
       this.handleConflict(error);
       throw error;
     }
   }
 
-  async removeForOrganization(organizationId: string, id: string) {
-    const existing = await this.prisma.marketplaceCategoryFee.findFirst({
-      where: { id, organizationId },
+  async removeGlobal(id: string) {
+    const existing = await this.prisma.marketplaceCategoryFee.findUnique({
+      where: { id },
     });
 
     if (!existing) {
@@ -135,6 +160,19 @@ export class MarketplaceCategoryFeesService {
     if (!marketplace) {
       throw new NotFoundException('Marketplace tidak ditemukan.');
     }
+  }
+
+  private async getSummaryById(id: string) {
+    const fee = await this.prisma.marketplaceCategoryFee.findUnique({
+      where: { id },
+      include: { marketplace: true },
+    });
+
+    if (!fee) {
+      throw new NotFoundException('Fee kategori marketplace tidak ditemukan.');
+    }
+
+    return this.toSummary(fee);
   }
 
   private handleConflict(error: unknown) {

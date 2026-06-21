@@ -3,6 +3,7 @@ node_modules/
 dist/
 build/
 coverage/
+.deploy-backups/
 .env
 .env.*
 !.env.example
@@ -12,4 +13,5 @@ Thumbs.db
 .vscode/
 .idea/
 *.log
+*.bak-*
 apps/extension/package/

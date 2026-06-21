@@ -4,6 +4,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import {
+  InternalUserRole,
   MembershipRole,
   MembershipStatus,
   OrganizationStatus,
@@ -17,6 +18,10 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { SignupDto } from './dto/signup.dto';
+
+const INTERNAL_PLAN_CODE = 'internal-unlimited';
+const INTERNAL_WORKSPACE_SLUG = 'internal-platform-admin';
+const INTERNAL_WORKSPACE_NAME = 'Internal Platform Admin';
 
 @Injectable()
 export class AuthService {
@@ -71,7 +76,7 @@ export class AuthService {
       });
 
       const defaultPlan = await tx.plan.findFirst({
-        where: { status: 'ACTIVE' },
+        where: { status: 'ACTIVE', isInternal: false },
         orderBy: { createdAt: 'asc' },
       });
 
@@ -118,31 +123,39 @@ export class AuthService {
       throw new UnauthorizedException('Email atau password salah.');
     }
 
-    const membership = await this.prisma.membership.findFirst({
-      where: {
-        userId: user.id,
-        status: MembershipStatus.ACTIVE,
-      },
-      include: {
-        organization: true,
-      },
-      orderBy: {
-        createdAt: 'asc',
-      },
-    });
-
-    if (!membership) {
-      throw new UnauthorizedException(
-        'User belum memiliki organization aktif.',
-      );
-    }
-
     const now = new Date();
     const result = await this.prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: user.id },
         data: { lastLoginAt: now },
       });
+
+      if (user.internalRole === InternalUserRole.PLATFORM_ADMIN) {
+        await this.ensureInternalWorkspaceAccess(tx, user.id, now);
+      }
+
+      const memberships = await tx.membership.findMany({
+        where: {
+          userId: user.id,
+          status: MembershipStatus.ACTIVE,
+        },
+        include: {
+          organization: true,
+        },
+        orderBy: {
+          createdAt: 'asc',
+        },
+      });
+      const membership = this.pickActiveMembership(
+        memberships,
+        user.internalRole,
+      );
+
+      if (!membership) {
+        throw new UnauthorizedException(
+          'User belum memiliki organization aktif.',
+        );
+      }
 
       const session = await this.createSession(
         tx,
@@ -195,6 +208,7 @@ export class AuthService {
       user: {
         id: user.id,
         email: user.email,
+        internalRole: user.internalRole,
         name: user.name,
         status: user.status,
       },
@@ -202,6 +216,7 @@ export class AuthService {
         id: membership.organization.id,
         name: membership.organization.name,
         slug: membership.organization.slug,
+        isInternal: membership.organization.isInternal,
         status: membership.organization.status,
       },
       membership: {
@@ -247,6 +262,7 @@ export class AuthService {
     user: {
       id: string;
       email: string;
+      internalRole: InternalUserRole | null;
       name: string;
       status: UserStatus;
     };
@@ -254,6 +270,7 @@ export class AuthService {
       id: string;
       name: string;
       slug: string;
+      isInternal: boolean;
       status: OrganizationStatus;
     };
     membership: {
@@ -269,6 +286,7 @@ export class AuthService {
       user: {
         id: input.user.id,
         email: input.user.email,
+        internalRole: input.user.internalRole,
         name: input.user.name,
         status: input.user.status,
       },
@@ -276,6 +294,7 @@ export class AuthService {
         id: input.organization.id,
         name: input.organization.name,
         slug: input.organization.slug,
+        isInternal: input.organization.isInternal,
         status: input.organization.status,
       },
       membership: {
@@ -306,5 +325,136 @@ export class AuthService {
     }
 
     return candidate;
+  }
+
+  private pickActiveMembership(
+    memberships: Array<
+      Prisma.MembershipGetPayload<{
+        include: { organization: true };
+      }>
+    >,
+    internalRole: InternalUserRole | null,
+  ) {
+    if (internalRole === InternalUserRole.PLATFORM_ADMIN) {
+      return (
+        memberships.find((membership) => membership.organization.isInternal) ??
+        memberships[0] ??
+        null
+      );
+    }
+
+    return (
+      memberships.find((membership) => !membership.organization.isInternal) ??
+      memberships[0] ??
+      null
+    );
+  }
+
+  private async ensureInternalWorkspaceAccess(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    now: Date,
+  ) {
+    const internalPlan = await tx.plan.findUnique({
+      where: { code: INTERNAL_PLAN_CODE },
+    });
+
+    if (!internalPlan || !internalPlan.isInternal) {
+      throw new UnauthorizedException(
+        'Plan internal belum tersedia. Jalankan migration dan seed terlebih dahulu.',
+      );
+    }
+
+    let organization = await tx.organization.findUnique({
+      where: { slug: INTERNAL_WORKSPACE_SLUG },
+    });
+
+    if (!organization) {
+      organization = await tx.organization.create({
+        data: {
+          name: INTERNAL_WORKSPACE_NAME,
+          slug: INTERNAL_WORKSPACE_SLUG,
+          ownerUserId: userId,
+          isInternal: true,
+          status: OrganizationStatus.ACTIVE,
+        },
+      });
+    }
+
+    const membership = await tx.membership.findUnique({
+      where: {
+        organizationId_userId: {
+          organizationId: organization.id,
+          userId,
+        },
+      },
+    });
+
+    if (!membership) {
+      await tx.membership.create({
+        data: {
+          organizationId: organization.id,
+          userId,
+          role:
+            organization.ownerUserId === userId
+              ? MembershipRole.OWNER
+              : MembershipRole.AGENCY_ADMIN,
+          status: MembershipStatus.ACTIVE,
+          joinedAt: now,
+        },
+      });
+    } else if (membership.status !== MembershipStatus.ACTIVE) {
+      await tx.membership.update({
+        where: { id: membership.id },
+        data: {
+          status: MembershipStatus.ACTIVE,
+          joinedAt: membership.joinedAt ?? now,
+        },
+      });
+    }
+
+    const subscription = await tx.subscription.findUnique({
+      where: { organizationId: organization.id },
+      include: { plan: true },
+    });
+
+    if (!subscription) {
+      await tx.subscription.create({
+        data: {
+          organizationId: organization.id,
+          planId: internalPlan.id,
+          status: SubscriptionStatus.ACTIVE,
+          startsAt: now,
+          currentPeriodStart: now,
+          provider: 'internal-unlimited',
+          autoRenew: false,
+          cancelAtPeriodEnd: false,
+          activatedAt: now,
+        },
+      });
+      return;
+    }
+
+    if (!subscription.plan.isInternal || subscription.plan.code !== INTERNAL_PLAN_CODE) {
+      await tx.subscription.update({
+        where: { id: subscription.id },
+        data: {
+          planId: internalPlan.id,
+          status: SubscriptionStatus.ACTIVE,
+          startsAt: subscription.startsAt ?? now,
+          endsAt: null,
+          currentPeriodStart: subscription.currentPeriodStart ?? now,
+          currentPeriodEnd: null,
+          gracePeriodEnd: null,
+          cancelAtPeriodEnd: false,
+          activatedAt: subscription.activatedAt ?? now,
+          canceledAt: null,
+          expiredAt: null,
+          autoRenew: false,
+          provider: 'internal-unlimited',
+          providerReference: null,
+        },
+      });
+    }
   }
 }

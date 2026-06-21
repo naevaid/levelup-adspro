@@ -13,6 +13,10 @@ enum UserStatus {
   SUSPENDED
 }
 
+enum InternalUserRole {
+  PLATFORM_ADMIN
+}
+
 enum OrganizationStatus {
   ACTIVE
   SUSPENDED
@@ -110,6 +114,7 @@ model User {
   passwordHash         String          @map("password_hash")
   name                 String
   status               UserStatus      @default(ACTIVE)
+  internalRole         InternalUserRole? @map("internal_role")
   lastLoginAt          DateTime?       @map("last_login_at")
   createdAt            DateTime        @default(now()) @map("created_at")
   updatedAt            DateTime        @updatedAt @map("updated_at")
@@ -127,6 +132,7 @@ model Organization {
   name           String
   slug           String             @unique
   ownerUserId    String             @map("owner_user_id") @db.Uuid
+  isInternal     Boolean            @default(false) @map("is_internal")
   status         OrganizationStatus @default(ACTIVE)
   createdAt      DateTime           @default(now()) @map("created_at")
   updatedAt      DateTime           @updatedAt @map("updated_at")
@@ -138,7 +144,6 @@ model Organization {
   extensionSessions ExtensionSession[]
   ingestionBatches IngestionBatch[]
   rawPayloadObjects RawPayloadObject[]
-  marketplaceCategoryFees MarketplaceCategoryFee[]
   billingInvoices BillingInvoice[]
   entitlementSnapshot OrganizationEntitlementSnapshot?
 
@@ -188,6 +193,7 @@ model Plan {
   id              String             @id @default(uuid()) @db.Uuid
   code            String             @unique
   name            String
+  isInternal      Boolean            @default(false) @map("is_internal")
   billingInterval BillingInterval    @map("billing_interval")
   priceAmount     Int                @default(0) @map("price_amount")
   currency        String             @default("IDR")
@@ -352,7 +358,6 @@ model Marketplace {
 
 model MarketplaceCategoryFee {
   id                String               @id @default(uuid()) @db.Uuid
-  organizationId    String               @map("organization_id") @db.Uuid
   marketplaceId     String               @map("marketplace_id") @db.Uuid
   storeType         CategoryFeeStoreType @map("store_type")
   primaryCategory   String               @map("primary_category")
@@ -367,12 +372,10 @@ model MarketplaceCategoryFee {
   notes             String?
   createdAt         DateTime             @default(now()) @map("created_at")
   updatedAt         DateTime             @updatedAt @map("updated_at")
-  organization      Organization         @relation(fields: [organizationId], references: [id])
   marketplace       Marketplace          @relation(fields: [marketplaceId], references: [id])
 
-  @@unique([organizationId, marketplaceId, storeType, primaryCategory, secondaryCategory, categoryName], map: "mcf_org_market_store_cat_unique")
-  @@index([organizationId, marketplaceId, storeType, isActive], map: "mcf_org_market_store_active_idx")
-  @@index([organizationId], map: "mcf_org_idx")
+  @@unique([marketplaceId, storeType, primaryCategory, secondaryCategory, categoryName], map: "mcf_market_store_cat_unique")
+  @@index([marketplaceId, storeType, isActive], map: "mcf_market_store_active_idx")
   @@index([marketplaceId], map: "mcf_market_idx")
   @@map("marketplace_category_fees")
 }

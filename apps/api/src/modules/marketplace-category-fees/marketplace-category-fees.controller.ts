@@ -6,12 +6,14 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
 import type { AuthenticatedRequest } from '../auth/authenticated-request';
 import { CreateMarketplaceCategoryFeeDto } from './dto/create-marketplace-category-fee.dto';
+import { ListMarketplaceCategoryFeesDto } from './dto/list-marketplace-category-fees.dto';
 import { UpdateMarketplaceCategoryFeeDto } from './dto/update-marketplace-category-fee.dto';
 import { MarketplaceCategoryFeesService } from './marketplace-category-fees.service';
 
@@ -23,10 +25,11 @@ export class MarketplaceCategoryFeesController {
 
   @UseGuards(SessionAuthGuard)
   @Get()
-  list(@Req() request: AuthenticatedRequest) {
-    return this.marketplaceCategoryFeesService.listForOrganization(
-      request.auth.organization.id,
-    );
+  list(
+    @Req() _request: AuthenticatedRequest,
+    @Query() query: ListMarketplaceCategoryFeesDto,
+  ) {
+    return this.marketplaceCategoryFeesService.listGlobal(query);
   }
 
   @UseGuards(SessionAuthGuard)
@@ -35,10 +38,10 @@ export class MarketplaceCategoryFeesController {
     @Req() request: AuthenticatedRequest,
     @Body() dto: CreateMarketplaceCategoryFeeDto,
   ) {
-    return this.marketplaceCategoryFeesService.createForOrganization(
-      request.auth.organization.id,
-      dto,
+    this.marketplaceCategoryFeesService.assertAccess(
+      request.auth.user.internalRole,
     );
+    return this.marketplaceCategoryFeesService.createGlobal(dto);
   }
 
   @UseGuards(SessionAuthGuard)
@@ -48,19 +51,18 @@ export class MarketplaceCategoryFeesController {
     @Param('id') id: string,
     @Body() dto: UpdateMarketplaceCategoryFeeDto,
   ) {
-    return this.marketplaceCategoryFeesService.updateForOrganization(
-      request.auth.organization.id,
-      id,
-      dto,
+    this.marketplaceCategoryFeesService.assertAccess(
+      request.auth.user.internalRole,
     );
+    return this.marketplaceCategoryFeesService.updateGlobal(id, dto);
   }
 
   @UseGuards(SessionAuthGuard)
   @Delete(':id')
   remove(@Req() request: AuthenticatedRequest, @Param('id') id: string) {
-    return this.marketplaceCategoryFeesService.removeForOrganization(
-      request.auth.organization.id,
-      id,
+    this.marketplaceCategoryFeesService.assertAccess(
+      request.auth.user.internalRole,
     );
+    return this.marketplaceCategoryFeesService.removeGlobal(id);
   }
 }

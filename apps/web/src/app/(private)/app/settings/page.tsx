@@ -141,6 +141,8 @@ export default function SettingsPage() {
     return `${session.tokenType} ${session.accessToken}`;
   }, [session]);
 
+  const hasAccess = session?.user.internalRole === "PLATFORM_ADMIN";
+
   const resetForm = useCallback(
     (nextMarketplaces?: MarketplaceSummary[]) => {
       const source = nextMarketplaces ?? marketplaces;
@@ -204,7 +206,7 @@ export default function SettingsPage() {
   }, [authorization]);
 
   useEffect(() => {
-    if (!isReady || !authorization) {
+    if (!isReady || !authorization || !hasAccess) {
       return;
     }
 
@@ -213,7 +215,7 @@ export default function SettingsPage() {
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, [authorization, isReady, refresh]);
+  }, [authorization, hasAccess, isReady, refresh]);
 
   const filteredFees = useMemo(() => {
     return fees.filter((fee) => {
@@ -258,6 +260,16 @@ export default function SettingsPage() {
       setCurrentPage(totalPages);
     }
   }, [currentPage, totalPages]);
+
+  if (isReady && session && !hasAccess) {
+    return (
+      <EmptyStatePanel
+        title="Settings ini khusus internal"
+        description="Master fee kategori marketplace sekarang menjadi katalog global. Hanya user dengan role internal platform admin yang bisa mengelola data ini agar semua tenant memakai sumber fee yang sama."
+        secondaryAction={{ label: "Kembali ke dashboard", href: "/app/dashboard" }}
+      />
+    );
+  }
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -407,7 +419,7 @@ export default function SettingsPage() {
       <PageHeader
         eyebrow="Settings"
         title="Master fee kategori marketplace"
-        description="Kelola biaya kategori Shopee dari dashboard agar update persentase fee tidak perlu rebuild extension. Jalur ini nanti menjadi sumber data untuk Kalkulator ROAS."
+        description="Kelola master fee kategori marketplace global dari dashboard internal agar update persentase fee tidak perlu diatur tenant satu per satu. Jalur ini menjadi sumber data bersama untuk semua tenant dan fondasi Kalkulator ROAS."
         actions={
           <button
             type="button"
@@ -425,7 +437,7 @@ export default function SettingsPage() {
           <p className="text-sm text-sky-200/75">Total konfigurasi</p>
           <p className="mt-3 text-3xl font-semibold text-white">{fees.length}</p>
           <p className="mt-2 text-sm muted-text">
-            Jumlah master fee kategori yang tersimpan untuk tenant aktif.
+            Jumlah master fee kategori global yang tersimpan di katalog internal.
           </p>
         </div>
         <div className="glass-card rounded-[1.75rem] border border-white/10 p-6 sm:p-7">
@@ -434,7 +446,7 @@ export default function SettingsPage() {
             {fees.filter((fee) => fee.isActive).length}
           </p>
           <p className="mt-2 text-sm muted-text">
-            Hanya fee aktif yang nantinya akan dipakai sebagai opsi utama di extension.
+            Hanya fee aktif yang nantinya dipakai sebagai opsi utama lintas tenant.
           </p>
         </div>
         <div className="glass-card rounded-[1.75rem] border border-white/10 p-6 sm:p-7">

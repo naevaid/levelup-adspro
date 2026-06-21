@@ -71,12 +71,14 @@ export class SessionAuthGuard implements CanActivate {
         id: session.user.id,
         email: session.user.email,
         name: session.user.name,
+        internalRole: session.user.internalRole,
         status: session.user.status,
       },
       organization: {
         id: session.activeOrganization.id,
         name: session.activeOrganization.name,
         slug: session.activeOrganization.slug,
+        isInternal: session.activeOrganization.isInternal,
         status: session.activeOrganization.status,
       },
       membership: {
