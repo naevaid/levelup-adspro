@@ -480,6 +480,113 @@ async function createSessionBundle(
   });
 }
 
+function isExtensionSessionExpired(
+  session: Awaited<ReturnType<typeof getExtensionState>>['extensionSession'],
+) {
+  if (!session) {
+    return true;
+  }
+
+  const expiresAt = new Date(session.expiresAt).getTime();
+  return !Number.isFinite(expiresAt) || expiresAt <= Date.now();
+}
+
+function isAuthSessionExpiredError(message: string) {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('session sudah kedaluwarsa') ||
+    normalized.includes('session tidak ditemukan') ||
+    normalized.includes('session token tidak valid') ||
+    normalized.includes('bearer token diperlukan')
+  );
+}
+
+async function clearExtensionLoginState(message: string) {
+  await patchExtensionState((current) => ({
+    authSession: null,
+    extensionSession: null,
+    shops: [],
+    selectedShopId: null,
+    lastPage: current.lastPage,
+    lastSync: {
+      status: 'error',
+      message,
+      at: new Date().toISOString(),
+    },
+  }));
+
+  return getExtensionState();
+}
+
+async function recoverExtensionSession(message: string) {
+  const state = await getExtensionState();
+  if (!state.authSession) {
+    return state;
+  }
+
+  try {
+    await createSessionBundle(
+      state.apiBaseUrl,
+      state.authSession,
+      state.selectedShopId,
+    );
+
+    return patchExtensionState({
+      lastSync: {
+        status: 'idle',
+        message,
+        at: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    const recoveryError =
+      error instanceof Error
+        ? error.message
+        : 'Gagal memulihkan session extension.';
+
+    if (isAuthSessionExpiredError(recoveryError)) {
+      return clearExtensionLoginState(
+        'Session login berakhir. Silakan login kembali.',
+      );
+    }
+
+    return patchExtensionState((current) => ({
+      authSession: current.authSession,
+      extensionSession: null,
+      shops: current.shops,
+      selectedShopId: current.selectedShopId,
+      lastPage: current.lastPage,
+      lastSync: {
+        status: 'error',
+        message: recoveryError,
+        at: new Date().toISOString(),
+      },
+    }));
+  }
+}
+
+async function ensureExtensionSessionState() {
+  const state = await getExtensionState();
+
+  if (state.extensionSession && !isExtensionSessionExpired(state.extensionSession)) {
+    return state;
+  }
+
+  if (!state.authSession) {
+    return state.extensionSession
+      ? clearExtensionLoginState(
+          'Session extension sudah kedaluwarsa. Silakan login kembali.',
+        )
+      : state;
+  }
+
+  return recoverExtensionSession(
+    state.extensionSession
+      ? 'Session extension diperbarui otomatis.'
+      : 'Session extension dipulihkan otomatis.',
+  );
+}
+
 async function refreshActiveTabSnapshot() {
   const tab = await getActiveTab();
   if (!tab?.id) {
@@ -699,7 +806,7 @@ async function handleSetSelectedShop(
 }
 
 async function handleSyncNow() {
-  const state = await getExtensionState();
+  const state = await ensureExtensionSessionState();
   const snapshot = (await refreshActiveTabSnapshot()) ?? state.lastPage;
 
   if (!snapshot) {
@@ -734,7 +841,7 @@ async function handleSyncNow() {
 async function handleSyncProductUrl(
   message: Extract<BackgroundMessage, { type: 'SYNC_PRODUCT_URL' }>,
 ) {
-  const state = await getExtensionState();
+  const state = await ensureExtensionSessionState();
 
   if (!state.extensionSession) {
     throw new Error('Extension session belum aktif.');
@@ -827,6 +934,9 @@ async function handleOpenExtensionLogin() {
 async function handleHeartbeat() {
   const state = await getExtensionState();
   if (!state.extensionSession) {
+    if (state.authSession) {
+      await recoverExtensionSession('Session extension dipulihkan otomatis.');
+    }
     return;
   }
 
@@ -854,6 +964,16 @@ async function handleHeartbeat() {
             },
     }));
   } catch (error) {
+    if (state.authSession) {
+      const recovered = await recoverExtensionSession(
+        'Session extension dipulihkan otomatis setelah heartbeat gagal.',
+      );
+
+      if (recovered.extensionSession) {
+        return;
+      }
+    }
+
     await patchExtensionState((current) => ({
       lastSync: {
         status: 'error',
@@ -917,7 +1037,7 @@ chrome.runtime.onMessage.addListener((message: BackgroundMessage, _sender, sendR
   const run = async () => {
     switch (message.type) {
       case 'GET_STATE':
-        return getExtensionState();
+        return ensureExtensionSessionState();
       case 'OPEN_EXTENSION_LOGIN':
         return handleOpenExtensionLogin();
       case 'GET_MARKETPLACE_CATEGORY_FEES':

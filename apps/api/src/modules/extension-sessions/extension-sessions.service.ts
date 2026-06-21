@@ -11,6 +11,8 @@ import { CreateExtensionSessionDto } from './dto/create-extension-session.dto';
 
 @Injectable()
 export class ExtensionSessionsService {
+  private static readonly SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30;
+
   constructor(private readonly prisma: PrismaService) {}
 
   async createForUserSession(
@@ -36,7 +38,7 @@ export class ExtensionSessionsService {
     const rawToken = randomBytes(32).toString('hex');
     const sessionTokenHash = this.hashToken(rawToken);
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 30);
+    const expiresAt = this.createExpiryDate(now);
 
     const session = await this.prisma.extensionSession.create({
       data: {
@@ -118,10 +120,14 @@ export class ExtensionSessionsService {
 
   async refreshHeartbeat(sessionId: string) {
     const now = new Date();
+    const expiresAt = this.createExpiryDate(now);
 
     const session = await this.prisma.extensionSession.update({
       where: { id: sessionId },
-      data: { lastHeartbeatAt: now },
+      data: {
+        lastHeartbeatAt: now,
+        expiresAt,
+      },
       include: {
         shop: true,
       },
@@ -145,5 +151,9 @@ export class ExtensionSessionsService {
 
   private hashToken(rawToken: string) {
     return createHash('sha256').update(rawToken).digest('hex');
+  }
+
+  private createExpiryDate(now: Date) {
+    return new Date(now.getTime() + ExtensionSessionsService.SESSION_TTL_MS);
   }
 }

@@ -1,6 +1,6 @@
 import type { ExtensionState } from './types';
 
-export const EXTENSION_VERSION = '0.1.0';
+export const EXTENSION_VERSION = '0.1.5';
 export const DEFAULT_API_BASE_URL = 'https://adspro.naeva.id';
 export const HEARTBEAT_ALARM_NAME = 'levelup-extension-heartbeat';
 export const HEARTBEAT_PERIOD_MINUTES = 5;
