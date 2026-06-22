@@ -19,6 +19,7 @@ let refreshTimeoutId: number | null = null;
 let searchEnrichmentTimeoutId: number | null = null;
 let productDetailEnrichmentTimeoutId: number | null = null;
 let shopResearchEnrichmentTimeoutId: number | null = null;
+let queuedShopResearchKey: string | null = null;
 let isRoasCalculatorOpen = false;
 let lastRoasProductDetail: ProductDetailSnapshot | null = null;
 let visibleResultCount = 10;
@@ -38,9 +39,14 @@ let adsDashboardBootstrapRetryTimeoutId: number | null = null;
 let adsDashboardBootstrapRetryCount = 0;
 let isDomObserverActive = false;
 let roasProductSurfaceRenderNonce = 0;
+let toastDismissTimeoutId: number | null = null;
 
 const OVERLAY_ID = 'levelup-adspro-market-overlay';
 const OVERLAY_STYLE_ID = 'levelup-adspro-market-overlay-style';
+const SHOP_OVERLAY_ID = 'levelup-adspro-shop-overlay';
+const SHOP_OVERLAY_STYLE_ID = 'levelup-adspro-shop-overlay-style';
+const TOAST_STYLE_ID = 'levelup-adspro-toast-style';
+const TOAST_ROOT_ID = 'levelup-adspro-toast-root';
 const ADS_DASHBOARD_ENHANCEMENT_ID = 'levelup-adspro-shopee-ads-enhancement';
 const ADS_DASHBOARD_BOOTSTRAP_RETRY_DELAYS_MS = [500, 1200, 2200, 3600] as const;
 const INITIAL_VISIBLE_RESULTS = 10;
@@ -52,6 +58,8 @@ const SEARCH_ENRICHMENT_START_DELAY_MS = 1800;
 const PAGE_BRIDGE_SCRIPT_ID = 'levelup-adspro-page-bridge';
 const PAGE_BRIDGE_REQUEST_EVENT = 'levelup-adspro:enrich-request';
 const PAGE_BRIDGE_RESPONSE_EVENT = 'levelup-adspro:enrich-response';
+const PAGE_BRIDGE_SHOP_REQUEST_EVENT = 'levelup-adspro:shop-request';
+const PAGE_BRIDGE_SHOP_RESPONSE_EVENT = 'levelup-adspro:shop-response';
 const PAGE_BRIDGE_TIMEOUT_MS = 5000;
 const HEADER_LOGO_URL = chrome.runtime.getURL('header-logo.png');
 const POWERED_BY_LOGO_URL = chrome.runtime.getURL('powered-by.png');
@@ -73,6 +81,22 @@ const pendingPageBridgeRequests = new Map<
     timeoutId: number;
   }
 >();
+const pendingPageBridgeShopRequests = new Map<
+  string,
+  {
+    resolve: (data: {
+      base: Record<string, unknown>;
+      detail: Record<string, unknown>;
+      categories: Record<string, unknown> | null;
+      itemsPayload: {
+        total_count?: number;
+        items?: Array<{ item_basic?: Record<string, unknown> }>;
+      };
+    }) => void;
+    reject: (error: Error) => void;
+    timeoutId: number;
+  }
+>();
 let pageBridgeRequestSequence = 0;
 let pageBridgeLoadPromise: Promise<void> | null = null;
 
@@ -85,6 +109,22 @@ type BackgroundResponse<T> = {
 type PageBridgeResponseMessage = {
   requestId: string;
   entries: SearchResultEnrichment[];
+  error?: string;
+};
+
+type PageBridgeShopResponsePayload = {
+  base: Record<string, unknown>;
+  detail: Record<string, unknown>;
+  categories: Record<string, unknown> | null;
+  itemsPayload: {
+    total_count?: number;
+    items?: Array<{ item_basic?: Record<string, unknown> }>;
+  };
+};
+
+type PageBridgeShopResponseMessage = {
+  requestId: string;
+  data?: PageBridgeShopResponsePayload;
   error?: string;
 };
 
@@ -283,6 +323,126 @@ function formatCurrency(value?: number) {
 
 function cleanProductTitle(title: string) {
   return normalizeText(title).replace(/^view product:\s*/i, '');
+}
+
+function buildShopeeProductUrl(input: {
+  shopId: string;
+  itemId: string;
+  productTitle: string;
+}) {
+  const slug = cleanProductTitle(input.productTitle)
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-');
+  const baseSlug = slug || 'produk-shopee';
+
+  return `${window.location.origin}/${baseSlug}-i.${input.shopId}.${input.itemId}`;
+}
+
+function sortShopResearchProducts(
+  products: ShopResearchSnapshot['products'],
+  sortKey: 'revenue30d' | 'sold30d' | 'reviews' | 'newest',
+) {
+  return [...products].sort((a, b) => {
+    const revenueDiff = (b.revenue30dEstimate ?? 0) - (a.revenue30dEstimate ?? 0);
+    const soldDiff = (b.sold30d ?? 0) - (a.sold30d ?? 0);
+    const reviewDiff = (b.reviewCount ?? 0) - (a.reviewCount ?? 0);
+    const newestDiff = (b.listingCtime ?? 0) - (a.listingCtime ?? 0);
+
+    switch (sortKey) {
+      case 'sold30d':
+        return soldDiff || revenueDiff || reviewDiff || newestDiff;
+      case 'reviews':
+        return reviewDiff || revenueDiff || soldDiff || newestDiff;
+      case 'newest':
+        return newestDiff || revenueDiff || soldDiff || reviewDiff;
+      case 'revenue30d':
+      default:
+        return revenueDiff || soldDiff || reviewDiff || newestDiff;
+    }
+  });
+}
+
+function ensureToastStyle() {
+  if (document.getElementById(TOAST_STYLE_ID)) {
+    return;
+  }
+
+  const style = document.createElement('style');
+  style.id = TOAST_STYLE_ID;
+  style.textContent = `
+    #${TOAST_ROOT_ID} {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      display: grid;
+      gap: 10px;
+      z-index: 2147483647;
+      pointer-events: none;
+    }
+
+    #${TOAST_ROOT_ID} .levelup-toast {
+      min-width: 240px;
+      max-width: min(360px, calc(100vw - 32px));
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      box-shadow: 0 14px 34px rgba(15, 23, 42, 0.18);
+      background: rgba(255, 255, 255, 0.98);
+      color: #0f172a;
+      font-family: Inter, Arial, sans-serif;
+      font-size: 12px;
+      line-height: 1.5;
+      pointer-events: auto;
+    }
+
+    #${TOAST_ROOT_ID} .levelup-toast[data-tone="success"] {
+      border-left: 4px solid #16a34a;
+    }
+
+    #${TOAST_ROOT_ID} .levelup-toast[data-tone="error"] {
+      border-left: 4px solid #dc2626;
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+function showToast(message: string, tone: 'success' | 'error' = 'success') {
+  if (!message) {
+    return;
+  }
+
+  ensureToastStyle();
+  const root =
+    document.getElementById(TOAST_ROOT_ID) ??
+    (() => {
+      const element = document.createElement('div');
+      element.id = TOAST_ROOT_ID;
+      document.body.appendChild(element);
+      return element;
+    })();
+
+  root.replaceChildren();
+  const toast = document.createElement('div');
+  toast.className = 'levelup-toast';
+  toast.dataset.tone = tone;
+  toast.textContent = message;
+  root.appendChild(toast);
+
+  if (toastDismissTimeoutId) {
+    window.clearTimeout(toastDismissTimeoutId);
+  }
+
+  toastDismissTimeoutId = window.setTimeout(() => {
+    toastDismissTimeoutId = null;
+    if (root.childElementCount === 1 && root.firstElementChild === toast) {
+      root.replaceChildren();
+    }
+  }, 3200);
 }
 
 function parseCurrencyInput(rawValue: string) {
@@ -1947,6 +2107,39 @@ async function requestPageBridgeSearchEnrichment(results: SearchResultPreview[])
   });
 }
 
+async function requestPageBridgeShopResearch(input: {
+  shopId: string;
+  limit: number;
+  offset: number;
+}) {
+  await ensurePageBridgeInjected();
+
+  return new Promise<PageBridgeShopResponsePayload>((resolve, reject) => {
+    const requestId = `shopee-shop-${Date.now()}-${++pageBridgeRequestSequence}`;
+    const timeoutId = window.setTimeout(() => {
+      pendingPageBridgeShopRequests.delete(requestId);
+      reject(new Error('Bridge riset toko Shopee timeout.'));
+    }, PAGE_BRIDGE_TIMEOUT_MS);
+
+    pendingPageBridgeShopRequests.set(requestId, {
+      resolve,
+      reject,
+      timeoutId,
+    });
+
+    document.dispatchEvent(
+      new CustomEvent(PAGE_BRIDGE_SHOP_REQUEST_EVENT, {
+        detail: {
+          requestId,
+          shopId: input.shopId,
+          limit: input.limit,
+          offset: input.offset,
+        },
+      }),
+    );
+  });
+}
+
 function hasSalesSignal(result: PageSnapshot['resultsPreview'][number]) {
   return (
     normalizeText(result.monthlySoldHint).length > 0 ||
@@ -2586,6 +2779,98 @@ function getOverlayHost(snapshot?: PageSnapshot) {
     parent: overlayParent,
     before: firstCardInContainer ?? overlayParent.firstChild,
     layoutMode: isPotentialProductGrid(overlayParent) ? ('grid' as const) : ('block' as const),
+  };
+}
+
+function getShopOverlayHost() {
+  const mainContent = document.querySelector('main') ?? document.body;
+  const allProductsSection = document.querySelector('.shop-page__all-products-section');
+  if (allProductsSection?.parentElement) {
+    return {
+      parent: allProductsSection.parentElement,
+      before: allProductsSection,
+      layoutMode: 'block' as const,
+    };
+  }
+
+  const productCards = getVisibleProductCards();
+  const containerCandidates = new Map<
+    Element,
+    { count: number; top: number; width: number }
+  >();
+
+  for (const match of productCards.slice(0, 20)) {
+    let current: Element | null = match.card.parentElement;
+    let depth = 0;
+
+    while (current && current !== document.body && depth < 6) {
+      const rect = current.getBoundingClientRect();
+      const count = countCardsInside(current, productCards);
+
+      if (count >= 4 && rect.width >= 600 && rect.height >= 180) {
+        const existing = containerCandidates.get(current);
+        if (!existing || count > existing.count) {
+          containerCandidates.set(current, {
+            count,
+            top: rect.top,
+            width: rect.width,
+          });
+        }
+      }
+
+      current = current.parentElement;
+      depth += 1;
+    }
+  }
+
+  const bestContainer =
+    Array.from(containerCandidates.entries())
+      .sort((left, right) => {
+        if (right[1].count !== left[1].count) {
+          return right[1].count - left[1].count;
+        }
+
+        return left[1].top - right[1].top;
+      })
+      .at(0)?.[0] ?? null;
+
+  if (bestContainer?.parentElement) {
+    const outerSection =
+      bestContainer.closest('section') ??
+      bestContainer.closest('div[class]') ??
+      bestContainer;
+    const anchorElement =
+      outerSection.parentElement && outerSection !== mainContent ? outerSection : bestContainer;
+
+    return {
+      parent: anchorElement.parentElement ?? bestContainer.parentElement,
+      before: anchorElement,
+      layoutMode: 'block' as const,
+    };
+  }
+
+  const titleHeading = document.querySelector('h1');
+  const searchInput =
+    Array.from(document.querySelectorAll<HTMLInputElement>('input')).find((input) =>
+      /cari di toko ini/i.test(
+        input.getAttribute('placeholder') ?? input.getAttribute('aria-label') ?? '',
+      ),
+    ) ?? null;
+  const preferredAnchor =
+    titleHeading?.closest('section, div') ?? searchInput?.closest('section, div') ?? null;
+
+  if (preferredAnchor?.parentElement) {
+    return {
+      parent: preferredAnchor.parentElement,
+      before: preferredAnchor.nextSibling,
+      layoutMode: 'block' as const,
+    };
+  }
+
+  return {
+    parent: mainContent,
+    before: mainContent.firstChild,
+    layoutMode: 'block' as const,
   };
 }
 
@@ -4212,6 +4497,326 @@ function ensureOverlayStyle() {
 
       #${ADS_DASHBOARD_ENHANCEMENT_ID} .levelup-adspro-powered-by {
         width: min(160px, 60%);
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+function ensureShopOverlayStyle() {
+  if (document.getElementById(SHOP_OVERLAY_STYLE_ID)) {
+    return;
+  }
+
+  const style = document.createElement('style');
+  style.id = SHOP_OVERLAY_STYLE_ID;
+  style.textContent = `
+    #${SHOP_OVERLAY_ID} {
+      margin: 20px auto 16px;
+      max-width: 1200px;
+      border: 2px solid #fb6a35;
+      border-radius: 10px;
+      background: linear-gradient(180deg, rgba(255, 243, 238, 0.96), rgba(255, 248, 245, 0.96));
+      box-shadow: 0 8px 20px rgba(251, 106, 53, 0.1);
+      color: #1f2937;
+      font-family: Inter, Arial, sans-serif;
+      overflow: hidden;
+      width: 100%;
+    }
+
+    #${SHOP_OVERLAY_ID} * {
+      box-sizing: border-box;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px 10px;
+      border-bottom: 1px solid rgba(251, 106, 53, 0.18);
+      background: rgba(255, 255, 255, 0.55);
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-header-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: 15px;
+      font-weight: 600;
+      color: #111827;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-header-title-logo {
+      width: 88px;
+      height: auto;
+      object-fit: contain;
+      opacity: 0.96;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-subtitle,
+    #${SHOP_OVERLAY_ID} .levelup-shop-status,
+    #${SHOP_OVERLAY_ID} .levelup-shop-note {
+      margin-top: 4px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #6b7280;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-header-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-inline-select {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      line-height: 1.4;
+      font-weight: 600;
+      color: #6b7280;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-inline-select select {
+      border: 1px solid rgba(251, 106, 53, 0.22);
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 12px;
+      line-height: 1.4;
+      color: #111827;
+      outline: none;
+      background: rgba(255, 255, 255, 0.92);
+      cursor: pointer;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-body {
+      padding: 12px 14px 14px;
+      display: grid;
+      gap: 12px;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-stats {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-card {
+      border: 1px solid rgba(251, 106, 53, 0.22);
+      border-radius: 14px;
+      background: #fff;
+      padding: 12px;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-card-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #9a3412;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-card-value {
+      margin-top: 6px;
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.45;
+      color: #111827;
+      word-break: break-word;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-chip-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-chip {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      background: rgba(251, 106, 53, 0.12);
+      color: #c2410c;
+      white-space: nowrap;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-results {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-result {
+      border: 1px solid rgba(251, 106, 53, 0.16);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.8);
+      padding: 8px;
+      display: grid;
+      gap: 8px;
+      min-height: 100%;
+      position: relative;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-result-thumb {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      border-radius: 6px;
+      background: linear-gradient(180deg, rgba(251, 106, 53, 0.08), rgba(251, 106, 53, 0.14));
+      overflow: hidden;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-result-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-result-action-layer {
+      position: absolute;
+      inset: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px;
+      border-radius: 12px;
+      background: linear-gradient(180deg, rgba(15, 23, 42, 0.08), rgba(15, 23, 42, 0.72));
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity 0.18s ease;
+      z-index: 3;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-result[data-hover-active="true"] .levelup-shop-result-action-layer,
+    #${SHOP_OVERLAY_ID} .levelup-shop-result:focus-within .levelup-shop-result-action-layer,
+    #${SHOP_OVERLAY_ID} .levelup-shop-result-action-layer:focus-within {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-hover-button {
+      border: none;
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.2;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+      width: 100%;
+      max-width: 150px;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-hover-button-primary {
+      background: #fb6a35;
+      color: #fff;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-hover-button-secondary {
+      background: rgba(255, 255, 255, 0.96);
+      color: #9a3412;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-result-title {
+      font-size: 12px;
+      font-weight: 400;
+      line-height: 1.5;
+      color: #111827;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      min-height: 36px;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-result-meta-grid {
+      display: grid;
+      gap: 6px;
+      font-size: 11px;
+      color: #4b5563;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-result-meta-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-result-meta-label {
+      color: #6b7280;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-result-meta-value {
+      color: #111827;
+      font-weight: 600;
+      text-align: right;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-button {
+      border: none;
+      border-radius: 999px;
+      padding: 9px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-button-primary {
+      background: #fb6a35;
+      color: #fff;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-button-secondary {
+      background: rgba(251, 106, 53, 0.12);
+      color: #c2410c;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-button-ghost {
+      background: #fff;
+      color: #9a3412;
+      border: 1px solid rgba(251, 106, 53, 0.22);
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-button:disabled,
+    #${SHOP_OVERLAY_ID} .levelup-shop-hover-button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    #${SHOP_OVERLAY_ID} .levelup-shop-empty {
+      padding: 16px;
+      border: 1px dashed rgba(251, 106, 53, 0.22);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.72);
+      color: #6b7280;
+      font-size: 12px;
+      line-height: 1.6;
+      text-align: center;
+      grid-column: 1 / -1;
+    }
+
+    @media (max-width: 960px) {
+      #${SHOP_OVERLAY_ID} .levelup-shop-stats {
+        grid-template-columns: 1fr;
+      }
+
+      #${SHOP_OVERLAY_ID} .levelup-shop-results {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
       }
     }
   `;
@@ -5980,24 +6585,35 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
   refreshComputed();
 }
 
-function removeOverlay() {
+function removeSharedOverlay() {
   document.getElementById(OVERLAY_ID)?.remove();
+}
+
+function removeShopOverlay() {
+  document.getElementById(SHOP_OVERLAY_ID)?.remove();
+}
+
+function removeOverlay() {
+  removeSharedOverlay();
+  removeShopOverlay();
 }
 
 function isManagedOverlayNode(node: Node) {
   if (node instanceof HTMLStyleElement) {
-    return node.id === OVERLAY_STYLE_ID;
+    return node.id === OVERLAY_STYLE_ID || node.id === SHOP_OVERLAY_STYLE_ID;
   }
 
   if (node instanceof HTMLElement) {
     return (
       node.id === OVERLAY_ID ||
+      node.id === SHOP_OVERLAY_ID ||
       node.id === ADS_DASHBOARD_ENHANCEMENT_ID ||
       node.id === OVERLAY_STYLE_ID ||
+      node.id === SHOP_OVERLAY_STYLE_ID ||
       node.getAttribute('data-levelup-ads-managed') === 'true' ||
       Boolean(
         node.closest?.(
-          `#${OVERLAY_ID}, #${ADS_DASHBOARD_ENHANCEMENT_ID}, [data-levelup-ads-managed="true"]`,
+          `#${OVERLAY_ID}, #${SHOP_OVERLAY_ID}, #${ADS_DASHBOARD_ENHANCEMENT_ID}, [data-levelup-ads-managed="true"]`,
         ),
       )
     );
@@ -6048,6 +6664,33 @@ document.addEventListener(PAGE_BRIDGE_RESPONSE_EVENT, (event: Event) => {
   }
 
   pending.resolve(Array.isArray(message.entries) ? message.entries : []);
+});
+
+document.addEventListener(PAGE_BRIDGE_SHOP_RESPONSE_EVENT, (event: Event) => {
+  const message = (event as CustomEvent<PageBridgeShopResponseMessage>).detail;
+  if (!message || typeof message.requestId !== 'string') {
+    return;
+  }
+
+  const pending = pendingPageBridgeShopRequests.get(message.requestId);
+  if (!pending) {
+    return;
+  }
+
+  window.clearTimeout(pending.timeoutId);
+  pendingPageBridgeShopRequests.delete(message.requestId);
+
+  if (message.error) {
+    pending.reject(new Error(message.error));
+    return;
+  }
+
+  if (!message.data) {
+    pending.reject(new Error('Bridge riset toko Shopee tidak mengembalikan data.'));
+    return;
+  }
+
+  pending.resolve(message.data);
 });
 
 async function enrichSearchSnapshot(snapshot: PageSnapshot) {
@@ -6276,7 +6919,9 @@ function queueProductDetailEnrichment(snapshot: PageSnapshot) {
 }
 
 async function fetchShopeeShopBase(shopId: string) {
-  const response = await fetch(`/api/v4/shop/get_shop_base?shopid=${shopId}`, {
+  const endpoint = new URL('/api/v4/shop/get_shop_base', window.location.origin);
+  endpoint.searchParams.set('shopid', shopId);
+  const response = await fetch(endpoint.toString(), {
     credentials: 'include',
   });
   const json = await response.json();
@@ -6288,7 +6933,9 @@ async function fetchShopeeShopBase(shopId: string) {
 }
 
 async function fetchShopeeShopDetail(shopId: string) {
-  const response = await fetch(`/api/v4/shop/get_shop_detail?shopid=${shopId}`, {
+  const endpoint = new URL('/api/v4/shop/get_shop_detail', window.location.origin);
+  endpoint.searchParams.set('shopid', shopId);
+  const response = await fetch(endpoint.toString(), {
     credentials: 'include',
   });
   const json = await response.json();
@@ -6299,13 +6946,24 @@ async function fetchShopeeShopDetail(shopId: string) {
   return json.data as Record<string, unknown>;
 }
 
-async function fetchShopeeShopCategories(shopId: string) {
-  const response = await fetch(
-    `/api/v4/shop/get_categories?limit=20&offset=0&shopid=${shopId}&two_tier_cate=1`,
-    {
-      credentials: 'include',
-    },
+function extractShopeeShopIdFromProductLinks(document: Document) {
+  const productLink = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href]')).find(
+    (anchor) => /-i\.(\d+)\.(\d+)(?:$|[/?#])/i.test(anchor.getAttribute('href') ?? ''),
   );
+  const href = productLink?.getAttribute('href') ?? '';
+  const matched = href.match(/-i\.(\d+)\.(\d+)(?:$|[/?#])/i);
+  return matched?.[1] ?? null;
+}
+
+async function fetchShopeeShopCategories(shopId: string) {
+  const endpoint = new URL('/api/v4/shop/get_categories', window.location.origin);
+  endpoint.searchParams.set('limit', '20');
+  endpoint.searchParams.set('offset', '0');
+  endpoint.searchParams.set('shopid', shopId);
+  endpoint.searchParams.set('two_tier_cate', '1');
+  const response = await fetch(endpoint.toString(), {
+    credentials: 'include',
+  });
   const json = await response.json();
   if (!response.ok || json?.error) {
     throw new Error(json?.error_msg || 'Gagal memuat kategori toko.');
@@ -6329,7 +6987,9 @@ async function fetchShopeeShopItems(input: {
     scenario: 'PAGE_SHOP_SEARCH',
     version: '2',
   });
-  const response = await fetch(`/api/v4/search/search_items?${params.toString()}`, {
+  const endpoint = new URL('/api/v4/search/search_items', window.location.origin);
+  endpoint.search = params.toString();
+  const response = await fetch(endpoint.toString(), {
     credentials: 'include',
   });
   const json = await response.json();
@@ -6344,6 +7004,11 @@ async function fetchShopeeShopItems(input: {
 }
 
 function resolveShopeeShopIdFromDocument(document: Document) {
+  const fromProductLinks = extractShopeeShopIdFromProductLinks(document);
+  if (fromProductLinks) {
+    return fromProductLinks;
+  }
+
   const scripts = Array.from(document.querySelectorAll<HTMLScriptElement>('script'));
   for (const script of scripts) {
     const text = script.textContent;
@@ -6421,7 +7086,11 @@ function buildShopResearchSnapshot(input: {
         position: index + 1,
         itemId,
         productTitle: String(item.name ?? 'Produk Shopee'),
-        productUrl: `https://shopee.co.id/-i.${input.shopId}.${itemId}`,
+        productUrl: buildShopeeProductUrl({
+          shopId: input.shopId,
+          itemId,
+          productTitle: String(item.name ?? 'Produk Shopee'),
+        }),
         imageUrl: typeof item.image === 'string' ? `https://down-id.img.susercontent.com/file/${item.image}` : undefined,
         priceMin,
         priceMax,
@@ -6546,25 +7215,31 @@ async function enrichShopSnapshot(snapshot: PageSnapshot) {
   let base: Record<string, unknown>;
   let detail: Record<string, unknown>;
   let categories: Record<string, unknown> | null = null;
-  let itemsPayload: Awaited<ReturnType<typeof fetchShopeeShopItems>>;
+  let itemsPayload: {
+    total_count?: number;
+    items?: Array<{ item_basic?: Record<string, unknown> }>;
+  };
   try {
-    [base, detail, itemsPayload] = await Promise.all([
-      fetchShopeeShopBase(shopId),
-      fetchShopeeShopDetail(shopId),
-      fetchShopeeShopItems({ shopId, offset: 0, limit: 60 }),
-    ]);
-
-    try {
-      categories = await fetchShopeeShopCategories(shopId);
-    } catch {
-      categories = null;
-    }
+    const bridgeData = await requestPageBridgeShopResearch({
+      shopId,
+      offset: 0,
+      limit: 60,
+    });
+    base = bridgeData.base;
+    detail = bridgeData.detail;
+    categories = bridgeData.categories;
+    itemsPayload = bridgeData.itemsPayload;
   } catch {
     shopeeShopResearchMeta.set(shopId, {
       totalCount: 0,
       nextOffset: 0,
       hasMore: false,
       isLoading: false,
+    });
+    await publishSnapshot({
+      ...snapshot,
+      shopIdentifier: shopId,
+      statusMessage: `Riset Toko gagal dimuat untuk ${shopName}. Coba Muat Ulang Parser.`,
     });
     return;
   }
@@ -6624,11 +7299,12 @@ async function loadMoreShopProducts(snapshot: PageSnapshot) {
 
   shopeeShopResearchMeta.set(shopId, { ...meta, isLoading: true });
 
-  const itemsPayload = await fetchShopeeShopItems({
+  const bridgeData = await requestPageBridgeShopResearch({
     shopId,
     offset: meta.nextOffset,
     limit: 40,
   }).catch(() => null);
+  const itemsPayload = bridgeData?.itemsPayload ?? null;
 
   if (!itemsPayload) {
     shopeeShopResearchMeta.set(shopId, { ...meta, isLoading: false });
@@ -6658,15 +7334,25 @@ async function loadMoreShopProducts(snapshot: PageSnapshot) {
     ...itemBasics,
   ];
 
-  const base = await fetchShopeeShopBase(shopId).catch(() => null);
-  const detail = await fetchShopeeShopDetail(shopId).catch(() => null);
+  const base = bridgeData?.base ?? {};
+  const detail = bridgeData?.detail ?? {};
 
   const nextShopResearch = buildShopResearchSnapshot({
     shopId,
     shopName: existing.shopName,
-    base: base ?? {},
-    detail: detail ?? {},
-    categories: existing.categories ? { shop_categories: existing.categories.map((c) => ({ shop_category_id: c.id, display_name: c.name, total: c.total })) } : null,
+    base,
+    detail,
+    categories:
+      bridgeData?.categories ??
+      (existing.categories
+        ? {
+            shop_categories: existing.categories.map((c) => ({
+              shop_category_id: c.id,
+              display_name: c.name,
+              total: c.total,
+            })),
+          }
+        : null),
     items: mergedBasics,
     totalCount: typeof itemsPayload.total_count === 'number' ? itemsPayload.total_count : meta.totalCount,
   });
@@ -6688,23 +7374,43 @@ async function loadMoreShopProducts(snapshot: PageSnapshot) {
 }
 
 function queueShopResearchEnrichment(snapshot: PageSnapshot) {
+  if (snapshot.pageType !== 'shopee_public_shop') {
+    if (shopResearchEnrichmentTimeoutId) {
+      window.clearTimeout(shopResearchEnrichmentTimeoutId);
+      shopResearchEnrichmentTimeoutId = null;
+    }
+    queuedShopResearchKey = null;
+    return;
+  }
+
+  if (/Riset Toko gagal dimuat/i.test(snapshot.statusMessage)) {
+    return;
+  }
+
+  const queueKey = snapshot.shopIdentifier ?? snapshot.url;
+  if (shopResearchEnrichmentTimeoutId && queuedShopResearchKey === queueKey) {
+    return;
+  }
+
   if (shopResearchEnrichmentTimeoutId) {
     window.clearTimeout(shopResearchEnrichmentTimeoutId);
     shopResearchEnrichmentTimeoutId = null;
   }
 
-  if (snapshot.pageType !== 'shopee_public_shop') {
-    return;
-  }
+  queuedShopResearchKey = queueKey;
 
   shopResearchEnrichmentTimeoutId = window.setTimeout(() => {
     shopResearchEnrichmentTimeoutId = null;
+    queuedShopResearchKey = null;
     void enrichShopSnapshot(snapshot);
   }, 900);
 }
 
 async function publishSnapshot(payload: PageSnapshot) {
   const snapshotWithResolvedEnrichment = applyResolvedEnrichmentToSnapshot(payload);
+  if (lastSnapshot && lastSnapshot.pageType !== snapshotWithResolvedEnrichment.pageType) {
+    removeOverlay();
+  }
   lastSnapshot = snapshotWithResolvedEnrichment;
   syncDomObservationMode(snapshotWithResolvedEnrichment);
   renderOverlay(snapshotWithResolvedEnrichment);
@@ -6768,6 +7474,378 @@ async function loadMoreSearchResults(targetCount: number) {
   return bestSnapshot;
 }
 
+function renderShopOverlay(snapshot: PageSnapshot, statusLabel: string) {
+  if (snapshot.pageType !== 'shopee_public_shop') {
+    removeShopOverlay();
+    return;
+  }
+
+  ensureShopOverlayStyle();
+  removeSharedOverlay();
+
+  const shopId =
+    snapshot.shopIdentifier && /^\d+$/.test(snapshot.shopIdentifier)
+      ? snapshot.shopIdentifier
+      : null;
+  const meta = shopId ? shopeeShopResearchMeta.get(shopId) ?? null : null;
+  const shop =
+    snapshot.shopResearch ?? (shopId ? shopeeShopResearchCache.get(shopId) ?? null : null);
+  const isLoading = meta?.isLoading ?? !shop;
+  const products = shop?.products ?? [];
+  const totalCount = meta?.totalCount ?? products.length;
+  const hasMore = meta?.hasMore ?? false;
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const shopLabel =
+    shop?.shopName ?? normalizeText(document.querySelector('h1')?.textContent) ?? 'Toko Shopee';
+  const revenueLabel = shop?.revenue30dEstimate
+    ? formatCompactCurrencyLabel(shop.revenue30dEstimate)
+    : isLoading
+      ? '-'
+      : formatCompactCurrencyLabel(0);
+  const soldTotalLabel =
+    typeof shop?.sold30dTotal === 'number' ? formatCompactCount(shop.sold30dTotal, 'Pcs') : '-';
+  const priceRangeLabel =
+    typeof shop?.priceMin === 'number' || typeof shop?.priceMax === 'number'
+      ? `${formatCompactCurrencyLabel(shop?.priceMin ?? null)} - ${formatCompactCurrencyLabel(
+          shop?.priceMax ?? null,
+        )}`
+      : '-';
+  const listingAgeLabel = formatListingAgeRange(
+    shop?.listingAgeMinDays ?? null,
+    shop?.listingAgeMaxDays ?? null,
+  );
+  const followerLabel =
+    typeof shop?.followerCount === 'number'
+      ? formatCompactCount(shop.followerCount, 'Pengikut')
+      : '-';
+  const responseRateLabel =
+    typeof shop?.responseRate === 'number' ? `${Math.round(shop.responseRate)}%` : '-';
+  const ratingStarLabel =
+    typeof shop?.ratingStar === 'number' ? formatDecimal(shop.ratingStar, 1) : '-';
+  const cancelRateLabel =
+    typeof shop?.cancellationRate === 'number'
+      ? `${(shop.cancellationRate * 100).toFixed(1).replace(/\.0$/, '')}%`
+      : '-';
+
+  const sortedProducts = sortShopResearchProducts(products, shopResearchSortKey);
+
+  const overlay = document.getElementById(SHOP_OVERLAY_ID) ?? document.createElement('section');
+  overlay.id = SHOP_OVERLAY_ID;
+  overlay.setAttribute('data-levelup-ads-managed', 'true');
+  const renderKey = JSON.stringify({
+    pageType: snapshot.pageType,
+    statusLabel,
+    shopIdentifier: snapshot.shopIdentifier ?? '',
+    sortKey: shopResearchSortKey,
+    shopUpdatedAt: shop?.updatedAt ?? '',
+    productCount: products.length,
+    totalCount,
+    hasMore,
+  });
+  const shouldRefreshMarkup = overlay.dataset.renderKey !== renderKey;
+
+  if (shouldRefreshMarkup) {
+    overlay.innerHTML = `
+      <div class="levelup-shop-header">
+        <div>
+          <div class="levelup-shop-header-title">
+            <span>Riset Toko |</span>
+            <img class="levelup-shop-header-title-logo" src="${POWERED_BY_LOGO_URL}" alt="LevelUP adsPRO" />
+          </div>
+          <div class="levelup-shop-subtitle">Toko: ${shopLabel}</div>
+          <div class="levelup-shop-status">${statusLabel}</div>
+        </div>
+        <div class="levelup-shop-header-actions">
+          <label class="levelup-shop-inline-select">
+            <span>Urutkan</span>
+            <select data-role="shop-sort-isolated">
+              <option value="revenue30d">Omset 30 hari</option>
+              <option value="sold30d">Pcs Terjual</option>
+              <option value="reviews">Ulasan</option>
+              <option value="newest">Terbaru</option>
+            </select>
+          </label>
+          <button type="button" class="levelup-shop-button levelup-shop-button-primary" data-action="shop-sync">Sinkronkan Sekarang</button>
+          <button type="button" class="levelup-shop-button levelup-shop-button-secondary" data-action="shop-refresh">Muat Ulang Parser</button>
+          <button type="button" class="levelup-shop-button levelup-shop-button-ghost" data-action="shop-load-more-isolated" ${hasMore ? '' : 'disabled'}>${meta?.isLoading ? 'Memuat...' : 'Muat Lebih Banyak'}</button>
+        </div>
+      </div>
+      <div class="levelup-shop-body">
+        <div class="levelup-shop-stats">
+          <div class="levelup-shop-card"><div class="levelup-shop-card-label">Pendapatan Kotor 30 Hari</div><div class="levelup-shop-card-value">${revenueLabel}</div></div>
+          <div class="levelup-shop-card"><div class="levelup-shop-card-label">Terjual 30 Hari</div><div class="levelup-shop-card-value">${soldTotalLabel}</div></div>
+          <div class="levelup-shop-card"><div class="levelup-shop-card-label">Rentang Harga</div><div class="levelup-shop-card-value">${priceRangeLabel}</div></div>
+          <div class="levelup-shop-card"><div class="levelup-shop-card-label">Rentang Umur Listing</div><div class="levelup-shop-card-value">${listingAgeLabel}</div></div>
+          <div class="levelup-shop-card"><div class="levelup-shop-card-label">Produk Terdata</div><div class="levelup-shop-card-value">${products.length} / ${totalCount || '-'}</div></div>
+          <div class="levelup-shop-card"><div class="levelup-shop-card-label">Pengikut</div><div class="levelup-shop-card-value">${followerLabel}</div></div>
+          <div class="levelup-shop-card"><div class="levelup-shop-card-label">Rating / Chat</div><div class="levelup-shop-card-value">${ratingStarLabel} • ${responseRateLabel}</div></div>
+          <div class="levelup-shop-card"><div class="levelup-shop-card-label">Cancel Rate</div><div class="levelup-shop-card-value">${cancelRateLabel}</div></div>
+        </div>
+        <div class="levelup-shop-note">Pendapatan Kotor 30 Hari adalah estimasi dari data publik (sold 30 hari x harga). Gunakan sebagai insight riset, bukan angka resmi.</div>
+        ${
+          shop?.categories?.length
+            ? `<div class="levelup-shop-chip-list">
+                ${shop.categories
+                  .slice(0, 8)
+                  .map((category) => `<span class="levelup-shop-chip">${category.name} (${category.total})</span>`)
+                  .join('')}
+              </div>`
+            : ''
+        }
+        <div class="levelup-shop-results">
+          ${
+            isLoading && products.length === 0
+              ? `<div class="levelup-shop-empty">Memuat data toko...</div>`
+              : sortedProducts
+                  .map((product) => {
+                    const cleanTitle = cleanProductTitle(product.productTitle);
+                    const priceLabel =
+                      typeof product.priceMin === 'number' || typeof product.priceMax === 'number'
+                        ? typeof product.priceMin === 'number' &&
+                          typeof product.priceMax === 'number' &&
+                          product.priceMin !== product.priceMax
+                          ? `${formatCompactCurrencyLabel(product.priceMin)} - ${formatCompactCurrencyLabel(product.priceMax)}`
+                          : formatCompactCurrencyLabel(product.priceMin ?? product.priceMax ?? null)
+                        : '-';
+                    const soldLabel = formatCompactCount(product.sold30d ?? null, 'Pcs');
+                    const ratingLabel =
+                      typeof product.ratingStar === 'number' ? formatDecimal(product.ratingStar, 1) : '-';
+                    const reviewLabel = formatCompactCount(product.reviewCount ?? null, '');
+                    const revenueItemLabel = formatCompactCurrencyLabel(product.revenue30dEstimate ?? null);
+                    const ageLabel =
+                      typeof product.listingCtime === 'number'
+                        ? formatListingAgeDays((nowSeconds - product.listingCtime) / 86400)
+                        : '-';
+
+                    return `
+                      <div class="levelup-shop-result" data-product-url="${encodeURIComponent(product.productUrl)}">
+                        <div class="levelup-shop-result-thumb">
+                          ${
+                            product.imageUrl
+                              ? `<img src="${product.imageUrl}" alt="${cleanTitle}" loading="lazy" referrerpolicy="no-referrer" />`
+                              : ''
+                          }
+                          <div class="levelup-shop-result-action-layer">
+                            <button type="button" class="levelup-shop-hover-button levelup-shop-hover-button-secondary" data-action="shop-open-product" data-product-url="${encodeURIComponent(product.productUrl)}">Lihat Produk</button>
+                            <button type="button" class="levelup-shop-hover-button levelup-shop-hover-button-primary" data-action="shop-sync-product" data-product-url="${encodeURIComponent(product.productUrl)}">Simpan Produk</button>
+                          </div>
+                        </div>
+                        <div class="levelup-shop-result-title">${cleanTitle}</div>
+                        <div class="levelup-shop-result-meta-grid">
+                          <div class="levelup-shop-result-meta-row"><span class="levelup-shop-result-meta-label">Harga</span><span class="levelup-shop-result-meta-value">${priceLabel}</span></div>
+                          <div class="levelup-shop-result-meta-row"><span class="levelup-shop-result-meta-label">Terjual 30 Hari</span><span class="levelup-shop-result-meta-value">${soldLabel}</span></div>
+                          <div class="levelup-shop-result-meta-row"><span class="levelup-shop-result-meta-label">Rating Ulasan</span><span class="levelup-shop-result-meta-value">${ratingLabel} / ${reviewLabel}</span></div>
+                          <div class="levelup-shop-result-meta-row"><span class="levelup-shop-result-meta-label">Umur Listing</span><span class="levelup-shop-result-meta-value">${ageLabel}</span></div>
+                          <div class="levelup-shop-result-meta-row"><span class="levelup-shop-result-meta-label">Omset Kotor</span><span class="levelup-shop-result-meta-value">${revenueItemLabel}</span></div>
+                        </div>
+                      </div>
+                    `;
+                  })
+                  .join('')
+          }
+        </div>
+      </div>
+    `;
+  }
+
+  overlay.dataset.renderKey = renderKey;
+  const { parent, before } = getShopOverlayHost();
+  const shouldMoveOverlay =
+    !overlay.isConnected ||
+    overlay.parentElement !== parent ||
+    (before instanceof Node && overlay.nextSibling !== before);
+
+  if (shouldMoveOverlay) {
+    parent.insertBefore(overlay, before);
+  }
+
+  if (!shouldRefreshMarkup) {
+    return;
+  }
+
+  const shopSyncButton = overlay.querySelector<HTMLButtonElement>('[data-action="shop-sync"]');
+  const shopRefreshButton = overlay.querySelector<HTMLButtonElement>('[data-action="shop-refresh"]');
+  const shopLoadMoreButton = overlay.querySelector<HTMLButtonElement>(
+    '[data-action="shop-load-more-isolated"]',
+  );
+  const shopSortSelect = overlay.querySelector<HTMLSelectElement>('[data-role="shop-sort-isolated"]');
+  const openProductButtons = Array.from(
+    overlay.querySelectorAll<HTMLButtonElement>('[data-action="shop-open-product"]'),
+  );
+  const syncProductButtons = Array.from(
+    overlay.querySelectorAll<HTMLButtonElement>('[data-action="shop-sync-product"]'),
+  );
+  const resultCards = Array.from(overlay.querySelectorAll<HTMLElement>('.levelup-shop-result'));
+
+  if (shopSortSelect) {
+    shopSortSelect.value = shopResearchSortKey;
+  }
+
+  shopSyncButton?.addEventListener('click', async () => {
+    if (!shopSyncButton) {
+      return;
+    }
+
+    shopSyncButton.disabled = true;
+    const previousLabel = shopSyncButton.textContent;
+    shopSyncButton.textContent = 'Menyinkronkan...';
+
+    try {
+      await sendBackgroundMessage<{ batchId: string; state: ExtensionState }>({
+        type: 'SYNC_NOW',
+      });
+      await refreshKnownState();
+      if (lastSnapshot) {
+        renderShopOverlay(lastSnapshot, lastKnownState?.lastSync.message ?? lastSnapshot.statusMessage);
+      }
+    } catch (error) {
+      const statusElement = overlay.querySelector<HTMLElement>('.levelup-shop-status');
+      if (statusElement) {
+        statusElement.textContent =
+          error instanceof Error ? error.message : 'Sync gagal dari overlay toko.';
+      }
+    } finally {
+      shopSyncButton.disabled = false;
+      shopSyncButton.textContent = previousLabel ?? 'Sinkronkan Sekarang';
+    }
+  });
+
+  shopRefreshButton?.addEventListener('click', () => {
+    queueRefresh();
+  });
+
+  shopLoadMoreButton?.addEventListener('click', async () => {
+    shopLoadMoreButton.disabled = true;
+    const previousLabel = shopLoadMoreButton.textContent;
+    shopLoadMoreButton.textContent = 'Memuat...';
+
+    try {
+      await loadMoreShopProducts(snapshot);
+      await refreshKnownState();
+      if (lastSnapshot) {
+        renderShopOverlay(lastSnapshot, lastKnownState?.lastSync.message ?? lastSnapshot.statusMessage);
+      }
+    } catch (error) {
+      const statusElement = overlay.querySelector<HTMLElement>('.levelup-shop-status');
+      if (statusElement) {
+        statusElement.textContent =
+          error instanceof Error ? error.message : 'Gagal memuat produk toko tambahan.';
+      }
+    } finally {
+      if (shopLoadMoreButton.isConnected) {
+        shopLoadMoreButton.disabled = false;
+        shopLoadMoreButton.textContent = previousLabel ?? 'Muat Lebih Banyak';
+      }
+    }
+  });
+
+  shopSortSelect?.addEventListener('change', () => {
+    const nextValue = shopSortSelect.value;
+    if (
+      nextValue === 'revenue30d' ||
+      nextValue === 'sold30d' ||
+      nextValue === 'reviews' ||
+      nextValue === 'newest'
+    ) {
+      shopResearchSortKey = nextValue;
+      if (lastSnapshot) {
+        renderShopOverlay(lastSnapshot, lastKnownState?.lastSync.message ?? lastSnapshot.statusMessage);
+      }
+    }
+  });
+
+  overlay.onmouseenter = () => {
+    if (refreshTimeoutId) {
+      window.clearTimeout(refreshTimeoutId);
+      refreshTimeoutId = null;
+    }
+
+    isOverlayInteractionLocked = true;
+  };
+
+  overlay.onmouseleave = () => {
+    if (isRoasCalculatorOpen) {
+      return;
+    }
+
+    isOverlayInteractionLocked = false;
+
+    if (hasDeferredRefresh) {
+      hasDeferredRefresh = false;
+      queueRefresh();
+    }
+  };
+
+  for (const card of resultCards) {
+    card.addEventListener('mouseenter', () => {
+      card.dataset.hoverActive = 'true';
+    });
+
+    card.addEventListener('mouseleave', () => {
+      delete card.dataset.hoverActive;
+    });
+  }
+
+  for (const button of openProductButtons) {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const productUrl = button.dataset.productUrl
+        ? decodeURIComponent(button.dataset.productUrl)
+        : '';
+      if (!productUrl) {
+        return;
+      }
+
+      window.open(productUrl, '_blank', 'noopener,noreferrer');
+    });
+  }
+
+  for (const button of syncProductButtons) {
+    button.addEventListener('click', async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const productUrl = button.dataset.productUrl
+        ? decodeURIComponent(button.dataset.productUrl)
+        : '';
+      if (!productUrl) {
+        return;
+      }
+
+      button.disabled = true;
+      const previousLabel = button.textContent;
+      button.textContent = 'Menyinkronkan...';
+
+      try {
+        const response = await sendBackgroundMessage<{ batchId: string; state: ExtensionState }>({
+          type: 'SYNC_PRODUCT_URL',
+          payload: { productUrl },
+        });
+        await refreshKnownState();
+        showToast(`Produk berhasil disimpan. Batch ${response.batchId} diterima.`, 'success');
+        if (lastSnapshot) {
+          renderShopOverlay(lastSnapshot, lastKnownState?.lastSync.message ?? lastSnapshot.statusMessage);
+        }
+      } catch (error) {
+        const statusElement = overlay.querySelector<HTMLElement>('.levelup-shop-status');
+        const message =
+          error instanceof Error ? error.message : 'Sync produk dari kartu riset toko gagal.';
+        if (statusElement) {
+          statusElement.textContent = message;
+        }
+        showToast(message, 'error');
+      } finally {
+        if (button.isConnected) {
+          button.disabled = false;
+          button.textContent = previousLabel ?? 'Simpan Produk';
+        }
+      }
+    });
+  }
+}
+
 function renderOverlay(snapshot: PageSnapshot) {
   if (
     (snapshot.pageType === 'shopee_ads_dashboard' ||
@@ -6807,9 +7885,21 @@ function renderOverlay(snapshot: PageSnapshot) {
     return;
   }
 
-  ensureOverlayStyle();
   const isSearchPage = snapshot.pageType === 'shopee_public_search';
   const isShopPage = snapshot.pageType === 'shopee_public_shop';
+  const statusLabel = lastKnownState?.lastSync.message ?? snapshot.statusMessage;
+  const combinedStatusLabel =
+    snapshot.pageType === 'shopee_public_search' && searchEnrichmentDebugLabel
+      ? `${statusLabel} ${searchEnrichmentDebugLabel}`
+      : statusLabel;
+
+  if (isShopPage) {
+    renderShopOverlay(snapshot, combinedStatusLabel);
+    return;
+  }
+
+  removeShopOverlay();
+  ensureOverlayStyle();
 
   const currentSignature = getResultsSignature(snapshot);
   if (currentSignature !== lastResultsSignature) {
@@ -6817,17 +7907,18 @@ function renderOverlay(snapshot: PageSnapshot) {
     lastResultsSignature = currentSignature;
     searchEnrichmentDebugLabel = '';
   }
-
-  const statusLabel = lastKnownState?.lastSync.message ?? snapshot.statusMessage;
-  const combinedStatusLabel =
-    snapshot.pageType === 'shopee_public_search' && searchEnrichmentDebugLabel
-      ? `${statusLabel} ${searchEnrichmentDebugLabel}`
-      : statusLabel;
   const orderedResults = isSearchPage
     ? orderResultsForResearch(snapshot.resultsPreview)
     : snapshot.resultsPreview;
   const totalResults = orderedResults.length;
-  const overlay = document.getElementById(OVERLAY_ID) ?? document.createElement('section');
+  const existingOverlay = document.getElementById(OVERLAY_ID);
+  const overlay =
+    isShopPage && existingOverlay
+      ? (() => {
+          existingOverlay.remove();
+          return document.createElement('section');
+        })()
+      : existingOverlay ?? document.createElement('section');
   const nextRenderKey = getOverlayRenderKey(
     snapshot,
     combinedStatusLabel,
@@ -6852,24 +7943,7 @@ function renderOverlay(snapshot: PageSnapshot) {
     const hasMore = meta?.hasMore ?? false;
     const nowSeconds = Math.floor(Date.now() / 1000);
 
-    const sortedProducts = [...products].sort((a, b) => {
-      const revenueDiff = (b.revenue30dEstimate ?? 0) - (a.revenue30dEstimate ?? 0);
-      const soldDiff = (b.sold30d ?? 0) - (a.sold30d ?? 0);
-      const reviewDiff = (b.reviewCount ?? 0) - (a.reviewCount ?? 0);
-      const newestDiff = (b.listingCtime ?? 0) - (a.listingCtime ?? 0);
-
-      switch (shopResearchSortKey) {
-        case 'sold30d':
-          return soldDiff || revenueDiff || reviewDiff || newestDiff;
-        case 'reviews':
-          return reviewDiff || revenueDiff || soldDiff || newestDiff;
-        case 'newest':
-          return newestDiff || revenueDiff || soldDiff || reviewDiff;
-        case 'revenue30d':
-        default:
-          return revenueDiff || soldDiff || reviewDiff || newestDiff;
-      }
-    });
+    const sortedProducts = sortShopResearchProducts(products, shopResearchSortKey);
 
     const statusLabel = lastKnownState?.lastSync.message ?? snapshot.statusMessage;
     const shopLabel = shop?.shopName ?? normalizeText(document.querySelector('h1')?.textContent) ?? 'Toko Shopee';
@@ -6941,7 +8015,7 @@ function renderOverlay(snapshot: PageSnapshot) {
       <div class="levelup-body">
         <div class="levelup-stats">
           <div class="levelup-card">
-            <div class="levelup-card-label">Pendapatan 30 Hari</div>
+            <div class="levelup-card-label">Pendapatan Kotor 30 Hari</div>
             <div class="levelup-card-value">${revenueLabel}</div>
           </div>
           <div class="levelup-card">
@@ -6973,7 +8047,7 @@ function renderOverlay(snapshot: PageSnapshot) {
             <div class="levelup-card-value">${cancelRateLabel}</div>
           </div>
         </div>
-        <div class="levelup-note">Pendapatan 30 hari adalah estimasi dari data publik (sold 30 hari x harga). Gunakan sebagai insight riset, bukan angka resmi.</div>
+        <div class="levelup-note">Pendapatan Kotor 30 Hari adalah estimasi dari data publik (sold 30 hari x harga). Gunakan sebagai insight riset, bukan angka resmi.</div>
         ${
           shop?.categories?.length
             ? `<div class="levelup-shop-categories">
@@ -7708,22 +8782,23 @@ function renderOverlay(snapshot: PageSnapshot) {
       button.textContent = 'Menyinkronkan...';
 
       try {
-        await sendBackgroundMessage<{ batchId: string; state: ExtensionState }>({
+        const response = await sendBackgroundMessage<{ batchId: string; state: ExtensionState }>({
           type: 'SYNC_PRODUCT_URL',
           payload: { productUrl },
         });
         await refreshKnownState();
+        showToast(`Produk berhasil disimpan. Batch ${response.batchId} diterima.`, 'success');
         if (lastSnapshot) {
           renderOverlay(lastSnapshot);
         }
       } catch (error) {
         const statusElement = overlay.querySelector<HTMLElement>('.levelup-status');
+        const message =
+          error instanceof Error ? error.message : 'Sync produk dari kartu riset gagal.';
         if (statusElement) {
-          statusElement.textContent =
-            error instanceof Error
-              ? error.message
-              : 'Sync produk dari kartu riset gagal.';
+          statusElement.textContent = message;
         }
+        showToast(message, 'error');
       } finally {
         button.disabled = false;
         button.textContent = previousLabel ?? 'Simpan Produk';
@@ -7767,6 +8842,13 @@ async function sendSnapshot() {
     return;
   }
 
+  const payload = detectPageSnapshot(document);
+  await publishSnapshot(payload);
+}
+
+async function forceSendSnapshot() {
+  hasDeferredRefresh = false;
+  isOverlayInteractionLocked = false;
   const payload = detectPageSnapshot(document);
   await publishSnapshot(payload);
 }
@@ -7881,7 +8963,7 @@ function watchRouteChanges() {
   window.setInterval(() => {
     if (window.location.href !== lastUrl) {
       lastUrl = window.location.href;
-      queueRefresh();
+      void forceSendSnapshot();
     }
   }, 1000);
 }
@@ -7917,11 +8999,11 @@ function watchDomChanges() {
 
 chrome.runtime.onMessage.addListener((message: DetectionMessage) => {
   if (message.type === 'REQUEST_PAGE_SNAPSHOT') {
-    void sendSnapshot();
+    void forceSendSnapshot();
   }
 });
 
-void refreshKnownState().then(() => sendSnapshot());
+void refreshKnownState().then(() => forceSendSnapshot());
 watchRouteChanges();
 watchAdsDashboardUserInteractions();
 watchDomChanges();

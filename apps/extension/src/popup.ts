@@ -40,6 +40,8 @@ const pageType = document.querySelector<HTMLElement>('#page-type');
 const captureMode = document.querySelector<HTMLElement>('#capture-mode');
 const marketplace = document.querySelector<HTMLElement>('#marketplace');
 const keyword = document.querySelector<HTMLElement>('#keyword');
+const shopIdentifier = document.querySelector<HTMLElement>('#shop-identifier');
+const productDetailStatus = document.querySelector<HTMLElement>('#product-detail-status');
 const pageStatus = document.querySelector<HTMLElement>('#page-status');
 const pageUrl = document.querySelector<HTMLElement>('#page-url');
 const resultsList = document.querySelector<HTMLUListElement>('#results-list');
@@ -324,6 +326,10 @@ function renderState(state: ExtensionState) {
   captureMode!.textContent = state.lastPage?.captureMode ?? '-';
   marketplace!.textContent = state.lastPage?.marketplace ?? '-';
   keyword!.textContent = state.lastPage?.keyword ?? '-';
+  shopIdentifier!.textContent = state.lastPage?.shopIdentifier ?? '-';
+  productDetailStatus!.textContent = state.lastPage?.productDetail
+    ? `Ada (${state.lastPage.productDetail.productTitle || 'tanpa judul'})`
+    : 'Kosong';
   pageStatus!.textContent = state.lastPage?.statusMessage ?? 'Belum ada snapshot halaman.';
   pageUrl!.textContent = state.lastPage?.url ?? '-';
   activityMessage!.textContent = state.lastSync.message;

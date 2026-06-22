@@ -11,8 +11,28 @@ type PageBridgeResponseMessage = {
   error?: string;
 };
 
+type PageBridgeShopRequestMessage = {
+  requestId: string;
+  shopId: string;
+  limit: number;
+  offset: number;
+};
+
+type PageBridgeShopResponseMessage = {
+  requestId: string;
+  data?: {
+    base: Record<string, unknown>;
+    detail: Record<string, unknown>;
+    categories: Record<string, unknown> | null;
+    itemsPayload: Record<string, unknown>;
+  };
+  error?: string;
+};
+
 const PAGE_BRIDGE_REQUEST_EVENT = 'levelup-adspro:enrich-request';
 const PAGE_BRIDGE_RESPONSE_EVENT = 'levelup-adspro:enrich-response';
+const PAGE_BRIDGE_SHOP_REQUEST_EVENT = 'levelup-adspro:shop-request';
+const PAGE_BRIDGE_SHOP_RESPONSE_EVENT = 'levelup-adspro:shop-response';
 const PAGE_ENRICHMENT_CONCURRENCY = 1;
 const PAGE_ENRICHMENT_DELAY_MS = 900;
 
@@ -346,6 +366,40 @@ async function handleEnrichmentRequest(message: PageBridgeRequestMessage) {
   );
 }
 
+async function handleShopRequest(message: PageBridgeShopRequestMessage) {
+  const base = await fetchShopeeJson<{ data?: Record<string, unknown> }>(
+    `/api/v4/shop/get_shop_base?shopid=${message.shopId}`,
+  );
+  const detail = await fetchShopeeJson<{ data?: Record<string, unknown> }>(
+    `/api/v4/shop/get_shop_detail?shopid=${message.shopId}`,
+  );
+
+  const [categories, itemsPayload] = await Promise.all([
+    fetchShopeeJson<{ data?: Record<string, unknown> }>(
+      `/api/v4/shop/get_categories?limit=20&offset=0&shopid=${message.shopId}&two_tier_cate=1`,
+    )
+      .then((response) => response.data ?? null)
+      .catch(() => null),
+    fetchShopeeJson<Record<string, unknown>>(
+      `/api/v4/search/search_items?by=sales&limit=${message.limit}&match_id=${message.shopId}&newest=${message.offset}&order=desc&page_type=shop&scenario=PAGE_SHOP_SEARCH&version=2`,
+    ),
+  ]);
+
+  document.dispatchEvent(
+    new CustomEvent<PageBridgeShopResponseMessage>(PAGE_BRIDGE_SHOP_RESPONSE_EVENT, {
+      detail: {
+        requestId: message.requestId,
+        data: {
+          base: base.data ?? {},
+          detail: detail.data ?? {},
+          categories,
+          itemsPayload,
+        },
+      },
+    }),
+  );
+}
+
 document.addEventListener(PAGE_BRIDGE_REQUEST_EVENT, (event: Event) => {
   const message = (event as CustomEvent<PageBridgeRequestMessage>).detail;
   if (
@@ -369,6 +423,33 @@ document.addEventListener(PAGE_BRIDGE_REQUEST_EVENT, (event: Event) => {
     document.dispatchEvent(
       new CustomEvent<PageBridgeResponseMessage>(PAGE_BRIDGE_RESPONSE_EVENT, {
         detail: response,
+      }),
+    );
+  });
+});
+
+document.addEventListener(PAGE_BRIDGE_SHOP_REQUEST_EVENT, (event: Event) => {
+  const message = (event as CustomEvent<PageBridgeShopRequestMessage>).detail;
+  if (
+    !message ||
+    typeof message.requestId !== 'string' ||
+    typeof message.shopId !== 'string' ||
+    typeof message.limit !== 'number' ||
+    typeof message.offset !== 'number'
+  ) {
+    return;
+  }
+
+  void handleShopRequest(message).catch((error: unknown) => {
+    document.dispatchEvent(
+      new CustomEvent<PageBridgeShopResponseMessage>(PAGE_BRIDGE_SHOP_RESPONSE_EVENT, {
+        detail: {
+          requestId: message.requestId,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Gagal mengambil riset toko Shopee dari halaman.',
+        },
       }),
     );
   });

@@ -118,6 +118,18 @@ function extractShopeeIdsFromProductUrl(rawUrl: string) {
   };
 }
 
+function extractShopeeShopIdFromProductLinks(document: Document) {
+  const productLink = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href]')).find(
+    (anchor) => {
+      const href = anchor.getAttribute('href') ?? '';
+      return /-i\.\d+\.\d+/i.test(href);
+    },
+  );
+
+  const href = productLink?.getAttribute('href') ?? '';
+  return extractShopeeIdsFromProductUrl(href)?.shopId;
+}
+
 function resolveSearchKeyword(document: Document, url: URL) {
   const candidates = [
     url.searchParams.get('keyword'),
@@ -1411,6 +1423,41 @@ function extractShopeeShopIdFromScripts(document: Document) {
   return undefined;
 }
 
+function isStrongShopeePublicShopPage(document: Document, url: URL) {
+  if (!url.hostname.toLowerCase().endsWith('shopee.co.id')) {
+    return false;
+  }
+
+  const title = normalizeText(document.title);
+  const heading = normalizeText(document.querySelector('h1')?.textContent);
+  const shopSearchInput =
+    document.querySelector('input[placeholder*="Cari di toko ini"]') ??
+    document.querySelector('input[aria-label*="Cari di toko ini"]') ??
+    document.querySelector('[role="combobox"][aria-label*="Cari di toko ini"]');
+  const interactiveTexts = Array.from(document.querySelectorAll('a, button')).map((element) =>
+    normalizeText(element.textContent).toLowerCase(),
+  );
+  const hasHomeTab = interactiveTexts.includes('halaman utama');
+  const hasProductTab = interactiveTexts.includes('produk');
+  const hasProductRoot = Boolean(
+    document.querySelector('.page-product__content') ??
+      document.querySelector('.product-briefing'),
+  );
+  const ogType = normalizeText(
+    document.querySelector('meta[property="og:type"]')?.getAttribute('content'),
+  ).toLowerCase();
+
+  return Boolean(
+    /^toko online\b/i.test(title) &&
+      heading.length >= 3 &&
+      shopSearchInput &&
+      hasHomeTab &&
+      hasProductTab &&
+      !hasProductRoot &&
+      ogType === 'website',
+  );
+}
+
 function detectShopeePublicShop(document: Document, url: URL) {
   const shopName =
     normalizeText(document.querySelector('h1')?.textContent) ||
@@ -1420,6 +1467,7 @@ function detectShopeePublicShop(document: Document, url: URL) {
   const shopId =
     url.searchParams.get('shopid') ??
     url.searchParams.get('shopId') ??
+    extractShopeeShopIdFromProductLinks(document) ??
     extractShopeeShopIdFromScripts(document);
 
   return {
@@ -1435,6 +1483,10 @@ function detectShopeePublicProduct(
   document: Document,
   url: URL,
 ): ProductDetailSnapshot | null {
+  if (isStrongShopeePublicShopPage(document, url)) {
+    return null;
+  }
+
   const productRoot =
     document.querySelector('.page-product__content') ??
     document.querySelector('.product-briefing') ??
@@ -1743,25 +1795,36 @@ function detectPageType(url: URL): {
 export function detectPageSnapshot(document: Document) {
   const url = new URL(window.location.href);
   const baseDetection = detectPageType(url);
+  const resolvedDetection =
+    baseDetection.marketplace === 'shopee' &&
+    baseDetection.captureMode === 'public' &&
+    isStrongShopeePublicShopPage(document, url)
+      ? {
+          pageType: 'shopee_public_shop' as const,
+          captureMode: 'public' as const,
+          marketplace: 'shopee' as const,
+          statusMessage: 'Shopee shop page terdeteksi.',
+        }
+      : baseDetection;
   const snapshot: PageSnapshot = {
     url: url.toString(),
     title: document.title,
     detectedAt: new Date().toISOString(),
-    pageType: baseDetection.pageType,
-    captureMode: baseDetection.captureMode,
-    marketplace: baseDetection.marketplace,
-    statusMessage: baseDetection.statusMessage,
+    pageType: resolvedDetection.pageType,
+    captureMode: resolvedDetection.captureMode,
+    marketplace: resolvedDetection.marketplace,
+    statusMessage: resolvedDetection.statusMessage,
     resultsPreview: [],
   };
 
-  if (baseDetection.pageType === 'shopee_public_search') {
+  if (resolvedDetection.pageType === 'shopee_public_search') {
     const detail = detectShopeePublicSearch(document, url);
     snapshot.keyword = detail.keyword;
     snapshot.resultsPreview = detail.resultsPreview;
     snapshot.statusMessage = detail.statusMessage;
   }
 
-  if (baseDetection.pageType === 'shopee_public_product') {
+  if (resolvedDetection.pageType === 'shopee_public_product') {
     const detail = detectShopeePublicProduct(document, url);
     if (detail) {
       snapshot.productDetail = detail;
@@ -1771,13 +1834,13 @@ export function detectPageSnapshot(document: Document) {
     }
   }
 
-  if (baseDetection.pageType === 'shopee_public_shop') {
+  if (resolvedDetection.pageType === 'shopee_public_shop') {
     const detail = detectShopeePublicShop(document, url);
     snapshot.shopIdentifier = detail.shopId ?? detail.shopName;
     snapshot.statusMessage = detail.statusMessage;
   }
 
-  if (baseDetection.pageType === 'shopee_ads_dashboard') {
+  if (resolvedDetection.pageType === 'shopee_ads_dashboard') {
     const adsDashboard = detectShopeeAdsDashboard(document);
     if (adsDashboard) {
       const detectedMetricCount = Object.values(adsDashboard).filter(Boolean).length;
@@ -1786,7 +1849,7 @@ export function detectPageSnapshot(document: Document) {
     }
   }
 
-  if (baseDetection.pageType === 'shopee_ads_product_detail') {
+  if (resolvedDetection.pageType === 'shopee_ads_product_detail') {
     const detail = detectShopeeAdsProductDetail(document, url);
     if (detail.productDetail) {
       snapshot.productDetail = detail.productDetail;

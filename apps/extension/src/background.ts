@@ -646,15 +646,11 @@ async function refreshActiveTabSnapshot() {
   }
 
   try {
-    await chrome.tabs.sendMessage(tab.id, {
-      type: 'REQUEST_PAGE_SNAPSHOT',
-    } satisfies DetectionMessage);
+    return await requestSnapshotFromTab(tab.id);
   } catch {
-    // Ignore tabs that do not have the content script.
+    const state = await getExtensionState();
+    return state.lastPage;
   }
-
-  const state = await getExtensionState();
-  return state.lastPage;
 }
 
 async function waitForTabComplete(tabId: number, timeoutMs = 15000) {
@@ -958,11 +954,18 @@ async function handleSyncProductUrl(
     const snapshot = await requestSnapshotFromTab(tabId);
     const comparableSnapshotUrl = normalizeComparableUrl(snapshot.url);
     const comparableRequestedUrl = normalizeComparableUrl(message.payload.productUrl);
+    const requestedProductIds = extractShopeeIdsFromUrl(message.payload.productUrl);
+    const snapshotProductIds =
+      extractShopeeIdsFromUrl(snapshot.url) ??
+      (snapshot.productDetail ? extractShopeeIdsFromUrl(snapshot.productDetail.productUrl) : null);
+    const isSameProduct =
+      comparableSnapshotUrl === comparableRequestedUrl ||
+      (requestedProductIds !== null &&
+        snapshotProductIds !== null &&
+        requestedProductIds.shopId === snapshotProductIds.shopId &&
+        requestedProductIds.itemId === snapshotProductIds.itemId);
 
-    if (
-      snapshot.pageType !== 'shopee_public_product' ||
-      comparableSnapshotUrl !== comparableRequestedUrl
-    ) {
+    if (snapshot.pageType !== 'shopee_public_product' || !isSameProduct) {
       throw new Error('Halaman target belum terbaca sebagai detail produk Shopee.');
     }
 
