@@ -5,6 +5,7 @@ export const ALLOWED_PAGE_TYPES = [
   'shopee_seller_product_page',
   'shopee_public_search',
   'shopee_public_product',
+  'shopee_public_shop',
   'tiktok_ads_dashboard',
   'tiktok_public_search',
 ] as const;

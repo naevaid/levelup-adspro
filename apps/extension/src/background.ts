@@ -755,6 +755,11 @@ function buildSyncPayload(
     throw new Error('Detail produk Shopee belum berhasil dibaca dari halaman.');
   }
 
+  const publicShopIdentifier = snapshot.shopIdentifier?.trim();
+  if (snapshot.pageType === 'shopee_public_shop' && !publicShopIdentifier) {
+    throw new Error('Toko Shopee terdeteksi, tetapi shopId belum berhasil dibaca.');
+  }
+
   return {
     captureMode: snapshot.captureMode,
     pageType: snapshot.pageType,
@@ -797,7 +802,7 @@ function buildSyncPayload(
             },
             highlights: snapshot.productDetail?.highlights ?? [],
           }
-        : snapshot.captureMode === 'public'
+        : snapshot.captureMode === 'public' && snapshot.pageType === 'shopee_public_search'
         ? {
             keyword: publicKeyword ?? '',
             resultCount: snapshot.resultsPreview.length,
@@ -820,6 +825,36 @@ function buildSyncPayload(
               monthlyRevenueHint: result.monthlyRevenueHint,
               listingAgeHint: result.listingAgeHint,
             })),
+          }
+        : snapshot.captureMode === 'public' && snapshot.pageType === 'shopee_public_shop'
+        ? {
+            pageTitle: snapshot.title,
+            shopIdentifier: publicShopIdentifier ?? '',
+            shop: snapshot.shopResearch
+              ? {
+                  shopId: snapshot.shopResearch.shopId,
+                  shopName: snapshot.shopResearch.shopName,
+                  followerCount: snapshot.shopResearch.followerCount ?? null,
+                  ratingStar: snapshot.shopResearch.ratingStar ?? null,
+                  responseRate: snapshot.shopResearch.responseRate ?? null,
+                  itemCount: snapshot.shopResearch.itemCount ?? null,
+                  preparationTime: snapshot.shopResearch.preparationTime ?? null,
+                  cancellationRate: snapshot.shopResearch.cancellationRate ?? null,
+                  priceMin: snapshot.shopResearch.priceMin ?? null,
+                  priceMax: snapshot.shopResearch.priceMax ?? null,
+                  listingAgeMinDays: snapshot.shopResearch.listingAgeMinDays ?? null,
+                  listingAgeMaxDays: snapshot.shopResearch.listingAgeMaxDays ?? null,
+                  sold30dTotal: snapshot.shopResearch.sold30dTotal ?? null,
+                  revenue30dEstimate: snapshot.shopResearch.revenue30dEstimate ?? null,
+                  categories: (snapshot.shopResearch.categories ?? []).slice(0, 12),
+                  updatedAt: snapshot.shopResearch.updatedAt,
+                }
+              : null,
+            products: (snapshot.shopResearch?.products ?? []).slice(0, 80),
+          }
+        : snapshot.captureMode === 'public'
+        ? {
+            pageTitle: snapshot.title,
           }
         : {
             shopIdentifier: snapshot.shopIdentifier ?? state.selectedShopId ?? '',

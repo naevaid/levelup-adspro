@@ -132,6 +132,7 @@ export type PageType =
   | 'unknown'
   | 'shopee_public_search'
   | 'shopee_public_product'
+  | 'shopee_public_shop'
   | 'shopee_ads_dashboard'
   | 'shopee_ads_product_detail'
   | 'shopee_seller_product_page'
@@ -190,6 +191,45 @@ export type ProductDetailSnapshot = {
   highlights: string[];
 };
 
+export type ShopResearchProductSummary = {
+  position: number;
+  itemId: string;
+  productTitle: string;
+  productUrl: string;
+  imageUrl?: string;
+  priceMin?: number;
+  priceMax?: number;
+  sold30d?: number;
+  ratingStar?: number;
+  reviewCount?: number;
+  revenue30dEstimate?: number;
+  listingCtime?: number;
+};
+
+export type ShopResearchSnapshot = {
+  shopId: string;
+  shopName: string;
+  followerCount?: number;
+  ratingStar?: number;
+  responseRate?: number;
+  itemCount?: number;
+  preparationTime?: number;
+  cancellationRate?: number;
+  priceMin?: number;
+  priceMax?: number;
+  listingAgeMinDays?: number;
+  listingAgeMaxDays?: number;
+  sold30dTotal?: number;
+  revenue30dEstimate?: number;
+  products: ShopResearchProductSummary[];
+  categories?: Array<{
+    id: number;
+    name: string;
+    total: number;
+  }>;
+  updatedAt: string;
+};
+
 export type AdsDashboardMetricSnapshot = {
   label: string;
   rawValue: string;
@@ -219,6 +259,7 @@ export type PageSnapshot = {
   shopIdentifier?: string;
   resultsPreview: SearchResultPreview[];
   productDetail?: ProductDetailSnapshot;
+  shopResearch?: ShopResearchSnapshot;
   adsDashboard?: ShopeeAdsDashboardSnapshot;
 };
 

@@ -8,6 +8,7 @@ import type {
   ProductDetailSnapshot,
   SearchResultEnrichment,
   SearchResultPreview,
+  ShopResearchSnapshot,
 } from './types';
 
 let lastUrl = window.location.href;
@@ -17,6 +18,7 @@ let mutationObserver: MutationObserver | null = null;
 let refreshTimeoutId: number | null = null;
 let searchEnrichmentTimeoutId: number | null = null;
 let productDetailEnrichmentTimeoutId: number | null = null;
+let shopResearchEnrichmentTimeoutId: number | null = null;
 let isRoasCalculatorOpen = false;
 let lastRoasProductDetail: ProductDetailSnapshot | null = null;
 let visibleResultCount = 10;
@@ -25,7 +27,9 @@ let isOverlayInteractionLocked = false;
 let hasDeferredRefresh = false;
 let searchEnrichmentRequestId = 0;
 let productDetailEnrichmentRequestId = 0;
+let shopResearchRequestId = 0;
 let searchEnrichmentDebugLabel = '';
+let shopResearchSortKey: 'revenue30d' | 'sold30d' | 'reviews' | 'newest' = 'revenue30d';
 let lastAppliedRoasDefaultsShopId: string | null = null;
 let lastStableShopeeAdsDashboard: NonNullable<PageSnapshot['adsDashboard']> | null = null;
 let adsDashboardRefreshTimeoutId: number | null = null;
@@ -52,6 +56,11 @@ const PAGE_BRIDGE_TIMEOUT_MS = 5000;
 const HEADER_LOGO_URL = chrome.runtime.getURL('header-logo.png');
 const POWERED_BY_LOGO_URL = chrome.runtime.getURL('powered-by.png');
 const resolvedSearchResultEnrichmentCache = new Map<string, SearchResultEnrichment>();
+const shopeeShopResearchCache = new Map<string, ShopResearchSnapshot>();
+const shopeeShopResearchMeta = new Map<
+  string,
+  { totalCount: number; nextOffset: number; hasMore: boolean; isLoading: boolean }
+>();
 const resolvedProductKeywordCache = new Map<
   string,
   { positive: string[]; negative: string[] }
@@ -311,6 +320,70 @@ function formatDecimal(value: number | null, fractionDigits = 2) {
     minimumFractionDigits: 0,
     maximumFractionDigits: fractionDigits,
   }).format(value);
+}
+
+function normalizeShopeePriceValue(value?: number | null) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return null;
+  }
+
+  return value >= 10_000_000 ? Math.round(value / 100_000) : Math.round(value);
+}
+
+function formatCompactCurrencyLabel(value?: number | null) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    return '-';
+  }
+
+  if (value >= 1_000_000_000) {
+    return `Rp${(value / 1_000_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+  }
+
+  if (value >= 1_000_000) {
+    return `Rp${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}JT`;
+  }
+
+  return `Rp${Math.round(value).toLocaleString('id-ID')}`;
+}
+
+function formatCompactCount(value: number | null, suffix: string) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    return '-';
+  }
+
+  if (value >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}JT ${suffix}`;
+  }
+
+  if (value >= 1_000) {
+    return `${(value / 1_000).toFixed(1).replace(/\.0$/, '')}RB ${suffix}`;
+  }
+
+  return `${Math.round(value).toLocaleString('id-ID')} ${suffix}`;
+}
+
+function formatListingAgeDays(days: number) {
+  if (!Number.isFinite(days) || days < 0) {
+    return '-';
+  }
+
+  if (days < 30) {
+    return `${Math.max(1, Math.round(days))} hari`;
+  }
+
+  if (days < 365) {
+    return `${Math.max(1, Math.round(days / 30))} bln`;
+  }
+
+  return `${(days / 365).toFixed(1).replace(/\.0$/, '')} thn`;
+}
+
+function formatListingAgeRange(minDays: number | null, maxDays: number | null) {
+  if (typeof minDays !== 'number' || typeof maxDays !== 'number') {
+    return '-';
+  }
+
+  return `${formatListingAgeDays(minDays)} - ${formatListingAgeDays(maxDays)}`;
 }
 
 function normalizeElementText(element: Element | null | undefined) {
@@ -1661,6 +1734,24 @@ function cacheResolvedSearchResultEnrichment(
 }
 
 function applyResolvedEnrichmentToSnapshot(snapshot: PageSnapshot) {
+  if (snapshot.pageType === 'shopee_public_shop') {
+    if (snapshot.shopResearch) {
+      return snapshot;
+    }
+
+    const shopId =
+      snapshot.shopIdentifier && /^\d+$/.test(snapshot.shopIdentifier)
+        ? snapshot.shopIdentifier
+        : null;
+    const cached = shopId ? shopeeShopResearchCache.get(shopId) ?? null : null;
+    return cached
+      ? {
+          ...snapshot,
+          shopResearch: cached,
+        }
+      : snapshot;
+  }
+
   if (snapshot.pageType === 'shopee_public_product' && snapshot.productDetail) {
     const cacheKey = getSearchResultCacheKey({
       productUrl: snapshot.productDetail.productUrl,
@@ -1953,6 +2044,17 @@ function getOverlayRenderKey(
         reviewCountHint: result.reviewCountHint ?? '',
         monthlyRevenueHint: result.monthlyRevenueHint ?? '',
       })),
+    });
+  }
+
+  if (snapshot.pageType === 'shopee_public_shop') {
+    return JSON.stringify({
+      pageType: snapshot.pageType,
+      statusLabel,
+      shopIdentifier: snapshot.shopIdentifier ?? '',
+      sortKey: shopResearchSortKey,
+      shopUpdatedAt: snapshot.shopResearch?.updatedAt ?? '',
+      productCount: snapshot.shopResearch?.products.length ?? 0,
     });
   }
 
@@ -2588,6 +2690,20 @@ function ensureOverlayStyle() {
     }
 
     #${OVERLAY_ID}[data-page-kind="search"] .levelup-search-header-title-logo {
+      width: 88px;
+      height: auto;
+      object-fit: contain;
+      opacity: 0.96;
+    }
+
+    #${OVERLAY_ID}[data-page-kind="shop"] .levelup-shop-header-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    #${OVERLAY_ID}[data-page-kind="shop"] .levelup-shop-header-title-logo {
       width: 88px;
       height: auto;
       object-fit: contain;
@@ -3404,6 +3520,28 @@ function ensureOverlayStyle() {
       flex-shrink: 0;
     }
 
+    #${OVERLAY_ID} .levelup-inline-select {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      line-height: 1.4;
+      font-weight: 600;
+      color: #6b7280;
+    }
+
+    #${OVERLAY_ID} .levelup-inline-select select {
+      border: 1px solid rgba(251, 106, 53, 0.22);
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 12px;
+      line-height: 1.4;
+      color: #111827;
+      outline: none;
+      background: rgba(255, 255, 255, 0.92);
+      cursor: pointer;
+    }
+
     #${OVERLAY_ID} .levelup-subtitle,
     #${OVERLAY_ID} .levelup-note,
     #${OVERLAY_ID} .levelup-status {
@@ -3425,6 +3563,12 @@ function ensureOverlayStyle() {
       background: rgba(251, 106, 53, 0.12);
       color: #c2410c;
       white-space: nowrap;
+    }
+
+    #${OVERLAY_ID} .levelup-shop-categories {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
     }
 
     #${OVERLAY_ID} .levelup-body {
@@ -6131,11 +6275,440 @@ function queueProductDetailEnrichment(snapshot: PageSnapshot) {
   }, 900);
 }
 
+async function fetchShopeeShopBase(shopId: string) {
+  const response = await fetch(`/api/v4/shop/get_shop_base?shopid=${shopId}`, {
+    credentials: 'include',
+  });
+  const json = await response.json();
+  if (!response.ok || json?.error) {
+    throw new Error(json?.error_msg || 'Gagal memuat profil toko.');
+  }
+
+  return json.data as Record<string, unknown>;
+}
+
+async function fetchShopeeShopDetail(shopId: string) {
+  const response = await fetch(`/api/v4/shop/get_shop_detail?shopid=${shopId}`, {
+    credentials: 'include',
+  });
+  const json = await response.json();
+  if (!response.ok || json?.error) {
+    throw new Error(json?.error_msg || 'Gagal memuat detail toko.');
+  }
+
+  return json.data as Record<string, unknown>;
+}
+
+async function fetchShopeeShopCategories(shopId: string) {
+  const response = await fetch(
+    `/api/v4/shop/get_categories?limit=20&offset=0&shopid=${shopId}&two_tier_cate=1`,
+    {
+      credentials: 'include',
+    },
+  );
+  const json = await response.json();
+  if (!response.ok || json?.error) {
+    throw new Error(json?.error_msg || 'Gagal memuat kategori toko.');
+  }
+
+  return json.data as Record<string, unknown>;
+}
+
+async function fetchShopeeShopItems(input: {
+  shopId: string;
+  offset: number;
+  limit: number;
+}) {
+  const params = new URLSearchParams({
+    by: 'sales',
+    limit: String(input.limit),
+    match_id: input.shopId,
+    newest: String(input.offset),
+    order: 'desc',
+    page_type: 'shop',
+    scenario: 'PAGE_SHOP_SEARCH',
+    version: '2',
+  });
+  const response = await fetch(`/api/v4/search/search_items?${params.toString()}`, {
+    credentials: 'include',
+  });
+  const json = await response.json();
+  if (!response.ok) {
+    throw new Error('Gagal memuat produk toko.');
+  }
+
+  return json as {
+    total_count?: number;
+    items?: Array<{ item_basic?: Record<string, unknown> }>;
+  };
+}
+
+function resolveShopeeShopIdFromDocument(document: Document) {
+  const scripts = Array.from(document.querySelectorAll<HTMLScriptElement>('script'));
+  for (const script of scripts) {
+    const text = script.textContent;
+    if (!text || text.length < 20) {
+      continue;
+    }
+
+    const matched =
+      text.match(/"shopid"\s*:\s*(\d{5,})/i) ??
+      text.match(/"shop_id"\s*:\s*(\d{5,})/i) ??
+      text.match(/\bshopid\s*=\s*(\d{5,})/i);
+    if (matched) {
+      return matched[1];
+    }
+  }
+
+  return null;
+}
+
+function buildShopResearchSnapshot(input: {
+  shopId: string;
+  shopName: string;
+  base: Record<string, unknown>;
+  detail: Record<string, unknown>;
+  categories: Record<string, unknown> | null;
+  items: Array<Record<string, unknown>>;
+  totalCount: number;
+}) {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const products = input.items
+    .map((item, index) => {
+      const itemId = String(item.itemid ?? '');
+      if (!itemId) {
+        return null;
+      }
+
+      const rawPriceMin = normalizeShopeePriceValue(item.price_min as number | null);
+      const rawPriceMax = normalizeShopeePriceValue(item.price_max as number | null);
+      const priceMin = rawPriceMin ?? undefined;
+      const priceMax = rawPriceMax ?? undefined;
+      const sold30d =
+        typeof item.sold === 'number' && Number.isFinite(item.sold) ? item.sold : undefined;
+      const ratingStar =
+        typeof (item.item_rating as any)?.rating_star === 'number'
+          ? (item.item_rating as any).rating_star
+          : undefined;
+      const ratingCount = Array.isArray((item.item_rating as any)?.rating_count)
+        ? Number((item.item_rating as any).rating_count[0])
+        : null;
+      const reviewCount =
+        typeof item.cmt_count === 'number'
+          ? item.cmt_count
+          : ratingCount && Number.isFinite(ratingCount)
+          ? ratingCount
+          : undefined;
+      const listingCtime =
+        typeof item.ctime === 'number' && Number.isFinite(item.ctime) ? item.ctime : undefined;
+      const ageDays =
+        listingCtime && listingCtime > 0 ? (nowSeconds - listingCtime) / 86400 : null;
+
+      const representativePrice =
+        typeof priceMin === 'number' && typeof priceMax === 'number'
+          ? Math.round((priceMin + priceMax) / 2)
+          : typeof priceMin === 'number'
+          ? priceMin
+          : typeof priceMax === 'number'
+          ? priceMax
+          : null;
+      const revenue30dEstimate =
+        typeof sold30d === 'number' && typeof representativePrice === 'number'
+          ? sold30d * representativePrice
+          : undefined;
+
+      return {
+        position: index + 1,
+        itemId,
+        productTitle: String(item.name ?? 'Produk Shopee'),
+        productUrl: `https://shopee.co.id/-i.${input.shopId}.${itemId}`,
+        imageUrl: typeof item.image === 'string' ? `https://down-id.img.susercontent.com/file/${item.image}` : undefined,
+        priceMin,
+        priceMax,
+        sold30d,
+        ratingStar,
+        reviewCount,
+        revenue30dEstimate,
+        listingCtime,
+        _ageDays: typeof ageDays === 'number' && Number.isFinite(ageDays) ? ageDays : null,
+      } as const;
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
+  const priceCandidates = products
+    .flatMap((product) => [product.priceMin, product.priceMax])
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  const priceMin = priceCandidates.length ? Math.min(...priceCandidates) : undefined;
+  const priceMax = priceCandidates.length ? Math.max(...priceCandidates) : undefined;
+
+  const ageCandidates = products
+    .map((product) => (product as any)._ageDays as number | null)
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  const listingAgeMinDays = ageCandidates.length ? Math.min(...ageCandidates) : undefined;
+  const listingAgeMaxDays = ageCandidates.length ? Math.max(...ageCandidates) : undefined;
+
+  const sold30dTotal = products.reduce((total, product) => total + (product.sold30d ?? 0), 0);
+  const revenue30dEstimate = products.reduce(
+    (total, product) => total + (product.revenue30dEstimate ?? 0),
+    0,
+  );
+
+  const categories = Array.isArray((input.categories as any)?.shop_categories)
+    ? ((input.categories as any).shop_categories as Array<any>)
+        .map((category) => ({
+          id: Number(category.shop_category_id),
+          name: String(category.display_name ?? ''),
+          total: Number(category.total ?? 0),
+        }))
+        .filter((category) => category.id && category.name)
+    : undefined;
+
+  const followerCount =
+    typeof input.base.follower_count === 'number' ? input.base.follower_count : undefined;
+  const ratingStar =
+    typeof input.base.rating_star === 'number' ? input.base.rating_star : undefined;
+  const responseRate =
+    typeof input.base.response_rate === 'number' ? input.base.response_rate : undefined;
+  const itemCount =
+    typeof input.base.item_count === 'number' ? input.base.item_count : undefined;
+  const preparationTime =
+    typeof input.detail.preparation_time === 'number'
+      ? input.detail.preparation_time
+      : undefined;
+  const cancellationRate =
+    typeof input.detail.cancellation_rate === 'number'
+      ? input.detail.cancellation_rate
+      : undefined;
+
+  const sanitizedProducts = products.map((product) => {
+    const { _ageDays, ...rest } = product as any;
+    return rest;
+  });
+
+  return {
+    shopId: input.shopId,
+    shopName: input.shopName,
+    followerCount,
+    ratingStar,
+    responseRate,
+    itemCount,
+    preparationTime,
+    cancellationRate,
+    priceMin,
+    priceMax,
+    listingAgeMinDays,
+    listingAgeMaxDays,
+    sold30dTotal,
+    revenue30dEstimate,
+    products: sanitizedProducts,
+    categories,
+    updatedAt: new Date().toISOString(),
+  } satisfies ShopResearchSnapshot;
+}
+
+async function enrichShopSnapshot(snapshot: PageSnapshot) {
+  if (snapshot.pageType !== 'shopee_public_shop') {
+    return;
+  }
+
+  const requestId = ++shopResearchRequestId;
+  const shopId =
+    snapshot.shopIdentifier && /^\d+$/.test(snapshot.shopIdentifier)
+      ? snapshot.shopIdentifier
+      : resolveShopeeShopIdFromDocument(document);
+  const shopName = normalizeText(document.querySelector('h1')?.textContent)
+    ? normalizeText(document.querySelector('h1')?.textContent)
+    : normalizeText(document.title.replace(/^Toko Online\s*/i, '').replace(/\s*\|\s*Shopee.*$/i, '')) ||
+      'Toko Shopee';
+
+  if (!shopId) {
+    if (lastSnapshot) {
+      renderOverlay({
+        ...snapshot,
+        statusMessage: 'Toko Shopee terdeteksi, tetapi shopId belum terbaca.',
+      });
+    }
+    return;
+  }
+
+  const existing = shopeeShopResearchCache.get(shopId) ?? null;
+  if (existing && existing.products.length >= 20) {
+    return;
+  }
+
+  shopeeShopResearchMeta.set(shopId, {
+    totalCount: existing ? shopeeShopResearchMeta.get(shopId)?.totalCount ?? 0 : 0,
+    nextOffset: existing ? existing.products.length : 0,
+    hasMore: true,
+    isLoading: true,
+  });
+
+  let base: Record<string, unknown>;
+  let detail: Record<string, unknown>;
+  let categories: Record<string, unknown> | null = null;
+  let itemsPayload: Awaited<ReturnType<typeof fetchShopeeShopItems>>;
+  try {
+    [base, detail, itemsPayload] = await Promise.all([
+      fetchShopeeShopBase(shopId),
+      fetchShopeeShopDetail(shopId),
+      fetchShopeeShopItems({ shopId, offset: 0, limit: 60 }),
+    ]);
+
+    try {
+      categories = await fetchShopeeShopCategories(shopId);
+    } catch {
+      categories = null;
+    }
+  } catch {
+    shopeeShopResearchMeta.set(shopId, {
+      totalCount: 0,
+      nextOffset: 0,
+      hasMore: false,
+      isLoading: false,
+    });
+    return;
+  }
+
+  if (requestId !== shopResearchRequestId) {
+    return;
+  }
+
+  const itemBasics = (itemsPayload.items ?? [])
+    .map((entry) => entry.item_basic ?? null)
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry));
+  const totalCount = typeof itemsPayload.total_count === 'number' ? itemsPayload.total_count : 0;
+  const nextShopResearch = buildShopResearchSnapshot({
+    shopId,
+    shopName,
+    base,
+    detail,
+    categories,
+    items: itemBasics,
+    totalCount,
+  });
+
+  shopeeShopResearchCache.set(shopId, nextShopResearch);
+  shopeeShopResearchMeta.set(shopId, {
+    totalCount,
+    nextOffset: nextShopResearch.products.length,
+    hasMore: totalCount > nextShopResearch.products.length,
+    isLoading: false,
+  });
+
+  await publishSnapshot({
+    ...snapshot,
+    shopIdentifier: shopId,
+    shopResearch: nextShopResearch,
+    statusMessage: `Toko Shopee terdeteksi: ${shopName}.`,
+  });
+}
+
+async function loadMoreShopProducts(snapshot: PageSnapshot) {
+  if (snapshot.pageType !== 'shopee_public_shop') {
+    return;
+  }
+
+  const shopId =
+    snapshot.shopIdentifier && /^\d+$/.test(snapshot.shopIdentifier)
+      ? snapshot.shopIdentifier
+      : null;
+  if (!shopId) {
+    return;
+  }
+
+  const existing = shopeeShopResearchCache.get(shopId) ?? null;
+  const meta = shopeeShopResearchMeta.get(shopId) ?? null;
+  if (!existing || !meta || meta.isLoading || !meta.hasMore) {
+    return;
+  }
+
+  shopeeShopResearchMeta.set(shopId, { ...meta, isLoading: true });
+
+  const itemsPayload = await fetchShopeeShopItems({
+    shopId,
+    offset: meta.nextOffset,
+    limit: 40,
+  }).catch(() => null);
+
+  if (!itemsPayload) {
+    shopeeShopResearchMeta.set(shopId, { ...meta, isLoading: false });
+    return;
+  }
+
+  const itemBasics = (itemsPayload.items ?? [])
+    .map((entry) => entry.item_basic ?? null)
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry));
+
+  const mergedBasics = [
+    ...existing.products.map((product) => ({
+      itemid: product.itemId,
+      shopid: shopId,
+      name: product.productTitle,
+      image: product.imageUrl ? product.imageUrl.split('/').pop() : undefined,
+      price_min: product.priceMin,
+      price_max: product.priceMax,
+      sold: product.sold30d,
+      cmt_count: product.reviewCount,
+      ctime: product.listingCtime,
+      item_rating: {
+        rating_star: product.ratingStar,
+        rating_count: [product.reviewCount],
+      },
+    })),
+    ...itemBasics,
+  ];
+
+  const base = await fetchShopeeShopBase(shopId).catch(() => null);
+  const detail = await fetchShopeeShopDetail(shopId).catch(() => null);
+
+  const nextShopResearch = buildShopResearchSnapshot({
+    shopId,
+    shopName: existing.shopName,
+    base: base ?? {},
+    detail: detail ?? {},
+    categories: existing.categories ? { shop_categories: existing.categories.map((c) => ({ shop_category_id: c.id, display_name: c.name, total: c.total })) } : null,
+    items: mergedBasics,
+    totalCount: typeof itemsPayload.total_count === 'number' ? itemsPayload.total_count : meta.totalCount,
+  });
+
+  shopeeShopResearchCache.set(shopId, nextShopResearch);
+  const totalCount =
+    typeof itemsPayload.total_count === 'number' ? itemsPayload.total_count : meta.totalCount;
+  shopeeShopResearchMeta.set(shopId, {
+    totalCount,
+    nextOffset: nextShopResearch.products.length,
+    hasMore: totalCount > nextShopResearch.products.length,
+    isLoading: false,
+  });
+
+  await publishSnapshot({
+    ...snapshot,
+    shopResearch: nextShopResearch,
+  });
+}
+
+function queueShopResearchEnrichment(snapshot: PageSnapshot) {
+  if (shopResearchEnrichmentTimeoutId) {
+    window.clearTimeout(shopResearchEnrichmentTimeoutId);
+    shopResearchEnrichmentTimeoutId = null;
+  }
+
+  if (snapshot.pageType !== 'shopee_public_shop') {
+    return;
+  }
+
+  shopResearchEnrichmentTimeoutId = window.setTimeout(() => {
+    shopResearchEnrichmentTimeoutId = null;
+    void enrichShopSnapshot(snapshot);
+  }, 900);
+}
+
 async function publishSnapshot(payload: PageSnapshot) {
   const snapshotWithResolvedEnrichment = applyResolvedEnrichmentToSnapshot(payload);
   lastSnapshot = snapshotWithResolvedEnrichment;
   syncDomObservationMode(snapshotWithResolvedEnrichment);
   renderOverlay(snapshotWithResolvedEnrichment);
+  queueShopResearchEnrichment(snapshotWithResolvedEnrichment);
 
   try {
     await chrome.runtime.sendMessage({
@@ -6226,7 +6799,8 @@ function renderOverlay(snapshot: PageSnapshot) {
 
   if (
     (snapshot.pageType !== 'shopee_public_search' &&
-      snapshot.pageType !== 'shopee_public_product') ||
+      snapshot.pageType !== 'shopee_public_product' &&
+      snapshot.pageType !== 'shopee_public_shop') ||
     snapshot.captureMode !== 'public'
   ) {
     removeOverlay();
@@ -6235,6 +6809,7 @@ function renderOverlay(snapshot: PageSnapshot) {
 
   ensureOverlayStyle();
   const isSearchPage = snapshot.pageType === 'shopee_public_search';
+  const isShopPage = snapshot.pageType === 'shopee_public_shop';
 
   const currentSignature = getResultsSignature(snapshot);
   if (currentSignature !== lastResultsSignature) {
@@ -6261,8 +6836,228 @@ function renderOverlay(snapshot: PageSnapshot) {
   const shouldRefreshMarkup = overlay.dataset.renderKey !== nextRenderKey;
 
   overlay.id = OVERLAY_ID;
-  overlay.dataset.pageKind = isSearchPage ? 'search' : 'product';
+  overlay.dataset.pageKind = isSearchPage ? 'search' : isShopPage ? 'shop' : 'product';
   overlay.setAttribute('data-levelup-ads-managed', 'true');
+
+  if (isShopPage && shouldRefreshMarkup) {
+    const shopId =
+      snapshot.shopIdentifier && /^\d+$/.test(snapshot.shopIdentifier)
+        ? snapshot.shopIdentifier
+        : null;
+    const meta = shopId ? shopeeShopResearchMeta.get(shopId) ?? null : null;
+    const shop = snapshot.shopResearch ?? (shopId ? shopeeShopResearchCache.get(shopId) ?? null : null);
+    const isLoading = meta?.isLoading ?? !shop;
+    const products = shop?.products ?? [];
+    const totalCount = meta?.totalCount ?? products.length;
+    const hasMore = meta?.hasMore ?? false;
+    const nowSeconds = Math.floor(Date.now() / 1000);
+
+    const sortedProducts = [...products].sort((a, b) => {
+      const revenueDiff = (b.revenue30dEstimate ?? 0) - (a.revenue30dEstimate ?? 0);
+      const soldDiff = (b.sold30d ?? 0) - (a.sold30d ?? 0);
+      const reviewDiff = (b.reviewCount ?? 0) - (a.reviewCount ?? 0);
+      const newestDiff = (b.listingCtime ?? 0) - (a.listingCtime ?? 0);
+
+      switch (shopResearchSortKey) {
+        case 'sold30d':
+          return soldDiff || revenueDiff || reviewDiff || newestDiff;
+        case 'reviews':
+          return reviewDiff || revenueDiff || soldDiff || newestDiff;
+        case 'newest':
+          return newestDiff || revenueDiff || soldDiff || reviewDiff;
+        case 'revenue30d':
+        default:
+          return revenueDiff || soldDiff || reviewDiff || newestDiff;
+      }
+    });
+
+    const statusLabel = lastKnownState?.lastSync.message ?? snapshot.statusMessage;
+    const shopLabel = shop?.shopName ?? normalizeText(document.querySelector('h1')?.textContent) ?? 'Toko Shopee';
+    const revenueLabel = shop?.revenue30dEstimate
+      ? formatCompactCurrencyLabel(shop.revenue30dEstimate)
+      : isLoading
+      ? '-'
+      : formatCompactCurrencyLabel(0);
+    const soldTotalLabel =
+      typeof shop?.sold30dTotal === 'number'
+        ? formatCompactCount(shop.sold30dTotal, 'Pcs')
+        : '-';
+    const priceRangeLabel =
+      typeof shop?.priceMin === 'number' || typeof shop?.priceMax === 'number'
+        ? `${formatCompactCurrencyLabel(shop?.priceMin ?? null)} - ${formatCompactCurrencyLabel(
+            shop?.priceMax ?? null,
+          )}`
+        : '-';
+    const listingAgeLabel = formatListingAgeRange(
+      shop?.listingAgeMinDays ?? null,
+      shop?.listingAgeMaxDays ?? null,
+    );
+    const followerLabel =
+      typeof shop?.followerCount === 'number'
+        ? formatCompactCount(shop.followerCount, 'Pengikut')
+        : '-';
+    const responseRateLabel =
+      typeof shop?.responseRate === 'number'
+        ? `${Math.round(shop.responseRate)}%`
+        : '-';
+    const ratingStarLabel =
+      typeof shop?.ratingStar === 'number' ? formatDecimal(shop.ratingStar, 1) : '-';
+    const cancelRateLabel =
+      typeof shop?.cancellationRate === 'number'
+        ? `${(shop.cancellationRate * 100).toFixed(1).replace(/\.0$/, '')}%`
+        : '-';
+
+    overlay.innerHTML = `
+      <div class="levelup-header">
+        <div class="levelup-brand">
+          <div class="levelup-brand-copy">
+            <div class="levelup-title levelup-shop-header-title">
+              <span>Riset Toko |</span>
+              <img
+                class="levelup-shop-header-title-logo"
+                src="${POWERED_BY_LOGO_URL}"
+                alt="LevelUP adsPRO"
+              />
+            </div>
+            <div class="levelup-subtitle">Toko: ${shopLabel}</div>
+            <div class="levelup-status">${statusLabel}</div>
+          </div>
+        </div>
+        <div class="levelup-header-actions">
+          <label class="levelup-inline-select">
+            <span>Urutkan</span>
+            <select data-role="shop-sort">
+              <option value="revenue30d">Omset 30 hari</option>
+              <option value="sold30d">Pcs Terjual</option>
+              <option value="reviews">Ulasan</option>
+              <option value="newest">Terbaru</option>
+            </select>
+          </label>
+          <button type="button" class="levelup-button levelup-button-primary" data-action="sync">Sinkronkan Sekarang</button>
+          <button type="button" class="levelup-button levelup-button-secondary" data-action="refresh">Muat Ulang Parser</button>
+          <button type="button" class="levelup-button levelup-button-ghost" data-action="shop-load-more" ${hasMore ? '' : 'disabled'}>${meta?.isLoading ? 'Memuat...' : 'Muat Lebih Banyak'}</button>
+        </div>
+      </div>
+      <div class="levelup-body">
+        <div class="levelup-stats">
+          <div class="levelup-card">
+            <div class="levelup-card-label">Pendapatan 30 Hari</div>
+            <div class="levelup-card-value">${revenueLabel}</div>
+          </div>
+          <div class="levelup-card">
+              <div class="levelup-card-label">Terjual 30 Hari</div>
+              <div class="levelup-card-value">${soldTotalLabel}</div>
+            </div>
+            <div class="levelup-card">
+            <div class="levelup-card-label">Rentang Harga</div>
+            <div class="levelup-card-value">${priceRangeLabel}</div>
+          </div>
+          <div class="levelup-card">
+            <div class="levelup-card-label">Rentang Umur Listing</div>
+            <div class="levelup-card-value">${listingAgeLabel}</div>
+          </div>
+          <div class="levelup-card">
+            <div class="levelup-card-label">Produk Terdata</div>
+            <div class="levelup-card-value">${products.length} / ${totalCount || '-'}</div>
+          </div>
+          <div class="levelup-card">
+            <div class="levelup-card-label">Pengikut</div>
+            <div class="levelup-card-value">${followerLabel}</div>
+          </div>
+          <div class="levelup-card">
+            <div class="levelup-card-label">Rating / Chat</div>
+            <div class="levelup-card-value">${ratingStarLabel} • ${responseRateLabel}</div>
+          </div>
+          <div class="levelup-card">
+            <div class="levelup-card-label">Cancel Rate</div>
+            <div class="levelup-card-value">${cancelRateLabel}</div>
+          </div>
+        </div>
+        <div class="levelup-note">Pendapatan 30 hari adalah estimasi dari data publik (sold 30 hari x harga). Gunakan sebagai insight riset, bukan angka resmi.</div>
+        ${
+          shop?.categories?.length
+            ? `<div class="levelup-shop-categories">
+                ${shop.categories
+                  .slice(0, 8)
+                  .map((category) => `<span class="levelup-chip">${category.name} (${category.total})</span>`)
+                  .join('')}
+              </div>`
+            : ''
+        }
+        <div class="levelup-results">
+          ${
+            isLoading && products.length === 0
+              ? `<div class="levelup-empty">Memuat data toko...</div>`
+              : sortedProducts
+                  .map((product) => {
+                    const cleanTitle = cleanProductTitle(product.productTitle);
+                    const priceLabel =
+                      typeof product.priceMin === 'number' || typeof product.priceMax === 'number'
+                        ? typeof product.priceMin === 'number' && typeof product.priceMax === 'number' && product.priceMin !== product.priceMax
+                          ? `${formatCompactCurrencyLabel(product.priceMin)} - ${formatCompactCurrencyLabel(product.priceMax)}`
+                          : formatCompactCurrencyLabel(product.priceMin ?? product.priceMax ?? null)
+                        : '-';
+                    const soldLabel = formatCompactCount(product.sold30d ?? null, 'Pcs');
+                    const ratingLabel =
+                      typeof product.ratingStar === 'number' ? formatDecimal(product.ratingStar, 1) : '-';
+                    const reviewLabel = formatCompactCount(product.reviewCount ?? null, 'Ulasan');
+                    const revenueItemLabel = formatCompactCurrencyLabel(product.revenue30dEstimate ?? null);
+                    const ageLabel =
+                      typeof product.listingCtime === 'number'
+                        ? formatListingAgeDays((nowSeconds - product.listingCtime) / 86400)
+                        : '-';
+
+                    return `
+                      <div class="levelup-result" data-product-url="${encodeURIComponent(product.productUrl)}">
+                        <div class="levelup-result-thumb">
+                          ${
+                            product.imageUrl
+                              ? `<img src="${product.imageUrl}" alt="${cleanTitle}" loading="lazy" referrerpolicy="no-referrer" />`
+                              : ''
+                          }
+                          <div class="levelup-result-action-layer">
+                            <button
+                              type="button"
+                              class="levelup-hover-button levelup-hover-button-secondary"
+                              data-action="open-result-product"
+                              data-product-url="${encodeURIComponent(product.productUrl)}"
+                            >
+                              Lihat Produk
+                            </button>
+                            <button
+                              type="button"
+                              class="levelup-hover-button levelup-hover-button-primary"
+                              data-action="sync-result-product"
+                              data-product-url="${encodeURIComponent(product.productUrl)}"
+                            >
+                              Simpan Produk
+                            </button>
+                          </div>
+                        </div>
+                        <div class="levelup-result-title">${cleanTitle}</div>
+                        <div class="levelup-result-meta-grid">
+                          <div class="levelup-result-meta-row">
+                            <div class="levelup-result-meta-cell" data-tone="primary">${priceLabel}</div>
+                            <div class="levelup-result-meta-cell" data-tone="accent" data-align="right">${soldLabel}</div>
+                          </div>
+                          <div class="levelup-result-meta-row">
+                            <div class="levelup-result-meta-cell">${ratingLabel}</div>
+                            <div class="levelup-result-meta-cell" data-align="right">${reviewLabel}</div>
+                          </div>
+                          <div class="levelup-result-meta-row">
+                            <div class="levelup-result-meta-cell">${ageLabel}</div>
+                            <div class="levelup-result-meta-cell" data-align="right">${revenueItemLabel}</div>
+                          </div>
+                        </div>
+                      </div>
+                    `;
+                  })
+                  .join('')
+          }
+        </div>
+      </div>
+    `;
+  }
 
   if (isSearchPage && shouldRefreshMarkup) {
     const displayedResults = orderedResults.slice(0, visibleResultCount);
@@ -6723,6 +7518,13 @@ function renderOverlay(snapshot: PageSnapshot) {
     overlay.querySelectorAll<HTMLButtonElement>('[data-action="roas"]'),
   );
   const loadMoreButton = overlay.querySelector<HTMLButtonElement>('[data-action="load-more"]');
+  const shopLoadMoreButton = overlay.querySelector<HTMLButtonElement>(
+    '[data-action="shop-load-more"]',
+  );
+  const shopSortSelect = overlay.querySelector<HTMLSelectElement>('[data-role="shop-sort"]');
+  if (shopSortSelect) {
+    shopSortSelect.value = shopResearchSortKey;
+  }
   const openProductButtons = Array.from(
     overlay.querySelectorAll<HTMLButtonElement>('[data-action="open-result-product"]'),
   );
@@ -6803,6 +7605,50 @@ function renderOverlay(snapshot: PageSnapshot) {
       if (loadMoreButton.isConnected) {
         loadMoreButton.disabled = false;
         loadMoreButton.textContent = previousLabel ?? 'Muat Lebih Banyak';
+      }
+    }
+  });
+
+  shopLoadMoreButton?.addEventListener('click', async () => {
+    if (!isShopPage) {
+      return;
+    }
+
+    shopLoadMoreButton.disabled = true;
+    const previousLabel = shopLoadMoreButton.textContent;
+    shopLoadMoreButton.textContent = 'Memuat...';
+
+    try {
+      await loadMoreShopProducts(snapshot);
+      await refreshKnownState();
+      if (lastSnapshot) {
+        renderOverlay(lastSnapshot);
+      }
+    } catch (error) {
+      const statusElement = overlay.querySelector<HTMLElement>('.levelup-status');
+      if (statusElement) {
+        statusElement.textContent =
+          error instanceof Error ? error.message : 'Gagal memuat produk toko tambahan.';
+      }
+    } finally {
+      if (shopLoadMoreButton.isConnected) {
+        shopLoadMoreButton.disabled = false;
+        shopLoadMoreButton.textContent = previousLabel ?? 'Muat Lebih Banyak';
+      }
+    }
+  });
+
+  shopSortSelect?.addEventListener('change', () => {
+    const nextValue = shopSortSelect.value;
+    if (
+      nextValue === 'revenue30d' ||
+      nextValue === 'sold30d' ||
+      nextValue === 'reviews' ||
+      nextValue === 'newest'
+    ) {
+      shopResearchSortKey = nextValue;
+      if (lastSnapshot) {
+        renderOverlay(lastSnapshot);
       }
     }
   });
