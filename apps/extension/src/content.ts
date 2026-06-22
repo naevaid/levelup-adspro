@@ -52,6 +52,10 @@ const PAGE_BRIDGE_TIMEOUT_MS = 5000;
 const HEADER_LOGO_URL = chrome.runtime.getURL('header-logo.png');
 const POWERED_BY_LOGO_URL = chrome.runtime.getURL('powered-by.png');
 const resolvedSearchResultEnrichmentCache = new Map<string, SearchResultEnrichment>();
+const resolvedProductKeywordCache = new Map<
+  string,
+  { positive: string[]; negative: string[] }
+>();
 const pendingPageBridgeRequests = new Map<
   string,
   {
@@ -1434,12 +1438,12 @@ function formatSearchMonthlyRevenueLabel(
 }
 
 function isRatingDistributionHighlight(value: string) {
-  return /^\d+\s*bintang\s*\(\d[\d.,]*\)$/i.test(normalizeText(value));
+  return /^\d+\s*bintang\s*\([\d.,A-Za-z+]+\)$/i.test(normalizeText(value));
 }
 
 function formatRatingDistributionHighlight(value: string) {
   const normalized = normalizeText(value);
-  const matched = normalized.match(/^(\d+)\s*bintang\s*(\(\d[\d.,]*\))$/i);
+  const matched = normalized.match(/^(\d+)\s*bintang\s*(\([\d.,A-Za-z+]+\))$/i);
   if (!matched) {
     return normalized;
   }
@@ -1457,6 +1461,173 @@ function extractShopeeIdsFromUrl(rawUrl: string) {
     shopId: matched[1],
     itemId: matched[2],
   };
+}
+
+const PRODUCT_KEYWORD_STOPWORDS = new Set([
+  'yang',
+  'dan',
+  'atau',
+  'dengan',
+  'untuk',
+  'dari',
+  'di',
+  'ke',
+  'ini',
+  'itu',
+  'saya',
+  'aku',
+  'kamu',
+  'dia',
+  'kami',
+  'kita',
+  'mereka',
+  'the',
+  'a',
+  'an',
+  'of',
+  'to',
+  'in',
+  'on',
+  'is',
+  'are',
+  'was',
+  'were',
+  'very',
+  'banget',
+  'bgt',
+  'nya',
+  'jg',
+  'juga',
+  'ga',
+  'gak',
+  'nggak',
+  'tdk',
+  'tidak',
+  'udah',
+  'sudah',
+  'belum',
+  'lagi',
+  'jadi',
+  'karena',
+  'pas',
+  'sih',
+  'kok',
+  'lah',
+  'deh',
+  'nya',
+]);
+
+function tokenizeKeywordText(input: string) {
+  return normalizeText(input)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3)
+    .filter((token) => !PRODUCT_KEYWORD_STOPWORDS.has(token))
+    .filter((token) => !/^\d+$/.test(token));
+}
+
+function pickTopKeywords(tokens: string[], limit: number) {
+  const counts = new Map<string, number>();
+  for (const token of tokens) {
+    counts.set(token, (counts.get(token) ?? 0) + 1);
+  }
+
+  return Array.from(counts.entries())
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, limit)
+    .map(([token]) => token);
+}
+
+async function fetchShopeeKeywordInsights(ids: { shopId: string; itemId: string }) {
+  const cacheKey = `${ids.shopId}:${ids.itemId}`;
+  const cached = resolvedProductKeywordCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const endpoint = new URL('/api/v2/item/get_ratings', window.location.origin);
+  endpoint.searchParams.set('filter', '0');
+  endpoint.searchParams.set('flag', '1');
+  endpoint.searchParams.set('limit', '8');
+  endpoint.searchParams.set('offset', '0');
+  endpoint.searchParams.set('type', '0');
+  endpoint.searchParams.set('exclude_filter', '1');
+  endpoint.searchParams.set('filter_size', '0');
+  endpoint.searchParams.set('fold_filter', '0');
+  endpoint.searchParams.set('relevant_reviews', 'false');
+  endpoint.searchParams.set('request_source', '2');
+  endpoint.searchParams.set('tag_filter', '');
+  endpoint.searchParams.set('variation_filters', '');
+  endpoint.searchParams.set('need_translation', '1');
+  endpoint.searchParams.set('shopid', ids.shopId);
+  endpoint.searchParams.set('itemid', ids.itemId);
+
+  const response = await fetch(endpoint.toString(), {
+    method: 'GET',
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    throw new Error('Gagal mengambil ulasan untuk keyword insight.');
+  }
+
+  const payload = (await response.json()) as any;
+  const ratings =
+    payload?.data?.ratings ??
+    payload?.data?.items ??
+    payload?.ratings ??
+    payload?.items ??
+    [];
+
+  const positiveTokens: string[] = [];
+  const negativeTokens: string[] = [];
+
+  for (const rating of Array.isArray(ratings) ? ratings : []) {
+    const comment =
+      normalizeText(rating?.comment) ||
+      normalizeText(rating?.comment_text) ||
+      normalizeText(rating?.commentText) ||
+      '';
+    if (!comment || comment.length < 6) {
+      continue;
+    }
+
+    const score =
+      typeof rating?.rating_star === 'number'
+        ? rating.rating_star
+        : typeof rating?.ratingStar === 'number'
+        ? rating.ratingStar
+        : typeof rating?.rating === 'number'
+        ? rating.rating
+        : null;
+
+    const tokens = tokenizeKeywordText(comment);
+    if (tokens.length === 0) {
+      continue;
+    }
+
+    if (score !== null && score <= 2) {
+      negativeTokens.push(...tokens);
+      continue;
+    }
+
+    if (score !== null && score >= 4) {
+      positiveTokens.push(...tokens);
+      continue;
+    }
+
+    positiveTokens.push(...tokens.slice(0, 6));
+  }
+
+  const result = {
+    positive: pickTopKeywords(positiveTokens, 6),
+    negative: pickTopKeywords(negativeTokens, 6),
+  };
+
+  resolvedProductKeywordCache.set(cacheKey, result);
+  return result;
 }
 
 function getSearchResultCacheKey(
@@ -3551,6 +3722,59 @@ function ensureOverlayStyle() {
       display: block;
     }
 
+    #${OVERLAY_ID} .levelup-product-image-foot {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    #${OVERLAY_ID} .levelup-product-roas-panel {
+      padding: 10px 12px;
+      border: 1px solid rgba(251, 106, 53, 0.16);
+      border-radius: 14px;
+      background: rgba(255, 247, 243, 0.72);
+      font-size: 12px;
+      line-height: 1.55;
+      color: #4b5563;
+    }
+
+    #${OVERLAY_ID} .levelup-product-roas-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-weight: 700;
+      color: #7c2d12;
+    }
+
+    #${OVERLAY_ID} .levelup-product-roas-grid {
+      margin-top: 10px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    #${OVERLAY_ID} .levelup-product-roas-item {
+      padding: 8px 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(251, 106, 53, 0.12);
+      background: rgba(255, 255, 255, 0.72);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    #${OVERLAY_ID} .levelup-product-roas-item-label {
+      font-size: 11px;
+      color: #6b7280;
+    }
+
+    #${OVERLAY_ID} .levelup-product-roas-item-value {
+      font-weight: 700;
+      color: #111827;
+    }
+
     #${OVERLAY_ID} .levelup-product-title {
       font-size: 15px;
       font-weight: 500;
@@ -3592,6 +3816,20 @@ function ensureOverlayStyle() {
       margin-top: 12px;
     }
 
+    #${OVERLAY_ID} .levelup-chip-groups {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    #${OVERLAY_ID} .levelup-chip-group-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #7c2d12;
+      letter-spacing: 0.02em;
+    }
+
     #${OVERLAY_ID} .levelup-highlight-chip {
       display: inline-flex;
       align-items: center;
@@ -3602,6 +3840,15 @@ function ensureOverlayStyle() {
       font-size: 11px;
       line-height: 1.4;
       font-weight: 400;
+    }
+
+    #${OVERLAY_ID} .levelup-highlight-link {
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    #${OVERLAY_ID} .levelup-highlight-link:hover {
+      background: rgba(251, 106, 53, 0.14);
     }
 
     #${OVERLAY_ID} .levelup-product-link {
@@ -4010,6 +4257,10 @@ function closeRoasCalculator() {
   if (hasDeferredRefresh) {
     hasDeferredRefresh = false;
     queueRefresh();
+  }
+
+  if (lastSnapshot) {
+    renderOverlay(lastSnapshot);
   }
 }
 
@@ -5764,52 +6015,81 @@ async function enrichProductDetailSnapshot(snapshot: PageSnapshot) {
     return;
   }
 
-  if (
-    normalizeText(snapshot.productDetail.shopName).length > 0 &&
-    normalizeText(snapshot.productDetail.ratingHint).length > 0 &&
-    normalizeText(snapshot.productDetail.reviewCountHint).length > 0 &&
-    normalizeText(snapshot.productDetail.salesHint).length > 0 &&
-    normalizeText(snapshot.productDetail.monthlySoldHint).length > 0 &&
-    normalizeText(snapshot.productDetail.totalRevenueHint).length > 0 &&
-    normalizeText(snapshot.productDetail.monthlyRevenueHint).length > 0 &&
-    normalizeText(snapshot.productDetail.listingAgeHint).length > 0
-  ) {
+  const detail = snapshot.productDetail;
+  const shouldFetchBaseEnrichment = !(
+    normalizeText(detail.shopName).length > 0 &&
+    normalizeText(detail.ratingHint).length > 0 &&
+    normalizeText(detail.reviewCountHint).length > 0 &&
+    normalizeText(detail.salesHint).length > 0 &&
+    normalizeText(detail.monthlySoldHint).length > 0 &&
+    normalizeText(detail.totalRevenueHint).length > 0 &&
+    normalizeText(detail.monthlyRevenueHint).length > 0 &&
+    normalizeText(detail.listingAgeHint).length > 0
+  );
+  const shouldFetchKeywords =
+    (detail.positiveKeywords?.length ?? 0) === 0 &&
+    (detail.negativeKeywords?.length ?? 0) === 0;
+
+  if (!shouldFetchBaseEnrichment && !shouldFetchKeywords) {
     return;
   }
 
   const requestId = ++productDetailEnrichmentRequestId;
-  let enrichedEntries: SearchResultEnrichment[] = [];
-  try {
-    if (!ENABLE_PAGE_BRIDGE_ENRICHMENT) {
-      throw new Error('Page bridge enrichment dinonaktifkan.');
+  let mergedDetail = detail;
+
+  if (shouldFetchBaseEnrichment) {
+    let enrichedEntries: SearchResultEnrichment[] = [];
+    try {
+      if (!ENABLE_PAGE_BRIDGE_ENRICHMENT) {
+        throw new Error('Page bridge enrichment dinonaktifkan.');
+      }
+
+      enrichedEntries = await requestPageBridgeSearchEnrichment([detailPreview]);
+    } catch {
+      try {
+        enrichedEntries = await sendBackgroundMessage<SearchResultEnrichment[]>({
+          type: 'ENRICH_SEARCH_RESULTS',
+          payload: {
+            results: [detailPreview],
+          },
+        });
+      } catch {
+        enrichedEntries = [];
+      }
     }
 
-    enrichedEntries = await requestPageBridgeSearchEnrichment([detailPreview]);
-  } catch {
-    try {
-      enrichedEntries = await sendBackgroundMessage<SearchResultEnrichment[]>({
-        type: 'ENRICH_SEARCH_RESULTS',
-        payload: {
-          results: [detailPreview],
-        },
-      });
-    } catch {
+    if (requestId !== productDetailEnrichmentRequestId) {
       return;
     }
+
+    const enrichment = enrichedEntries[0] ?? null;
+    if (enrichment) {
+      cacheResolvedSearchResultEnrichment(enrichment);
+      mergedDetail = mergeProductDetailEnrichment(mergedDetail, enrichment);
+    }
   }
 
-  if (requestId !== productDetailEnrichmentRequestId) {
-    return;
+  if (shouldFetchKeywords) {
+    const ids = extractShopeeIdsFromUrl(detailPreview.productUrl);
+    if (ids) {
+      try {
+        const keywordInsights = await fetchShopeeKeywordInsights(ids);
+        mergedDetail = {
+          ...mergedDetail,
+          positiveKeywords: keywordInsights.positive,
+          negativeKeywords: keywordInsights.negative,
+        };
+      } catch {
+        mergedDetail = {
+          ...mergedDetail,
+          positiveKeywords: mergedDetail.positiveKeywords ?? [],
+          negativeKeywords: mergedDetail.negativeKeywords ?? [],
+        };
+      }
+    }
   }
 
-  const enrichment = enrichedEntries[0] ?? null;
-  if (!enrichment) {
-    return;
-  }
-
-  cacheResolvedSearchResultEnrichment(enrichment);
-  const mergedDetail = mergeProductDetailEnrichment(snapshot.productDetail, enrichment);
-  if (JSON.stringify(mergedDetail) === JSON.stringify(snapshot.productDetail)) {
+  if (JSON.stringify(mergedDetail) === JSON.stringify(detail)) {
     return;
   }
 
@@ -6152,13 +6432,21 @@ function renderOverlay(snapshot: PageSnapshot) {
       comparablePrices.length > 0
         ? comparablePrices[comparablePrices.length - 1]
         : null;
-    const badges = detail
-      ? getProductDetailBadges(detail, {
-          minPriceValue,
-          maxPriceValue,
-          medianPriceValue,
-        })
-      : [];
+    const hasComparableRange =
+      comparablePrices.length >= 3 &&
+      typeof minPriceValue === 'number' &&
+      typeof maxPriceValue === 'number' &&
+      Number.isFinite(minPriceValue) &&
+      Number.isFinite(maxPriceValue) &&
+      minPriceValue !== maxPriceValue;
+    const badges =
+      detail && hasComparableRange
+        ? getProductDetailBadges(detail, {
+            minPriceValue,
+            maxPriceValue,
+            medianPriceValue,
+          })
+        : [];
     const priceLabel =
       detail && (typeof detail.priceMin === 'number' || typeof detail.priceMax === 'number')
         ? typeof detail.priceMin === 'number' &&
@@ -6167,8 +6455,16 @@ function renderOverlay(snapshot: PageSnapshot) {
           ? `${formatCurrency(detail.priceMin)} - ${formatCurrency(detail.priceMax)}`
           : formatCurrency(detail.priceMin ?? detail.priceMax)
         : '-';
-    const ratingLabel = detail?.ratingHint ? `★ ${detail.ratingHint}` : '★ -';
-    const reviewLabel = normalizeText(detail?.reviewCountHint) || '-';
+    const ratingValueLabel =
+      normalizeText(detail?.ratingHint).match(/\d(?:[.,]\d)?/)?.[0] ?? '-';
+    const reviewCountToken =
+      normalizeText(detail?.reviewCountHint).match(/^[^A-Za-z]{0,2}([\d.,A-Za-z+]+)\b/)?.[1] ??
+      normalizeText(detail?.reviewCountHint).split(/\s+/).filter(Boolean)[0] ??
+      '-';
+    const ratingReviewValue =
+      ratingValueLabel === '-' && reviewCountToken === '-'
+        ? '-'
+        : `${ratingValueLabel} Dari ${reviewCountToken === '-' ? '-' : `${reviewCountToken} Ulasan`}`;
     const salesLabel = normalizeText(detail?.salesHint) || '-';
     const monthlySoldLabel = normalizeText(detail?.monthlySoldHint) || '-';
     const monthlySoldPiecesLabel =
@@ -6178,14 +6474,63 @@ function renderOverlay(snapshot: PageSnapshot) {
     const totalRevenueLabel = normalizeText(detail?.totalRevenueHint) || '-';
     const monthlyRevenueLabel = normalizeText(detail?.monthlyRevenueHint) || '-';
     const listingAgeLabel = normalizeText(detail?.listingAgeHint) || '-';
-    const shopLabel = normalizeText(detail?.shopName) || 'Toko belum terbaca';
+    const favoriteLabel = normalizeText(detail?.favoriteCountHint) || '-';
+    const shippedFromLabel = normalizeText(detail?.shippedFromHint) || '-';
     const productHighlights = detail?.highlights ?? [];
     const ratingHighlights = productHighlights.filter(isRatingDistributionHighlight);
-    const nonRatingHighlights = productHighlights.filter(
-      (highlight) => !isRatingDistributionHighlight(highlight),
-    );
-    const productInsightLabel =
-      badges.length > 0 ? badges.join(' | ') : 'Belum ada insight pembanding harga.';
+    const nonRatingHighlights = productHighlights
+      .filter((highlight) => !isRatingDistributionHighlight(highlight))
+      .filter((highlight) => !/^dengan komentar/i.test(normalizeText(highlight)));
+    const positiveKeywords = detail?.positiveKeywords ?? [];
+    const negativeKeywords = detail?.negativeKeywords ?? [];
+    const competitorProducts = detail?.competitorProducts ?? [];
+    const productInsightLabel = badges.length > 0 ? badges.join(' | ') : '';
+
+    if (detail && roasCalculatorState.price === null) {
+      roasCalculatorState.price = getRepresentativeProductPrice(detail);
+    }
+    const hasRoasInput =
+      roasCalculatorState.hpp !== null ||
+      roasCalculatorState.operasional !== null ||
+      Boolean(normalizeText(roasCalculatorState.categoryLabel)) ||
+      (roasCalculatorState.kategoriFeePct ?? 0) > 0 ||
+      roasCalculatorState.promoXtraEnabled ||
+      roasCalculatorState.gratisOngkirXtraEnabled;
+    const roasMetrics = hasRoasInput ? computeRoasMetrics() : null;
+    const roasFootMarkup = !detail
+      ? ''
+      : roasMetrics
+      ? `<div class="levelup-product-roas-panel">
+          <div class="levelup-product-roas-title">
+            <span>Ringkasan ROAS</span>
+            <button type="button" class="levelup-button levelup-button-secondary" data-action="roas">Edit</button>
+          </div>
+          <div class="levelup-product-roas-grid">
+            <div class="levelup-product-roas-item">
+              <span class="levelup-product-roas-item-label">Profit Sebelum Iklan</span>
+              <span class="levelup-product-roas-item-value">${formatCompactCurrency(Math.round(roasMetrics.profitSebelumIklan))}</span>
+            </div>
+            <div class="levelup-product-roas-item">
+              <span class="levelup-product-roas-item-label">Break-even ROAS</span>
+              <span class="levelup-product-roas-item-value">${typeof roasMetrics.breakEvenRoas === 'number' ? roasMetrics.breakEvenRoas.toFixed(1) : '-'}</span>
+            </div>
+            <div class="levelup-product-roas-item">
+              <span class="levelup-product-roas-item-label">ROAS Kompetitif</span>
+              <span class="levelup-product-roas-item-value">${typeof roasMetrics.tiers.find((tier) => tier.key === 'kompetitif')?.roas === 'number' ? roasMetrics.tiers.find((tier) => tier.key === 'kompetitif')!.roas!.toFixed(1) : '-'}</span>
+            </div>
+            <div class="levelup-product-roas-item">
+              <span class="levelup-product-roas-item-label">ROAS Konservatif</span>
+              <span class="levelup-product-roas-item-value">${typeof roasMetrics.tiers.find((tier) => tier.key === 'konservatif')?.roas === 'number' ? roasMetrics.tiers.find((tier) => tier.key === 'konservatif')!.roas!.toFixed(1) : '-'}</span>
+            </div>
+          </div>
+        </div>`
+      : `<div class="levelup-product-roas-panel">
+          <div class="levelup-product-roas-title">
+            <span>ROAS & Rekomendasi</span>
+            <button type="button" class="levelup-button levelup-button-secondary" data-action="roas">Isi Kalkulator</button>
+          </div>
+          <div class="levelup-note">Untuk mendapatkan rekomendasi ROAS dan profit, silakan isi detail dari Kalkulator ROAS.</div>
+        </div>`;
 
     overlay.innerHTML = `
       <div class="levelup-header">
@@ -6230,6 +6575,7 @@ function renderOverlay(snapshot: PageSnapshot) {
                   : ''
               }
             </div>
+            ${detail ? `<div class="levelup-product-image-foot">${roasFootMarkup}</div>` : ''}
           </div>
           <div class="levelup-product-panel">
             <div class="levelup-product-title">${cleanProductTitle(detail?.productTitle ?? snapshot.title)}</div>
@@ -6269,12 +6615,8 @@ function renderOverlay(snapshot: PageSnapshot) {
                 <div class="levelup-card-value">${listingAgeLabel}</div>
               </div>
               <div class="levelup-card">
-                <div class="levelup-card-label">Rating</div>
-                <div class="levelup-card-value">${detail?.ratingHint ?? "-"}</div>
-              </div>
-              <div class="levelup-card">
-                <div class="levelup-card-label">Ulasan</div>
-                <div class="levelup-card-value">${detail?.reviewCountHint ?? "-"}</div>
+                <div class="levelup-card-label">Rating Ulasan</div>
+                <div class="levelup-card-value">${ratingReviewValue}</div>
                 ${
                   ratingHighlights.length
                     ? `<div class="levelup-card-subchips">${ratingHighlights
@@ -6288,14 +6630,20 @@ function renderOverlay(snapshot: PageSnapshot) {
                     : ''
                 }
               </div>
+              <div class="levelup-card">
+                <div class="levelup-card-label">Favorit</div>
+                <div class="levelup-card-value">${favoriteLabel}</div>
+              </div>
+              <div class="levelup-card">
+                <div class="levelup-card-label">Dikirim Dari</div>
+                <div class="levelup-card-value">${shippedFromLabel}</div>
+              </div>
             </div>
-            <div class="levelup-product-insight">Insight pembanding: ${productInsightLabel}</div>
-            <div class="levelup-product-meta">
-              <div>Toko: ${shopLabel}</div>
-              <div>Sorotan terbaca: ${nonRatingHighlights.length}</div>
-              <div>URL produk:</div>
-              <div class="levelup-product-link">${detail?.productUrl ?? snapshot.url}</div>
-            </div>
+            ${
+              productInsightLabel
+                ? `<div class="levelup-product-insight">Insight pembanding: ${productInsightLabel}</div>`
+                : ''
+            }
             ${
               nonRatingHighlights.length
                 ? `<div class="levelup-highlights">${nonRatingHighlights
@@ -6304,6 +6652,45 @@ function renderOverlay(snapshot: PageSnapshot) {
                         `<span class="levelup-highlight-chip">${highlight}</span>`,
                     )
                     .join('')}</div>`
+                : ''
+            }
+            ${
+              positiveKeywords.length || negativeKeywords.length || competitorProducts.length
+                ? `<div class="levelup-chip-groups">
+                  ${
+                    positiveKeywords.length
+                      ? `<div class="levelup-chip-group">
+                        <div class="levelup-chip-group-title">Keyword Positif</div>
+                        <div class="levelup-highlights">${positiveKeywords
+                          .map((keyword) => `<span class="levelup-highlight-chip">${keyword}</span>`)
+                          .join('')}</div>
+                      </div>`
+                      : ''
+                  }
+                  ${
+                    negativeKeywords.length
+                      ? `<div class="levelup-chip-group">
+                        <div class="levelup-chip-group-title">Keyword Negatif</div>
+                        <div class="levelup-highlights">${negativeKeywords
+                          .map((keyword) => `<span class="levelup-highlight-chip">${keyword}</span>`)
+                          .join('')}</div>
+                      </div>`
+                      : ''
+                  }
+                  ${
+                    competitorProducts.length
+                      ? `<div class="levelup-chip-group">
+                        <div class="levelup-chip-group-title">Rekomendasi / Kompetitor</div>
+                        <div class="levelup-highlights">${competitorProducts
+                          .map(
+                            (product) =>
+                              `<a class="levelup-highlight-chip levelup-highlight-link" href="${product.productUrl}" target="_blank" rel="noreferrer">${cleanProductTitle(product.title)}</a>`,
+                          )
+                          .join('')}</div>
+                      </div>`
+                      : ''
+                  }
+                </div>`
                 : ''
             }
           </div>
@@ -6332,7 +6719,9 @@ function renderOverlay(snapshot: PageSnapshot) {
 
   const syncButton = overlay.querySelector<HTMLButtonElement>('[data-action="sync"]');
   const refreshButton = overlay.querySelector<HTMLButtonElement>('[data-action="refresh"]');
-  const roasButton = overlay.querySelector<HTMLButtonElement>('[data-action="roas"]');
+  const roasButtons = Array.from(
+    overlay.querySelectorAll<HTMLButtonElement>('[data-action="roas"]'),
+  );
   const loadMoreButton = overlay.querySelector<HTMLButtonElement>('[data-action="load-more"]');
   const openProductButtons = Array.from(
     overlay.querySelectorAll<HTMLButtonElement>('[data-action="open-result-product"]'),
@@ -6373,8 +6762,12 @@ function renderOverlay(snapshot: PageSnapshot) {
     queueRefresh();
   });
 
-  roasButton?.addEventListener('click', () => {
-    openRoasCalculator(snapshot.pageType === 'shopee_public_product' ? snapshot.productDetail : null);
+  roasButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      openRoasCalculator(
+        snapshot.pageType === 'shopee_public_product' ? snapshot.productDetail : null,
+      );
+    });
   });
 
   loadMoreButton?.addEventListener('click', async () => {

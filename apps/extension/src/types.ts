@@ -176,6 +176,14 @@ export type ProductDetailSnapshot = {
   monthlySoldHint?: string;
   ratingHint?: string;
   reviewCountHint?: string;
+  favoriteCountHint?: string;
+  shippedFromHint?: string;
+  positiveKeywords?: string[];
+  negativeKeywords?: string[];
+  competitorProducts?: Array<{
+    title: string;
+    productUrl: string;
+  }>;
   totalRevenueHint?: string;
   monthlyRevenueHint?: string;
   listingAgeHint?: string;

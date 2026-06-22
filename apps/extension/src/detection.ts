@@ -1073,6 +1073,15 @@ function extractShopeeProductDataFromScripts(document: Document, url: URL) {
     /"ctime"\s*:\s*(\d+)/i,
     /"create_time"\s*:\s*(\d+)/i,
   ]);
+  const shippedFromRaw = matchScriptValue(scriptText, [
+    /"shop_location"\s*:\s*"([^"]+)"/i,
+    /"shopLocation"\s*:\s*"([^"]+)"/i,
+  ]);
+  const favoriteCountRaw = matchScriptValue(scriptText, [
+    /"liked_count"\s*:\s*(\d+)/i,
+    /"like_count"\s*:\s*(\d+)/i,
+    /"likedCount"\s*:\s*(\d+)/i,
+  ]);
   const fullImageUrl = matchScriptValue(scriptText, [
     /"image"\s*:\s*"(https?:[^"]+)"/i,
     /"image_url"\s*:\s*"(https?:[^"]+)"/i,
@@ -1095,6 +1104,7 @@ function extractShopeeProductDataFromScripts(document: Document, url: URL) {
   const reviewCount = parseNumericLike(reviewCountRaw);
   const ratingValue = ratingRaw ? Number.parseFloat(ratingRaw.replace(',', '.')) : undefined;
   const createdAt = parseNumericLike(createdAtRaw);
+  const favoriteCountValue = parseNumericLike(favoriteCountRaw);
   const representativePrice =
     typeof priceMin === 'number' && typeof priceMax === 'number'
       ? Math.round((priceMin + priceMax) / 2)
@@ -1127,6 +1137,11 @@ function extractShopeeProductDataFromScripts(document: Document, url: URL) {
       typeof ratingValue === 'number' && Number.isFinite(ratingValue)
         ? `${ratingValue.toString().replace('.', ',')} dari 5`
         : undefined,
+    shippedFromHint: shippedFromRaw ? decodeScriptString(shippedFromRaw) : undefined,
+    favoriteCountHint:
+      typeof favoriteCountValue === 'number'
+        ? favoriteCountValue.toLocaleString('id-ID')
+        : undefined,
     totalRevenueHint: totalRevenue
       ? `± ${formatCompactCurrencyLabel(totalRevenue)} Total`
       : undefined,
@@ -1136,6 +1151,106 @@ function extractShopeeProductDataFromScripts(document: Document, url: URL) {
     listingAgeHint:
       typeof createdAt === 'number' ? formatListingAgeHint(createdAt) : undefined,
   };
+}
+
+function extractShopeeFavoriteCountHint(compactCandidates: string[]) {
+  const favoriteCandidate =
+    extractCompactHint(compactCandidates, /^favorit\s*\(\s*[^)]+\s*\)$/i) ??
+    compactCandidates.find((candidate) => /^favorit/i.test(candidate)) ??
+    null;
+  if (!favoriteCandidate) {
+    return undefined;
+  }
+
+  const match = favoriteCandidate.match(/\(\s*([^)]+)\s*\)/);
+  return normalizeText(match?.[1]) || undefined;
+}
+
+function extractShopeeShippedFromHint(productRoot: Element) {
+  const candidates = getSmallTextCandidates(
+    productRoot,
+    ['span', 'div', 'a'],
+    { minLength: 2, maxLength: 48, limit: 80 },
+  );
+
+  const markerIndex = candidates.findIndex((candidate) =>
+    /^dikirim dari$/i.test(candidate),
+  );
+  if (markerIndex >= 0) {
+    const next = normalizeText(candidates[markerIndex + 1]);
+    if (next && !/^dikirim dari$/i.test(next) && next.length >= 3) {
+      return next;
+    }
+  }
+
+  return undefined;
+}
+
+function extractShopeeCompetitorProducts(
+  productRoot: Element,
+  currentUrl: URL,
+) {
+  const headingCandidates = Array.from(
+    productRoot.querySelectorAll<HTMLElement>('h2,h3,[role="heading"]'),
+  )
+    .map((element) => ({
+      element,
+      text: normalizeText(element.textContent),
+    }))
+    .filter((candidate) => candidate.text.length > 0)
+    .filter((candidate) =>
+      /^(produk pilihan toko|produk serupa|produk lainnya|rekomendasi|produk terkait)$/i.test(
+        candidate.text,
+      ),
+    )
+    .slice(0, 4);
+
+  if (headingCandidates.length === 0) {
+    return [];
+  }
+
+  const productLinks = new Map<string, { title: string; productUrl: string }>();
+  const normalizedCurrent = currentUrl.toString();
+
+  for (const heading of headingCandidates) {
+    const container =
+      heading.element.closest('section') ??
+      heading.element.parentElement ??
+      productRoot;
+    const anchors = Array.from(container.querySelectorAll<HTMLAnchorElement>('a[href]'));
+
+    for (const anchor of anchors) {
+      const href = anchor.getAttribute('href');
+      if (!href || !isProductHref(href)) {
+        continue;
+      }
+
+      let productUrl: string;
+      try {
+        productUrl = new URL(href, currentUrl.origin).toString();
+      } catch {
+        continue;
+      }
+
+      if (productUrl === normalizedCurrent) {
+        continue;
+      }
+
+      const title =
+        normalizeText(anchor.getAttribute('aria-label')) ||
+        normalizeText(anchor.textContent) ||
+        '';
+      if (title.length < 6) {
+        continue;
+      }
+
+      if (!productLinks.has(productUrl)) {
+        productLinks.set(productUrl, { title, productUrl });
+      }
+    }
+  }
+
+  return Array.from(productLinks.values()).slice(0, 6);
 }
 
 function collectJsonLdNodes(document: Document) {
@@ -1343,6 +1458,11 @@ function detectShopeePublicProduct(
   const monthlySoldHint = scriptedData?.monthlySoldHint;
   const monthlyRevenueHint = scriptedData?.monthlyRevenueHint;
   const listingAgeHint = scriptedData?.listingAgeHint;
+  const favoriteCountHint =
+    extractShopeeFavoriteCountHint(compactCandidates) ?? scriptedData?.favoriteCountHint;
+  const shippedFromHint =
+    scriptedData?.shippedFromHint ?? extractShopeeShippedFromHint(productRoot);
+  const competitorProducts = extractShopeeCompetitorProducts(productRoot, url);
 
   const highlights = compactCandidates
     .filter(
@@ -1350,6 +1470,7 @@ function detectShopeePublicProduct(
         !/^(chat|beli sekarang|masukkan keranjang|voucher|garansi|laporkan|share|favorit.*|tersedia)$/i.test(
           value,
         ) &&
+        !/^dengan komentar/i.test(value) &&
         !/^(dari 5|semua)$/i.test(value) &&
         !isLikelySalesText(value) &&
         !/^\d(?:[.,]\d)?$/.test(value) &&
@@ -1368,6 +1489,9 @@ function detectShopeePublicProduct(
     monthlySoldHint,
     ratingHint,
     reviewCountHint,
+    favoriteCountHint,
+    shippedFromHint,
+    competitorProducts: competitorProducts.length ? competitorProducts : undefined,
     monthlyRevenueHint,
     listingAgeHint,
     highlights,
