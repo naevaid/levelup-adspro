@@ -902,7 +902,7 @@ async function handleSyncNow() {
   }
 
   if (!state.extensionSession) {
-    throw new Error('Extension session belum aktif.');
+    throw new Error('Untuk melakukan sync, perlu login terlebih dahulu.');
   }
 
   const payload = buildSyncPayload(snapshot, state);
@@ -932,7 +932,7 @@ async function handleSyncProductUrl(
   const state = await ensureExtensionSessionState();
 
   if (!state.extensionSession) {
-    throw new Error('Extension session belum aktif.');
+    throw new Error('Untuk melakukan sync, perlu login terlebih dahulu.');
   }
 
   let tabId: number | null = null;

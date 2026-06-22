@@ -40,6 +40,10 @@ let adsDashboardBootstrapRetryCount = 0;
 let isDomObserverActive = false;
 let roasProductSurfaceRenderNonce = 0;
 let toastDismissTimeoutId: number | null = null;
+let shopSortInteractionTimeoutId: number | null = null;
+let isShopSortInteractionLocked = false;
+let activeRoasPersistenceKey: string | null = null;
+let hasPersistedRoasStateForCurrentKey = false;
 
 const OVERLAY_ID = 'levelup-adspro-market-overlay';
 const OVERLAY_STYLE_ID = 'levelup-adspro-market-overlay-style';
@@ -61,6 +65,7 @@ const PAGE_BRIDGE_RESPONSE_EVENT = 'levelup-adspro:enrich-response';
 const PAGE_BRIDGE_SHOP_REQUEST_EVENT = 'levelup-adspro:shop-request';
 const PAGE_BRIDGE_SHOP_RESPONSE_EVENT = 'levelup-adspro:shop-response';
 const PAGE_BRIDGE_TIMEOUT_MS = 5000;
+const ROAS_CALCULATOR_STORAGE_KEY = 'levelupAdsProRoasCalculatorByAdsKey';
 const HEADER_LOGO_URL = chrome.runtime.getURL('header-logo.png');
 const POWERED_BY_LOGO_URL = chrome.runtime.getURL('powered-by.png');
 const resolvedSearchResultEnrichmentCache = new Map<string, SearchResultEnrichment>();
@@ -176,6 +181,10 @@ type RoasMetrics = {
   gratisOngkirPct: number;
   gratisOngkirCap: number;
   feeProsesPesanan: number;
+};
+
+type StoredRoasCalculatorEntry = RoasCalculatorState & {
+  savedAt: string;
 };
 
 type RoasPercentField =
@@ -325,6 +334,15 @@ function cleanProductTitle(title: string) {
   return normalizeText(title).replace(/^view product:\s*/i, '');
 }
 
+function truncateProductCardTitle(title: string, maxLength = 54) {
+  const normalized = cleanProductTitle(title);
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxLength).trimEnd()}...`;
+}
+
 function buildShopeeProductUrl(input: {
   shopId: string;
   itemId: string;
@@ -376,12 +394,14 @@ function ensureToastStyle() {
   style.textContent = `
     #${TOAST_ROOT_ID} {
       position: fixed;
-      right: 20px;
-      bottom: 20px;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
       display: grid;
       gap: 10px;
       z-index: 2147483647;
       pointer-events: none;
+      justify-items: center;
     }
 
     #${TOAST_ROOT_ID} .levelup-toast {
@@ -445,6 +465,54 @@ function showToast(message: string, tone: 'success' | 'error' = 'success') {
   }, 3200);
 }
 
+async function triggerParserReload(options: {
+  button: HTMLButtonElement;
+  defaultLabel: string;
+  loadingLabel?: string;
+  statusElement?: HTMLElement | null;
+  loadingMessage?: string;
+  successMessage?: string;
+  errorMessage?: string;
+  onAfterReload?: () => void;
+}) {
+  const {
+    button,
+    defaultLabel,
+    loadingLabel = 'Memuat Ulang...',
+    statusElement,
+    loadingMessage = 'Memuat ulang parser...',
+    successMessage = 'Parser berhasil dimuat ulang.',
+    errorMessage = 'Gagal memuat ulang parser.',
+    onAfterReload,
+  } = options;
+
+  button.disabled = true;
+  const previousLabel = button.textContent;
+  button.textContent = loadingLabel;
+
+  if (statusElement) {
+    statusElement.textContent = loadingMessage;
+  }
+
+  try {
+    await forceSendSnapshot();
+    await refreshKnownState();
+    onAfterReload?.();
+    showToast(successMessage, 'success');
+  } catch (error) {
+    const nextMessage = error instanceof Error ? error.message : errorMessage;
+    if (statusElement) {
+      statusElement.textContent = nextMessage;
+    }
+    showToast(nextMessage, 'error');
+  } finally {
+    if (button.isConnected) {
+      button.disabled = false;
+      button.textContent = previousLabel ?? defaultLabel;
+    }
+  }
+}
+
 function parseCurrencyInput(rawValue: string) {
   const digits = rawValue.replace(/[^\d]/g, '');
   if (!digits) {
@@ -480,6 +548,203 @@ function formatDecimal(value: number | null, fractionDigits = 2) {
     minimumFractionDigits: 0,
     maximumFractionDigits: fractionDigits,
   }).format(value);
+}
+
+function cloneRoasCalculatorState(): RoasCalculatorState {
+  return {
+    hpp: roasCalculatorState.hpp,
+    price: roasCalculatorState.price,
+    operasional: roasCalculatorState.operasional,
+    storeType: roasCalculatorState.storeType,
+    promoXtraEnabled: roasCalculatorState.promoXtraEnabled,
+    gratisOngkirXtraEnabled: roasCalculatorState.gratisOngkirXtraEnabled,
+    gratisOngkirProductSize: roasCalculatorState.gratisOngkirProductSize,
+    categoryLabel: roasCalculatorState.categoryLabel,
+    kategoriFeePct: roasCalculatorState.kategoriFeePct,
+    gratisOngkirPctRegular: roasCalculatorState.gratisOngkirPctRegular,
+    gratisOngkirCapRegular: roasCalculatorState.gratisOngkirCapRegular,
+    gratisOngkirPctSpecial: roasCalculatorState.gratisOngkirPctSpecial,
+    gratisOngkirCapSpecial: roasCalculatorState.gratisOngkirCapSpecial,
+  };
+}
+
+function extractShopeeAdsProductDetailKey(rawUrl: string) {
+  try {
+    const url = new URL(rawUrl);
+    const matchedPath =
+      url.pathname.match(/\/portal\/marketing\/pas\/product\/([^/?#]+)/i) ??
+      url.pathname.match(/\/marketing\/pas\/product\/([^/?#]+)/i);
+    if (matchedPath?.[1]) {
+      return matchedPath[1];
+    }
+
+    const queryKey =
+      url.searchParams.get('product_id') ??
+      url.searchParams.get('productId') ??
+      url.searchParams.get('ads_id') ??
+      url.searchParams.get('adsId') ??
+      url.searchParams.get('id');
+
+    if (queryKey) {
+      return queryKey;
+    }
+
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return null;
+  }
+}
+
+function getRoasPersistenceKey(snapshot?: PageSnapshot | null) {
+  if (
+    snapshot?.pageType !== 'shopee_ads_product_detail' ||
+    snapshot.captureMode !== 'owned'
+  ) {
+    return null;
+  }
+
+  const adsKey = extractShopeeAdsProductDetailKey(snapshot.url);
+  return adsKey ? `shopee_ads_product_detail:${adsKey}` : null;
+}
+
+function hasRequiredRoasCalculatorInput() {
+  return (
+    typeof roasCalculatorState.hpp === 'number' &&
+    Number.isFinite(roasCalculatorState.hpp) &&
+    roasCalculatorState.hpp >= 0 &&
+    typeof roasCalculatorState.price === 'number' &&
+    Number.isFinite(roasCalculatorState.price) &&
+    roasCalculatorState.price > 0
+  );
+}
+
+function resetRoasCalculatorState(detail?: ProductDetailSnapshot | null) {
+  const resetDefaults = getSelectedShopRoasDefaults(lastKnownState);
+  roasCalculatorState.hpp = null;
+  roasCalculatorState.operasional = null;
+  roasCalculatorState.storeType = resetDefaults?.storeType ?? 'non_star';
+  roasCalculatorState.promoXtraEnabled = resetDefaults?.promoXtraEnabled ?? false;
+  roasCalculatorState.gratisOngkirXtraEnabled = false;
+  roasCalculatorState.gratisOngkirProductSize = 'regular';
+  clearRoasCategorySelection();
+  roasCalculatorState.price = detail ? getRepresentativeProductPrice(detail) : null;
+  lastAppliedRoasDefaultsShopId = resetDefaults?.shopId ?? null;
+}
+
+function applyPersistedRoasCalculatorState(entry: StoredRoasCalculatorEntry) {
+  roasCalculatorState.hpp =
+    typeof entry.hpp === 'number' && Number.isFinite(entry.hpp) ? entry.hpp : null;
+  roasCalculatorState.price =
+    typeof entry.price === 'number' && Number.isFinite(entry.price) && entry.price > 0
+      ? entry.price
+      : null;
+  roasCalculatorState.operasional =
+    typeof entry.operasional === 'number' && Number.isFinite(entry.operasional)
+      ? entry.operasional
+      : null;
+  roasCalculatorState.storeType =
+    entry.storeType === 'star' || entry.storeType === 'mall' ? entry.storeType : 'non_star';
+  roasCalculatorState.promoXtraEnabled = Boolean(entry.promoXtraEnabled);
+  roasCalculatorState.gratisOngkirXtraEnabled = Boolean(entry.gratisOngkirXtraEnabled);
+  roasCalculatorState.gratisOngkirProductSize =
+    entry.gratisOngkirProductSize === 'special' ? 'special' : 'regular';
+  roasCalculatorState.categoryLabel = normalizeText(entry.categoryLabel) || null;
+  roasCalculatorState.kategoriFeePct =
+    typeof entry.kategoriFeePct === 'number' && Number.isFinite(entry.kategoriFeePct)
+      ? entry.kategoriFeePct
+      : 0;
+  roasCalculatorState.gratisOngkirPctRegular =
+    typeof entry.gratisOngkirPctRegular === 'number' &&
+    Number.isFinite(entry.gratisOngkirPctRegular)
+      ? entry.gratisOngkirPctRegular
+      : 0;
+  roasCalculatorState.gratisOngkirCapRegular =
+    typeof entry.gratisOngkirCapRegular === 'number' &&
+    Number.isFinite(entry.gratisOngkirCapRegular)
+      ? entry.gratisOngkirCapRegular
+      : 0;
+  roasCalculatorState.gratisOngkirPctSpecial =
+    typeof entry.gratisOngkirPctSpecial === 'number' &&
+    Number.isFinite(entry.gratisOngkirPctSpecial)
+      ? entry.gratisOngkirPctSpecial
+      : 0;
+  roasCalculatorState.gratisOngkirCapSpecial =
+    typeof entry.gratisOngkirCapSpecial === 'number' &&
+    Number.isFinite(entry.gratisOngkirCapSpecial)
+      ? entry.gratisOngkirCapSpecial
+      : 0;
+}
+
+async function readStoredRoasCalculatorEntries() {
+  const result = await chrome.storage.local.get(ROAS_CALCULATOR_STORAGE_KEY);
+  return (result[ROAS_CALCULATOR_STORAGE_KEY] as Record<string, StoredRoasCalculatorEntry>) ?? {};
+}
+
+async function saveRoasCalculatorStateForSnapshot(snapshot?: PageSnapshot | null) {
+  const persistenceKey = getRoasPersistenceKey(snapshot);
+  if (!persistenceKey) {
+    throw new Error('Id iklan produk belum ditemukan pada halaman ini.');
+  }
+
+  const entries = await readStoredRoasCalculatorEntries();
+  entries[persistenceKey] = {
+    ...cloneRoasCalculatorState(),
+    savedAt: new Date().toISOString(),
+  };
+  await chrome.storage.local.set({
+    [ROAS_CALCULATOR_STORAGE_KEY]: entries,
+  });
+
+  activeRoasPersistenceKey = persistenceKey;
+  hasPersistedRoasStateForCurrentKey = true;
+}
+
+async function clearSavedRoasCalculatorStateForSnapshot(snapshot?: PageSnapshot | null) {
+  const persistenceKey = getRoasPersistenceKey(snapshot);
+  if (!persistenceKey) {
+    return;
+  }
+
+  const entries = await readStoredRoasCalculatorEntries();
+  if (!entries[persistenceKey]) {
+    hasPersistedRoasStateForCurrentKey = false;
+    return;
+  }
+
+  delete entries[persistenceKey];
+  await chrome.storage.local.set({
+    [ROAS_CALCULATOR_STORAGE_KEY]: entries,
+  });
+  hasPersistedRoasStateForCurrentKey = false;
+}
+
+async function hydrateRoasCalculatorStateForSnapshot(snapshot: PageSnapshot) {
+  const persistenceKey = getRoasPersistenceKey(snapshot);
+  if (!persistenceKey) {
+    activeRoasPersistenceKey = null;
+    hasPersistedRoasStateForCurrentKey = false;
+    return;
+  }
+
+  if (activeRoasPersistenceKey === persistenceKey) {
+    return;
+  }
+
+  resetRoasCalculatorState(snapshot.productDetail ?? null);
+  activeRoasPersistenceKey = persistenceKey;
+
+  const entries = await readStoredRoasCalculatorEntries();
+  const savedEntry = entries[persistenceKey];
+  hasPersistedRoasStateForCurrentKey = Boolean(savedEntry);
+
+  if (!savedEntry) {
+    return;
+  }
+
+  applyPersistedRoasCalculatorState(savedEntry);
+  if (roasCalculatorState.price === null && snapshot.productDetail) {
+    roasCalculatorState.price = getRepresentativeProductPrice(snapshot.productDetail);
+  }
 }
 
 function normalizeShopeePriceValue(value?: number | null) {
@@ -840,6 +1105,77 @@ function renderShopeeAdsDashboardEnhancement(snapshot: PageSnapshot) {
     typeof actualAdSpend === 'number' && actualAdSpend > 0 && typeof revenue === 'number'
       ? revenue / actualAdSpend
       : null;
+  const hasRoasCostInputs = hasRequiredRoasCalculatorInput();
+  const roasMetrics = hasRoasCostInputs ? computeRoasMetrics() : null;
+  const soldUnits =
+    typeof conversionSourceCount === 'number' &&
+    Number.isFinite(conversionSourceCount) &&
+    conversionSourceCount >= 0
+      ? conversionSourceCount
+      : null;
+  const totalHpp =
+    roasMetrics &&
+    typeof soldUnits === 'number' &&
+    typeof roasCalculatorState.hpp === 'number' &&
+    Number.isFinite(roasCalculatorState.hpp)
+      ? roasCalculatorState.hpp * soldUnits
+      : null;
+  const totalOperational =
+    roasMetrics &&
+    typeof soldUnits === 'number' &&
+    typeof roasCalculatorState.operasional === 'number' &&
+    Number.isFinite(roasCalculatorState.operasional)
+      ? roasCalculatorState.operasional * soldUnits
+      : 0;
+  const totalServiceFee =
+    roasMetrics && typeof soldUnits === 'number' ? roasMetrics.totalBiayaShopee * soldUnits : null;
+  const netRevenue =
+    typeof revenue === 'number' && Number.isFinite(revenue) && revenue >= 0
+      ? revenue
+      : roasMetrics && typeof soldUnits === 'number'
+      ? roasMetrics.price * soldUnits
+      : null;
+  const netProfit =
+    roasMetrics &&
+    typeof totalHpp === 'number' &&
+    Number.isFinite(totalHpp) &&
+    typeof totalServiceFee === 'number' &&
+    Number.isFinite(totalServiceFee) &&
+    typeof netRevenue === 'number' &&
+    Number.isFinite(netRevenue)
+      ? netRevenue - totalHpp - totalOperational - totalServiceFee - (actualAdSpend ?? 0)
+      : null;
+  const totalInvestment =
+    typeof totalHpp === 'number' &&
+    Number.isFinite(totalHpp) &&
+    typeof totalServiceFee === 'number' &&
+    Number.isFinite(totalServiceFee)
+      ? totalHpp + totalOperational + totalServiceFee + (actualAdSpend ?? 0)
+      : null;
+  const roi =
+    typeof netProfit === 'number' &&
+    Number.isFinite(netProfit) &&
+    typeof totalInvestment === 'number' &&
+    Number.isFinite(totalInvestment) &&
+    totalInvestment > 0
+      ? (netProfit / totalInvestment) * 100
+      : null;
+  const totalHppLabel =
+    roasMetrics && typeof totalHpp === 'number'
+      ? formatCurrency(Math.round(totalHpp))
+      : 'Isi Kalkulator';
+  const totalServiceFeeLabel =
+    roasMetrics && typeof totalServiceFee === 'number'
+      ? formatCurrency(Math.round(totalServiceFee))
+      : 'Isi Kalkulator';
+  const netProfitLabel =
+    roasMetrics && typeof netProfit === 'number'
+      ? formatCurrency(Math.round(netProfit))
+      : 'Isi Kalkulator';
+  const roiLabel =
+    roasMetrics && typeof roi === 'number' && Number.isFinite(roi)
+      ? formatPercent(roi)
+      : 'Isi Kalkulator';
 
   const anchor = findShopeeAdsSummaryAnchor();
   if (!anchor) {
@@ -876,6 +1212,22 @@ function renderShopeeAdsDashboardEnhancement(snapshot: PageSnapshot) {
       <div class="levelup-adspro-dashboard-card">
         <div class="levelup-adspro-dashboard-label">RPM</div>
         <div class="levelup-adspro-dashboard-value">${formatCurrency(typeof rpm === 'number' ? Math.round(rpm) : undefined)}</div>
+      </div>
+      <div class="levelup-adspro-dashboard-card">
+        <div class="levelup-adspro-dashboard-label">Total HPP</div>
+        <div class="levelup-adspro-dashboard-value">${totalHppLabel}</div>
+      </div>
+      <div class="levelup-adspro-dashboard-card">
+        <div class="levelup-adspro-dashboard-label">Biaya Layanan</div>
+        <div class="levelup-adspro-dashboard-value">${totalServiceFeeLabel}</div>
+      </div>
+      <div class="levelup-adspro-dashboard-card">
+        <div class="levelup-adspro-dashboard-label">Keuntungan Bersih</div>
+        <div class="levelup-adspro-dashboard-value">${netProfitLabel}</div>
+      </div>
+      <div class="levelup-adspro-dashboard-card">
+        <div class="levelup-adspro-dashboard-label">ROI</div>
+        <div class="levelup-adspro-dashboard-value">${roiLabel}</div>
       </div>
     </div>
     <div class="levelup-adspro-dashboard-footer">
@@ -996,7 +1348,7 @@ function renderShopeeAdsProductDetailOverlay(snapshot: PageSnapshot) {
 
   const defaults = getSelectedShopRoasDefaults(lastKnownState);
   if (defaults) {
-    if (defaults.shopId !== lastAppliedRoasDefaultsShopId) {
+    if (!hasPersistedRoasStateForCurrentKey && defaults.shopId !== lastAppliedRoasDefaultsShopId) {
       const previousStoreType = roasCalculatorState.storeType;
       if (defaults.storeType) {
         roasCalculatorState.storeType = defaults.storeType;
@@ -1073,6 +1425,7 @@ function renderShopeeAdsProductDetailOverlay(snapshot: PageSnapshot) {
           </div>
         </div>
         <div class="levelup-header-actions">
+          <button type="button" class="levelup-button levelup-button-secondary" data-action="roas-save">Simpan Data</button>
           <button type="button" class="levelup-button levelup-button-secondary" data-action="roas-reset">Reset Data</button>
         </div>
       </div>
@@ -1221,6 +1574,7 @@ function renderShopeeAdsProductDetailOverlay(snapshot: PageSnapshot) {
   `;
 
   let isGratisOngkirPopupOpen = false;
+  const saveButton = overlay.querySelector<HTMLButtonElement>('[data-action="roas-save"]');
   const resetButton = overlay.querySelector<HTMLButtonElement>('[data-action="roas-reset"]');
   const pickCategoryButton = overlay.querySelector<HTMLButtonElement>('[data-action="roas-pick-category"]');
   const inputs = Array.from(overlay.querySelectorAll<HTMLInputElement>('.levelup-roas-input'));
@@ -1354,16 +1708,9 @@ function renderShopeeAdsProductDetailOverlay(snapshot: PageSnapshot) {
   };
 
   resetButton?.addEventListener('click', () => {
-    const resetDefaults = getSelectedShopRoasDefaults(lastKnownState);
-    roasCalculatorState.hpp = null;
-    roasCalculatorState.operasional = null;
-    roasCalculatorState.storeType = resetDefaults?.storeType ?? 'non_star';
-    roasCalculatorState.promoXtraEnabled = resetDefaults?.promoXtraEnabled ?? false;
-    roasCalculatorState.gratisOngkirXtraEnabled = false;
-    roasCalculatorState.gratisOngkirProductSize = 'regular';
     isGratisOngkirPopupOpen = false;
-    clearRoasCategorySelection();
-    roasCalculatorState.price = getRepresentativeProductPrice(detail);
+    resetRoasCalculatorState(detail);
+    void clearSavedRoasCalculatorStateForSnapshot(lastSnapshot).catch(() => undefined);
 
     for (const input of inputs) {
       const field = input.dataset.field as keyof RoasCalculatorState | undefined;
@@ -1397,6 +1744,27 @@ function renderShopeeAdsProductDetailOverlay(snapshot: PageSnapshot) {
       pickCategoryButton.textContent = 'Pilih Kategori';
     }
     refreshComputed();
+  });
+
+  saveButton?.addEventListener('click', async () => {
+    saveButton.disabled = true;
+    const previousLabel = saveButton.textContent;
+    saveButton.textContent = 'Menyimpan...';
+
+    try {
+      await saveRoasCalculatorStateForSnapshot(lastSnapshot);
+      showToast('Data Kalkulator ROAS berhasil disimpan untuk iklan ini.', 'success');
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : 'Gagal menyimpan data Kalkulator ROAS.',
+        'error',
+      );
+    } finally {
+      if (saveButton.isConnected) {
+        saveButton.disabled = false;
+        saveButton.textContent = previousLabel ?? 'Simpan Data';
+      }
+    }
   });
 
   pickCategoryButton?.addEventListener('click', () => {
@@ -1594,18 +1962,18 @@ function parseCompactMetricNumber(rawValue?: string | null) {
   }
 }
 
-function parseSalesMetricValue(rawValue?: string | null) {
-  const normalized = normalizeText(rawValue);
+function extractCompactMetricToken(rawValue?: string | null) {
+  const normalized = normalizeText(rawValue).toUpperCase();
   if (!normalized) {
-    return null;
+    return '';
   }
 
-  const compactValue = normalized
-    .replace(/terjual|sold/gi, '')
-    .replace(/\s+/g, '')
-    .trim();
+  const match = normalized.match(/(\d+(?:[.,]\d+)?(?:\s?(?:RB|JT|K|M))?\+?)/i);
+  return match?.[1]?.replace(/\s+/g, '') ?? '';
+}
 
-  return parseCompactMetricNumber(compactValue);
+function parseSalesMetricValue(rawValue?: string | null) {
+  return parseCompactMetricNumber(extractCompactMetricToken(rawValue));
 }
 
 function formatSearchPriceLabel(result: PageSnapshot['resultsPreview'][number]) {
@@ -1633,7 +2001,8 @@ function formatSearchSalesLabel(result: PageSnapshot['resultsPreview'][number]) 
 function formatSearchMonthlySoldLabel(
   result: PageSnapshot['resultsPreview'][number],
 ) {
-  return normalizeText(result.monthlySoldHint) || '-';
+  const parsedValue = parseCompactMetricNumber(extractCompactMetricToken(result.monthlySoldHint));
+  return parsedValue !== null ? formatCompactCount(parsedValue, 'Pcs') : '-';
 }
 
 function formatSearchRatingLabel(result: PageSnapshot['resultsPreview'][number]) {
@@ -1667,7 +2036,34 @@ function formatSearchLocationLabel(result: PageSnapshot['resultsPreview'][number
 function formatSearchMonthlyRevenueLabel(
   result: PageSnapshot['resultsPreview'][number],
 ) {
-  return normalizeText(result.monthlyRevenueHint) || '-';
+  const normalized = normalizeText(result.monthlyRevenueHint).replace(/^±\s*/, '');
+  if (!normalized) {
+    return '-';
+  }
+
+  const compactMatch = normalized.match(/Rp\s*[\d.,]+(?:\s?(?:RB|JT|M))?/i);
+  if (compactMatch?.[0]) {
+    return compactMatch[0].replace(/\s+/g, '');
+  }
+
+  return normalized.replace(/\s*\/\s*30\s*hari.*$/i, '').trim() || '-';
+}
+
+function formatSearchListingAgeLabel(result: PageSnapshot['resultsPreview'][number]) {
+  const normalized = normalizeText(result.listingAgeHint);
+  if (!normalized) {
+    return '-';
+  }
+
+  return normalized
+    .replace(/\btahun\b/gi, 'th')
+    .replace(/\bthn\b/gi, 'th')
+    .replace(/\bbulan\b/gi, 'bl')
+    .replace(/\bbln\b/gi, 'bl')
+    .replace(/\bminggu\b/gi, 'mg')
+    .replace(/\bhari\b/gi, 'hr')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function isRatingDistributionHighlight(value: string) {
@@ -4304,7 +4700,7 @@ function ensureOverlayStyle() {
 
     #${OVERLAY_ID} .levelup-result-title {
       font-size: 12px;
-      font-weight: 400;
+      font-weight: 500;
       line-height: 1.5;
       color: #111827;
       min-height: 36px;
@@ -4326,6 +4722,9 @@ function ensureOverlayStyle() {
       display: grid;
       gap: 6px;
       margin-top: 2px;
+      font-size: 11px;
+      line-height: 1.45;
+      color: #4b5563;
     }
 
     #${OVERLAY_ID} .levelup-result-meta-row {
@@ -4356,6 +4755,19 @@ function ensureOverlayStyle() {
     #${OVERLAY_ID} .levelup-result-meta-cell[data-tone="accent"] {
       color: #c2410c;
       font-weight: 500;
+    }
+
+    #${OVERLAY_ID} .levelup-result-meta-label {
+      color: #6b7280;
+      font-weight: 400;
+    }
+
+    #${OVERLAY_ID} .levelup-result-meta-value {
+      color: #fb6a35;
+      font-size: 11px;
+      line-height: 1.45;
+      font-weight: 600;
+      text-align: right;
     }
 
     #${ADS_DASHBOARD_ENHANCEMENT_ID} {
@@ -5010,6 +5422,70 @@ function closeRoasCalculator() {
 
   if (lastSnapshot) {
     renderOverlay(lastSnapshot);
+  }
+}
+
+function isOverlayFocusWithin(overlay?: HTMLElement | null) {
+  if (!overlay) {
+    return false;
+  }
+
+  const activeElement = document.activeElement;
+  return activeElement instanceof Node && overlay.contains(activeElement);
+}
+
+function lockOverlayInteraction() {
+  if (refreshTimeoutId) {
+    window.clearTimeout(refreshTimeoutId);
+    refreshTimeoutId = null;
+  }
+
+  isOverlayInteractionLocked = true;
+}
+
+function beginShopSortInteraction() {
+  isShopSortInteractionLocked = true;
+  lockOverlayInteraction();
+
+  if (shopSortInteractionTimeoutId) {
+    window.clearTimeout(shopSortInteractionTimeoutId);
+  }
+
+  shopSortInteractionTimeoutId = window.setTimeout(() => {
+    shopSortInteractionTimeoutId = null;
+    isShopSortInteractionLocked = false;
+    unlockOverlayInteraction(
+      document.getElementById(SHOP_OVERLAY_ID) ?? document.getElementById(OVERLAY_ID),
+    );
+  }, 5000);
+}
+
+function endShopSortInteraction() {
+  if (shopSortInteractionTimeoutId) {
+    window.clearTimeout(shopSortInteractionTimeoutId);
+    shopSortInteractionTimeoutId = null;
+  }
+
+  isShopSortInteractionLocked = false;
+  unlockOverlayInteraction(
+    document.getElementById(SHOP_OVERLAY_ID) ?? document.getElementById(OVERLAY_ID),
+  );
+}
+
+function unlockOverlayInteraction(overlay?: HTMLElement | null) {
+  if (isRoasCalculatorOpen || isShopSortInteractionLocked) {
+    return;
+  }
+
+  if (overlay && (overlay.matches(':hover') || isOverlayFocusWithin(overlay))) {
+    return;
+  }
+
+  isOverlayInteractionLocked = false;
+
+  if (hasDeferredRefresh) {
+    hasDeferredRefresh = false;
+    queueRefresh();
   }
 }
 
@@ -6049,7 +6525,7 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
 
   const defaults = getSelectedShopRoasDefaults(lastKnownState);
   if (defaults) {
-    if (defaults.shopId !== lastAppliedRoasDefaultsShopId) {
+    if (!hasPersistedRoasStateForCurrentKey && defaults.shopId !== lastAppliedRoasDefaultsShopId) {
       const previousStoreType = roasCalculatorState.storeType;
       if (defaults.storeType) {
         roasCalculatorState.storeType = defaults.storeType;
@@ -6103,6 +6579,7 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
       <div class="levelup-modal-header">
         <div class="levelup-modal-title">Kalkulator ROAS | LevelUP adsPRO</div>
         <div class="levelup-modal-actions">
+          <button type="button" class="levelup-button levelup-button-secondary" data-action="roas-save">Simpan Data</button>
           <button type="button" class="levelup-button levelup-button-secondary" data-action="roas-reset">Reset Data</button>
           <button type="button" class="levelup-button levelup-button-primary" data-action="roas-close">Sembunyikan Detail</button>
         </div>
@@ -6274,6 +6751,7 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
   `;
 
   const closeButton = modal.querySelector<HTMLButtonElement>('[data-action="roas-close"]');
+  const saveButton = modal.querySelector<HTMLButtonElement>('[data-action="roas-save"]');
   const resetButton = modal.querySelector<HTMLButtonElement>('[data-action="roas-reset"]');
   const pickCategoryButton = modal.querySelector<HTMLButtonElement>('[data-action="roas-pick-category"]');
   const inputs = Array.from(modal.querySelectorAll<HTMLInputElement>('.levelup-roas-input'));
@@ -6414,16 +6892,9 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
   });
 
   resetButton?.addEventListener('click', () => {
-    const resetDefaults = getSelectedShopRoasDefaults(lastKnownState);
-    roasCalculatorState.hpp = null;
-    roasCalculatorState.operasional = null;
-    roasCalculatorState.storeType = resetDefaults?.storeType ?? 'non_star';
-    roasCalculatorState.promoXtraEnabled = resetDefaults?.promoXtraEnabled ?? false;
-    roasCalculatorState.gratisOngkirXtraEnabled = false;
-    roasCalculatorState.gratisOngkirProductSize = 'regular';
     isGratisOngkirPopupOpen = false;
-    clearRoasCategorySelection();
-    roasCalculatorState.price = getRepresentativeProductPrice(detail);
+    resetRoasCalculatorState(detail);
+    void clearSavedRoasCalculatorStateForSnapshot(lastSnapshot).catch(() => undefined);
 
     for (const input of inputs) {
       const field = input.dataset.field as keyof RoasCalculatorState | undefined;
@@ -6457,6 +6928,29 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
       pickCategoryButton.textContent = 'Pilih Kategori';
     }
     refreshComputed();
+    rerenderCurrentRoasSurface();
+  });
+
+  saveButton?.addEventListener('click', async () => {
+    saveButton.disabled = true;
+    const previousLabel = saveButton.textContent;
+    saveButton.textContent = 'Menyimpan...';
+
+    try {
+      await saveRoasCalculatorStateForSnapshot(lastSnapshot);
+      showToast('Data Kalkulator ROAS berhasil disimpan untuk iklan ini.', 'success');
+      rerenderCurrentRoasSurface();
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : 'Gagal menyimpan data Kalkulator ROAS.',
+        'error',
+      );
+    } finally {
+      if (saveButton.isConnected) {
+        saveButton.disabled = false;
+        saveButton.textContent = previousLabel ?? 'Simpan Data';
+      }
+    }
   });
 
   pickCategoryButton?.addEventListener('click', () => {
@@ -7239,7 +7733,7 @@ async function enrichShopSnapshot(snapshot: PageSnapshot) {
     await publishSnapshot({
       ...snapshot,
       shopIdentifier: shopId,
-      statusMessage: `Riset Toko gagal dimuat untuk ${shopName}. Coba Muat Ulang Parser.`,
+      statusMessage: `Riset Toko gagal dimuat untuk ${shopName}. Coba Muat Ulang.`,
     });
     return;
   }
@@ -7411,6 +7905,7 @@ async function publishSnapshot(payload: PageSnapshot) {
   if (lastSnapshot && lastSnapshot.pageType !== snapshotWithResolvedEnrichment.pageType) {
     removeOverlay();
   }
+  await hydrateRoasCalculatorStateForSnapshot(snapshotWithResolvedEnrichment);
   lastSnapshot = snapshotWithResolvedEnrichment;
   syncDomObservationMode(snapshotWithResolvedEnrichment);
   renderOverlay(snapshotWithResolvedEnrichment);
@@ -7566,7 +8061,7 @@ function renderShopOverlay(snapshot: PageSnapshot, statusLabel: string) {
             </select>
           </label>
           <button type="button" class="levelup-shop-button levelup-shop-button-primary" data-action="shop-sync">Sinkronkan Sekarang</button>
-          <button type="button" class="levelup-shop-button levelup-shop-button-secondary" data-action="shop-refresh">Muat Ulang Parser</button>
+          <button type="button" class="levelup-shop-button levelup-shop-button-secondary" data-action="shop-refresh">Muat Ulang</button>
           <button type="button" class="levelup-shop-button levelup-shop-button-ghost" data-action="shop-load-more-isolated" ${hasMore ? '' : 'disabled'}>${meta?.isLoading ? 'Memuat...' : 'Muat Lebih Banyak'}</button>
         </div>
       </div>
@@ -7710,8 +8205,28 @@ function renderShopOverlay(snapshot: PageSnapshot, statusLabel: string) {
     }
   });
 
-  shopRefreshButton?.addEventListener('click', () => {
-    queueRefresh();
+  shopRefreshButton?.addEventListener('click', async () => {
+    if (!shopRefreshButton) {
+      return;
+    }
+
+    await triggerParserReload({
+      button: shopRefreshButton,
+      defaultLabel: 'Muat Ulang Parser',
+      loadingLabel: 'Memuat Ulang...',
+      statusElement: overlay.querySelector<HTMLElement>('.levelup-shop-status'),
+      loadingMessage: 'Memuat ulang parser riset toko...',
+      successMessage: 'Parser riset toko berhasil dimuat ulang.',
+      errorMessage: 'Gagal memuat ulang parser riset toko.',
+      onAfterReload: () => {
+        if (lastSnapshot) {
+          renderShopOverlay(
+            lastSnapshot,
+            lastKnownState?.lastSync.message ?? lastSnapshot.statusMessage,
+          );
+        }
+      },
+    });
   });
 
   shopLoadMoreButton?.addEventListener('click', async () => {
@@ -7752,29 +8267,43 @@ function renderShopOverlay(snapshot: PageSnapshot, statusLabel: string) {
         renderShopOverlay(lastSnapshot, lastKnownState?.lastSync.message ?? lastSnapshot.statusMessage);
       }
     }
+
+    window.setTimeout(() => {
+      endShopSortInteraction();
+    }, 120);
+  });
+
+  shopSortSelect?.addEventListener('pointerdown', () => {
+    beginShopSortInteraction();
+  });
+
+  shopSortSelect?.addEventListener('focus', () => {
+    beginShopSortInteraction();
+  });
+
+  shopSortSelect?.addEventListener('blur', () => {
+    window.setTimeout(() => {
+      endShopSortInteraction();
+    }, 120);
   });
 
   overlay.onmouseenter = () => {
-    if (refreshTimeoutId) {
-      window.clearTimeout(refreshTimeoutId);
-      refreshTimeoutId = null;
-    }
-
-    isOverlayInteractionLocked = true;
+    lockOverlayInteraction();
   };
 
   overlay.onmouseleave = () => {
-    if (isRoasCalculatorOpen) {
-      return;
-    }
-
-    isOverlayInteractionLocked = false;
-
-    if (hasDeferredRefresh) {
-      hasDeferredRefresh = false;
-      queueRefresh();
-    }
+    unlockOverlayInteraction(overlay);
   };
+
+  overlay.addEventListener('focusin', () => {
+    lockOverlayInteraction();
+  });
+
+  overlay.addEventListener('focusout', () => {
+    window.setTimeout(() => {
+      unlockOverlayInteraction(overlay);
+    }, 0);
+  });
 
   for (const card of resultCards) {
     card.addEventListener('mouseenter', () => {
@@ -8008,7 +8537,7 @@ function renderOverlay(snapshot: PageSnapshot) {
             </select>
           </label>
           <button type="button" class="levelup-button levelup-button-primary" data-action="sync">Sinkronkan Sekarang</button>
-          <button type="button" class="levelup-button levelup-button-secondary" data-action="refresh">Muat Ulang Parser</button>
+          <button type="button" class="levelup-button levelup-button-secondary" data-action="refresh">Muat Ulang</button>
           <button type="button" class="levelup-button levelup-button-ghost" data-action="shop-load-more" ${hasMore ? '' : 'disabled'}>${meta?.isLoading ? 'Memuat...' : 'Muat Lebih Banyak'}</button>
         </div>
       </div>
@@ -8169,7 +8698,7 @@ function renderOverlay(snapshot: PageSnapshot) {
         </div>
         <div class="levelup-header-actions">
           <button type="button" class="levelup-button levelup-button-primary" data-action="sync">Sinkronkan Sekarang</button>
-          <button type="button" class="levelup-button levelup-button-secondary" data-action="refresh">Muat Ulang Parser</button>
+          <button type="button" class="levelup-button levelup-button-secondary" data-action="refresh">Muat Ulang</button>
           <button type="button" class="levelup-button levelup-button-ghost" data-action="load-more">Muat Lebih Banyak</button>
         </div>
       </div>
@@ -8203,11 +8732,13 @@ function renderOverlay(snapshot: PageSnapshot) {
           ${displayedResults
             .map((result) => {
               const cleanTitle = cleanProductTitle(result.productTitle);
+              const displayTitle = truncateProductCardTitle(result.productTitle);
               const shopLabel = formatSearchShopLabel(result);
               const priceLabel = formatSearchPriceLabel(result);
               const monthlySoldLabel = formatSearchMonthlySoldLabel(result);
               const ratingLabel = formatSearchRatingLabel(result);
               const reviewCountLabel = formatSearchReviewCountLabel(result);
+              const listingAgeLabel = formatSearchListingAgeLabel(result);
               const monthlyRevenueLabel = formatSearchMonthlyRevenueLabel(result);
               const badges = getProductBadges(result, {
                 minPriceValue,
@@ -8254,19 +8785,27 @@ function renderOverlay(snapshot: PageSnapshot) {
                       </button>
                     </div>
                   </div>
-                  <div class="levelup-result-title">${cleanTitle}</div>
+                  <div class="levelup-result-title">${displayTitle}</div>
                   <div class="levelup-result-meta-grid">
                     <div class="levelup-result-meta-row">
-                      <div class="levelup-result-meta-cell" data-tone="primary">${priceLabel}</div>
-                      <div class="levelup-result-meta-cell" data-tone="accent" data-align="right">${monthlySoldLabel}</div>
+                      <span class="levelup-result-meta-label">Harga</span>
+                      <span class="levelup-result-meta-value">${priceLabel}</span>
                     </div>
                     <div class="levelup-result-meta-row">
-                      <div class="levelup-result-meta-cell">${ratingLabel}</div>
-                      <div class="levelup-result-meta-cell" data-align="right">${reviewCountLabel}</div>
+                      <span class="levelup-result-meta-label">Terjual 30 Hari</span>
+                      <span class="levelup-result-meta-value">${monthlySoldLabel}</span>
                     </div>
                     <div class="levelup-result-meta-row">
-                      <div class="levelup-result-meta-cell">${shopLabel}</div>
-                      <div class="levelup-result-meta-cell" data-align="right">${monthlyRevenueLabel}</div>
+                      <span class="levelup-result-meta-label">Rating Ulasan</span>
+                      <span class="levelup-result-meta-value">${ratingLabel}</span>
+                    </div>
+                    <div class="levelup-result-meta-row">
+                      <span class="levelup-result-meta-label">Umur Listing</span>
+                      <span class="levelup-result-meta-value">${listingAgeLabel}</span>
+                    </div>
+                    <div class="levelup-result-meta-row">
+                      <span class="levelup-result-meta-label">Omset Kotor</span>
+                      <span class="levelup-result-meta-value">${monthlyRevenueLabel}</span>
                     </div>
                   </div>
                 </div>
@@ -8634,8 +9173,25 @@ function renderOverlay(snapshot: PageSnapshot) {
     }
   });
 
-  refreshButton?.addEventListener('click', () => {
-    queueRefresh();
+  refreshButton?.addEventListener('click', async () => {
+    if (!refreshButton) {
+      return;
+    }
+
+    await triggerParserReload({
+      button: refreshButton,
+      defaultLabel: 'Muat Ulang Parser',
+      loadingLabel: 'Memuat Ulang...',
+      statusElement: overlay.querySelector<HTMLElement>('.levelup-status'),
+      loadingMessage: 'Memuat ulang parser halaman...',
+      successMessage: 'Parser halaman berhasil dimuat ulang.',
+      errorMessage: 'Gagal memuat ulang parser halaman.',
+      onAfterReload: () => {
+        if (lastSnapshot) {
+          renderOverlay(lastSnapshot);
+        }
+      },
+    });
   });
 
   roasButtons.forEach((button) => {
@@ -8725,29 +9281,43 @@ function renderOverlay(snapshot: PageSnapshot) {
         renderOverlay(lastSnapshot);
       }
     }
+
+    window.setTimeout(() => {
+      endShopSortInteraction();
+    }, 120);
+  });
+
+  shopSortSelect?.addEventListener('pointerdown', () => {
+    beginShopSortInteraction();
+  });
+
+  shopSortSelect?.addEventListener('focus', () => {
+    beginShopSortInteraction();
+  });
+
+  shopSortSelect?.addEventListener('blur', () => {
+    window.setTimeout(() => {
+      endShopSortInteraction();
+    }, 120);
   });
 
   overlay.onmouseenter = () => {
-    if (refreshTimeoutId) {
-      window.clearTimeout(refreshTimeoutId);
-      refreshTimeoutId = null;
-    }
-
-    isOverlayInteractionLocked = true;
+    lockOverlayInteraction();
   };
 
   overlay.onmouseleave = () => {
-    if (isRoasCalculatorOpen) {
-      return;
-    }
-
-    isOverlayInteractionLocked = false;
-
-    if (hasDeferredRefresh) {
-      hasDeferredRefresh = false;
-      queueRefresh();
-    }
+    unlockOverlayInteraction(overlay);
   };
+
+  overlay.addEventListener('focusin', () => {
+    lockOverlayInteraction();
+  });
+
+  overlay.addEventListener('focusout', () => {
+    window.setTimeout(() => {
+      unlockOverlayInteraction(overlay);
+    }, 0);
+  });
 
   for (const button of openProductButtons) {
     button.addEventListener('click', (event) => {
@@ -8862,7 +9432,7 @@ function isOwnedShopeeAdsPageSnapshot(snapshot?: PageSnapshot | null) {
 }
 
 function queueRefresh() {
-  if (isOverlayInteractionLocked) {
+  if (isOverlayInteractionLocked || isShopSortInteractionLocked) {
     hasDeferredRefresh = true;
     return;
   }
@@ -8871,9 +9441,12 @@ function queueRefresh() {
     window.clearTimeout(refreshTimeoutId);
   }
 
+  const refreshDelayMs =
+    lastSnapshot?.pageType === 'shopee_public_shop' ? 1200 : 300;
+
   refreshTimeoutId = window.setTimeout(() => {
     void sendSnapshot();
-  }, 300);
+  }, refreshDelayMs);
 }
 
 function queueAdsDashboardManualRefresh() {
@@ -8938,6 +9511,23 @@ function stopWatchingDomChanges() {
   isDomObserverActive = false;
 }
 
+function shouldPauseDomObservationForShop(snapshot?: PageSnapshot | null) {
+  if (snapshot?.pageType !== 'shopee_public_shop') {
+    return false;
+  }
+
+  const shopId =
+    snapshot.shopIdentifier && /^\d+$/.test(snapshot.shopIdentifier)
+      ? snapshot.shopIdentifier
+      : null;
+  const shop = snapshot.shopResearch ?? (shopId ? shopeeShopResearchCache.get(shopId) ?? null : null);
+  const meta = shopId ? shopeeShopResearchMeta.get(shopId) ?? null : null;
+  const hasLoadedShopResearch = Boolean(shop && shop.products.length > 0);
+  const isLoading = meta?.isLoading ?? !hasLoadedShopResearch;
+
+  return hasLoadedShopResearch && !isLoading;
+}
+
 function startWatchingDomChanges() {
   if (!mutationObserver || isDomObserverActive) {
     return;
@@ -8951,7 +9541,10 @@ function startWatchingDomChanges() {
 }
 
 function syncDomObservationMode(snapshot?: PageSnapshot | null) {
-  if (isOwnedShopeeAdsPageSnapshot(snapshot)) {
+  if (
+    isOwnedShopeeAdsPageSnapshot(snapshot) ||
+    shouldPauseDomObservationForShop(snapshot)
+  ) {
     stopWatchingDomChanges();
     return;
   }
@@ -8971,7 +9564,10 @@ function watchRouteChanges() {
 function watchDomChanges() {
   stopWatchingDomChanges();
   mutationObserver = new MutationObserver((mutations) => {
-    if (isOwnedShopeeAdsPageSnapshot(lastSnapshot)) {
+    if (
+      isOwnedShopeeAdsPageSnapshot(lastSnapshot) ||
+      shouldPauseDomObservationForShop(lastSnapshot)
+    ) {
       return;
     }
 
