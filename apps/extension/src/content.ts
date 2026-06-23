@@ -265,6 +265,58 @@ const SHOPEE_ADS_DASHBOARD_LABELS = {
   roas: 'ROAS',
 } as const;
 
+type ShopeeAdsPerformanceMetricKey =
+  | 'dailyBudget'
+  | 'targetRoas'
+  | 'diagnosis'
+  | 'adSpend'
+  | 'revenue'
+  | 'roas'
+  | 'impressions'
+  | 'clicks'
+  | 'ctr'
+  | 'addToCart'
+  | 'addToCartRate'
+  | 'conversions'
+  | 'conversionRate'
+  | 'unitsSold'
+  | 'costPerConversion'
+  | 'acos';
+
+type ShopeeAdsPerformanceHeaderDefinition = {
+  key: ShopeeAdsPerformanceMetricKey;
+  label: string;
+};
+
+type ShopeeAdsPerformanceTableContext = {
+  headerKeys: Array<ShopeeAdsPerformanceMetricKey | null>;
+  rowTable: HTMLTableElement;
+  linkTable: HTMLTableElement | null;
+};
+
+type ShopeeAdsPerformanceRowMetrics = Partial<
+  Record<ShopeeAdsPerformanceMetricKey, number | null>
+>;
+
+const SHOPEE_ADS_PERFORMANCE_HEADERS: ShopeeAdsPerformanceHeaderDefinition[] = [
+  { key: 'dailyBudget', label: 'Modal Harian' },
+  { key: 'targetRoas', label: 'Target ROAS' },
+  { key: 'diagnosis', label: 'Diagnosis' },
+  { key: 'adSpend', label: 'Biaya Iklan' },
+  { key: 'revenue', label: 'Penjualan dari Iklan' },
+  { key: 'roas', label: 'ROAS' },
+  { key: 'impressions', label: 'Iklan Dilihat' },
+  { key: 'clicks', label: 'Jumlah Klik' },
+  { key: 'ctr', label: 'Persentase Klik' },
+  { key: 'addToCart', label: 'Tambah ke Keranjang' },
+  { key: 'addToCartRate', label: 'Persentase Tambah ke Keranjang' },
+  { key: 'conversions', label: 'Konversi' },
+  { key: 'conversionRate', label: 'Tingkat Konversi' },
+  { key: 'unitsSold', label: 'Produk Terjual' },
+  { key: 'costPerConversion', label: 'Biaya per Konversi' },
+  { key: 'acos', label: 'Persentase Biaya Iklan (ACOS)' },
+];
+
 type CategoryPickerCatalog = Record<
   RoasCalculatorState['storeType'],
   CategoryPickerGroup[]
@@ -1138,6 +1190,521 @@ function getShopeeAdsDashboardComputedMetricLabels(snapshot: PageSnapshot) {
   };
 }
 
+function getShopeeAdsPerformanceHeaderKey(rawText: string) {
+  const normalized = normalizeText(rawText).toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  const matched = SHOPEE_ADS_PERFORMANCE_HEADERS.find((entry) =>
+    normalized.startsWith(entry.label.toLowerCase()),
+  );
+  return matched?.key ?? null;
+}
+
+function parseShopeeCurrencyMetricValue(rawValue?: string | null) {
+  const normalized = normalizeText(rawValue);
+  if (!normalized || !/\d/.test(normalized)) {
+    return null;
+  }
+
+  const token = extractCompactMetricToken(normalized);
+  if (!token) {
+    return null;
+  }
+
+  const matchedCompact = token.match(/^(\d+(?:[.,]\d+)?)(RB|JT|K|M)?\+?$/i);
+  if (matchedCompact?.[2]) {
+    return parseCompactMetricNumber(token);
+  }
+
+  const digitsOnly = token.replace(/[^\d]/g, '');
+  return digitsOnly ? Number.parseInt(digitsOnly, 10) : null;
+}
+
+function parseShopeePercentMetricValue(rawValue?: string | null) {
+  const normalized = normalizeText(rawValue);
+  if (!normalized) {
+    return null;
+  }
+
+  const matched = normalized.match(/(\d+(?:[.,]\d+)?)\s*%/);
+  if (!matched) {
+    return null;
+  }
+
+  const parsed = Number.parseFloat(matched[1].replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatAnalysisCompactNumber(value: number) {
+  if (!Number.isFinite(value)) {
+    return '-';
+  }
+
+  const absolute = Math.abs(value);
+  const sign = value < 0 ? '-' : '';
+
+  if (absolute >= 1_000_000_000) {
+    return `${sign}${(absolute / 1_000_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+  }
+
+  if (absolute >= 1_000_000) {
+    return `${sign}${(absolute / 1_000_000).toFixed(1).replace(/\.0$/, '')}JT`;
+  }
+
+  return `${sign}${Math.round(absolute).toLocaleString('id-ID')}`;
+}
+
+function formatAnalysisDecimal(value: number, fractionDigits = 1) {
+  if (!Number.isFinite(value)) {
+    return '-';
+  }
+
+  return value.toFixed(fractionDigits).replace(/\.0$/, '');
+}
+
+function formatAnalysisBadgeText(
+  value: number,
+  suffix: string,
+  kind: 'currency' | 'decimal' | 'percent',
+) {
+  if (!Number.isFinite(value)) {
+    return '';
+  }
+
+  switch (kind) {
+    case 'percent':
+      return `${formatAnalysisDecimal(value, 1)}% ${suffix}`;
+    case 'decimal':
+      return `${formatAnalysisDecimal(value, 1)} ${suffix}`;
+    case 'currency':
+    default:
+      return `Rp${formatAnalysisCompactNumber(value)} ${suffix}`;
+  }
+}
+
+function computeBreakEvenRoasFromCalculatorState(
+  state: Pick<
+    RoasCalculatorState,
+    | 'hpp'
+    | 'price'
+    | 'operasional'
+    | 'promoXtraEnabled'
+    | 'gratisOngkirXtraEnabled'
+    | 'gratisOngkirProductSize'
+    | 'kategoriFeePct'
+    | 'gratisOngkirPctRegular'
+    | 'gratisOngkirCapRegular'
+    | 'gratisOngkirPctSpecial'
+    | 'gratisOngkirCapSpecial'
+  >,
+) {
+  const price = state.price;
+  const hpp = state.hpp;
+  const operasional = state.operasional ?? 0;
+  const kategoriPct = state.kategoriFeePct ?? 0;
+
+  if (
+    typeof price !== 'number' ||
+    !Number.isFinite(price) ||
+    price <= 0 ||
+    typeof hpp !== 'number' ||
+    !Number.isFinite(hpp) ||
+    hpp < 0 ||
+    typeof operasional !== 'number' ||
+    !Number.isFinite(operasional) ||
+    operasional < 0
+  ) {
+    return null;
+  }
+
+  const gratisOngkirPct =
+    state.gratisOngkirProductSize === 'special'
+      ? state.gratisOngkirPctSpecial ?? 0
+      : state.gratisOngkirPctRegular ?? 0;
+  const gratisOngkirCap =
+    state.gratisOngkirProductSize === 'special'
+      ? state.gratisOngkirCapSpecial ?? 0
+      : state.gratisOngkirCapRegular ?? 0;
+
+  const feeKategori = price * (kategoriPct / 100);
+  const feePromoXtra = state.promoXtraEnabled
+    ? Math.min(
+        price * (SHOPEE_PROMO_XTRA_FEE_PCT / 100),
+        SHOPEE_PROMO_XTRA_FEE_CAP_IDR,
+      )
+    : 0;
+  const feeGratisOngkirXtra = state.gratisOngkirXtraEnabled
+    ? Math.min(
+        price * (gratisOngkirPct / 100),
+        gratisOngkirCap > 0 ? gratisOngkirCap : Number.POSITIVE_INFINITY,
+      )
+    : 0;
+  const totalBiayaShopee =
+    feeKategori + feePromoXtra + feeGratisOngkirXtra + SHOPEE_ORDER_PROCESSING_FEE_IDR;
+  const profitSebelumIklan = price - (hpp + operasional + totalBiayaShopee);
+  const contributionMarginRatio = profitSebelumIklan / price;
+
+  return Number.isFinite(contributionMarginRatio) && contributionMarginRatio > 0
+    ? 1 / contributionMarginRatio
+    : null;
+}
+
+function computeRoasTierTargetsFromCalculatorState(
+  state: Parameters<typeof computeBreakEvenRoasFromCalculatorState>[0],
+) {
+  const breakEvenRoas = computeBreakEvenRoasFromCalculatorState(state);
+  if (typeof breakEvenRoas !== 'number' || !Number.isFinite(breakEvenRoas) || breakEvenRoas <= 0) {
+    return null;
+  }
+
+  const kompetitif = Math.max(breakEvenRoas * 1.64, breakEvenRoas + 1.6);
+  const konservatif = Math.max(breakEvenRoas * 2.5, breakEvenRoas + 3.6);
+  const prospektif = Math.max(breakEvenRoas * 4, breakEvenRoas + 7);
+
+  return {
+    breakEvenRoas,
+    rugi: breakEvenRoas,
+    kompetitif,
+    konservatif,
+    prospektif,
+  };
+}
+
+function findShopeeAdsPerformanceTableContexts() {
+  const tables = Array.from(document.querySelectorAll<HTMLTableElement>('table'));
+  const contexts: ShopeeAdsPerformanceTableContext[] = [];
+  const usedRowTables = new Set<HTMLTableElement>();
+
+  for (let index = 0; index < tables.length; index += 1) {
+    const headerCells = Array.from(tables[index].querySelectorAll('thead th'));
+    if (headerCells.length === 0) {
+      continue;
+    }
+
+    const headerKeys = headerCells.map((cell) => getShopeeAdsPerformanceHeaderKey(cell.textContent ?? ''));
+    const knownHeaderCount = headerKeys.filter((value) => value !== null).length;
+    if (knownHeaderCount < 8) {
+      continue;
+    }
+
+    let rowTable: HTMLTableElement | null = null;
+    for (let cursor = index + 1; cursor < tables.length; cursor += 1) {
+      const candidate = tables[cursor];
+      if (usedRowTables.has(candidate)) {
+        continue;
+      }
+
+      const firstRow = candidate.querySelector('tbody tr');
+      const cellCount = firstRow?.querySelectorAll('td').length ?? 0;
+      if (cellCount === headerKeys.length) {
+        rowTable = candidate;
+        break;
+      }
+    }
+
+    if (!rowTable) {
+      continue;
+    }
+
+    usedRowTables.add(rowTable);
+    const rowCount = rowTable.querySelectorAll('tbody tr').length;
+    let linkTable: HTMLTableElement | null = null;
+
+    for (let cursor = tables.indexOf(rowTable) - 1; cursor > index; cursor -= 1) {
+      const candidate = tables[cursor];
+      if (candidate.querySelectorAll('tbody tr').length !== rowCount) {
+        continue;
+      }
+
+      if (candidate.querySelector('a[href*="/portal/marketing/pas/product/"]')) {
+        linkTable = candidate;
+        break;
+      }
+    }
+
+    contexts.push({
+      headerKeys,
+      rowTable,
+      linkTable,
+    });
+  }
+
+  return contexts;
+}
+
+function parseShopeeAdsPerformanceRowMetrics(
+  cells: HTMLTableCellElement[],
+  headerKeys: Array<ShopeeAdsPerformanceMetricKey | null>,
+) {
+  const metrics: ShopeeAdsPerformanceRowMetrics = {};
+
+  headerKeys.forEach((key, index) => {
+    if (!key) {
+      return;
+    }
+
+    const rawText = normalizeText(cells[index]?.textContent);
+    if (!rawText) {
+      metrics[key] = null;
+      return;
+    }
+
+    switch (key) {
+      case 'adSpend':
+      case 'revenue':
+      case 'costPerConversion':
+        metrics[key] = parseShopeeCurrencyMetricValue(rawText);
+        break;
+      case 'ctr':
+      case 'addToCartRate':
+      case 'conversionRate':
+      case 'acos':
+        metrics[key] = parseShopeePercentMetricValue(rawText);
+        break;
+      case 'roas': {
+        const parsed = Number.parseFloat(rawText.replace(',', '.'));
+        metrics[key] = Number.isFinite(parsed) ? parsed : null;
+        break;
+      }
+      case 'impressions':
+      case 'clicks':
+      case 'addToCart':
+      case 'conversions':
+      case 'unitsSold':
+        metrics[key] = parseCompactMetricNumber(extractCompactMetricToken(rawText));
+        break;
+      default:
+        metrics[key] = null;
+        break;
+    }
+  });
+
+  return metrics;
+}
+
+function computeShopeeAdsAnalysisBadges(
+  metrics: ShopeeAdsPerformanceRowMetrics,
+  roasTargets: ReturnType<typeof computeRoasTierTargetsFromCalculatorState> | null,
+) {
+  const badges = new Map<ShopeeAdsPerformanceMetricKey, { label: string; tooltip: string }>();
+  const impressions = metrics.impressions ?? null;
+  const clicks = metrics.clicks ?? null;
+  const addToCart = metrics.addToCart ?? null;
+  const unitsSold = metrics.unitsSold ?? null;
+  const adSpend = metrics.adSpend ?? null;
+  const revenue = metrics.revenue ?? null;
+  const actualRoas = metrics.roas ?? null;
+
+  if (typeof impressions === 'number' && impressions > 0 && typeof adSpend === 'number') {
+    const cpm = (adSpend / impressions) * 1000;
+    badges.set('impressions', {
+      label: formatAnalysisBadgeText(cpm, 'CPM', 'currency'),
+      tooltip: `CPM = Biaya Iklan ÷ Iklan Dilihat × 1000`,
+    });
+  }
+
+  if (typeof clicks === 'number' && clicks > 0 && typeof adSpend === 'number') {
+    const cpc = adSpend / clicks;
+    badges.set('clicks', {
+      label: formatAnalysisBadgeText(cpc, 'CPC', 'currency'),
+      tooltip: `CPC = Biaya Iklan ÷ Jumlah Klik`,
+    });
+  }
+
+  if (typeof adSpend === 'number' && Number.isFinite(adSpend)) {
+    const actual = adSpend * (1 + SHOPEE_AD_TAX_RATE);
+    badges.set('adSpend', {
+      label: formatAnalysisBadgeText(actual, 'Aktual', 'currency'),
+      tooltip: `Biaya Iklan Rp${Math.round(adSpend).toLocaleString('id-ID')} Aktual (setelah ditambah pajak PPN Iklan 11%)`,
+    });
+  }
+
+  if (typeof clicks === 'number' && clicks > 0 && typeof revenue === 'number') {
+    const rpc = revenue / clicks;
+    badges.set('revenue', {
+      label: formatAnalysisBadgeText(rpc, 'RPC', 'currency'),
+      tooltip: `RPC = Penjualan dari Iklan ÷ Jumlah Klik`,
+    });
+  }
+
+  if (typeof addToCart === 'number' && addToCart > 0 && typeof adSpend === 'number') {
+    const cpatc = adSpend / addToCart;
+    badges.set('addToCart', {
+      label: formatAnalysisBadgeText(cpatc, 'CPATC', 'currency'),
+      tooltip: `CPATC = Biaya Iklan ÷ Tambah ke Keranjang`,
+    });
+  }
+
+  if (typeof unitsSold === 'number' && unitsSold > 0 && typeof revenue === 'number') {
+    const rpu = revenue / unitsSold;
+    badges.set('unitsSold', {
+      label: formatAnalysisBadgeText(rpu, 'RPU', 'currency'),
+      tooltip: `RPU = Penjualan dari Iklan ÷ Produk Terjual`,
+    });
+  }
+
+  if (roasTargets) {
+    badges.set('acos', {
+      label: formatAnalysisBadgeText(100 / roasTargets.breakEvenRoas, 'MAX', 'percent'),
+      tooltip: `ACOS maksimum aman = 100 ÷ Break-even ROAS`,
+    });
+
+    if (typeof actualRoas === 'number' && Number.isFinite(actualRoas) && actualRoas > 0) {
+      const roasFixed = actualRoas.toFixed(1);
+      const tierLines = [
+        `Rugi ROAS: ${roasTargets.rugi.toFixed(1)}`,
+        `Kompetitif ROAS: ${roasTargets.kompetitif.toFixed(1)}`,
+        `Konservatif ROAS: ${roasTargets.konservatif.toFixed(1)}`,
+        `Prospektif ROAS: ${roasTargets.prospektif.toFixed(1)}`,
+      ];
+
+      let status = 'KURANG';
+      let achievedLabel = 'di bawah Rugi ROAS';
+      if (actualRoas >= roasTargets.rugi) {
+        status = 'CUKUP';
+        achievedLabel = `mencapai Rugi ROAS ${roasTargets.rugi.toFixed(1)}`;
+      }
+      if (actualRoas >= roasTargets.kompetitif) {
+        status = 'BAGUS';
+        achievedLabel = `mencapai Kompetitif ROAS ${roasTargets.kompetitif.toFixed(1)}`;
+      }
+      if (actualRoas >= roasTargets.konservatif) {
+        status = 'BAGUS';
+        achievedLabel = `mencapai Konservatif ROAS ${roasTargets.konservatif.toFixed(1)}`;
+      }
+      if (actualRoas >= roasTargets.prospektif) {
+        status = 'SEMPURNA';
+        achievedLabel = `mencapai Prospektif ROAS ${roasTargets.prospektif.toFixed(1)}`;
+      }
+
+      badges.set('roas', {
+        label: `${status} | ${roasFixed}`,
+        tooltip: [...tierLines, `${status} Target ROAS ${achievedLabel}.`].join('\n'),
+      });
+    } else {
+      badges.set('roas', {
+        label: 'ROAS | -',
+        tooltip: `Nilai ROAS belum tersedia pada periode ini.`,
+      });
+    }
+  } else {
+    badges.set('roas', {
+      label: 'Isi Kalkulator',
+      tooltip:
+        'Isi Kalkulator ROAS untuk menampilkan status KURANG/CUKUP/BAGUS/SEMPURNA berdasarkan tier Rugi/Kompetitif/Konservatif/Prospektif.',
+    });
+  }
+
+  return badges;
+}
+
+function upsertShopeeAdsAnalysisBadge(
+  cell: HTMLTableCellElement,
+  badgePayload: { label: string; tooltip: string } | null,
+) {
+  const existing = cell.querySelector<HTMLElement>('[data-role="ads-analysis-badge"]');
+
+  if (!badgePayload?.label) {
+    existing?.remove();
+    return;
+  }
+
+  const badge =
+    existing ??
+    (() => {
+      const element = document.createElement('div');
+      element.dataset.role = 'ads-analysis-badge';
+      element.dataset.levelupAdsManaged = 'true';
+      element.className = 'levelup-ads-analysis-badge';
+      element.innerHTML =
+        '<span data-role="ads-analysis-badge-label"></span><span class="levelup-ads-analysis-tooltip" data-role="ads-analysis-badge-tooltip"></span>';
+      cell.appendChild(element);
+      return element;
+    })();
+
+  const labelNode = badge.querySelector<HTMLElement>('[data-role="ads-analysis-badge-label"]');
+  if (labelNode) {
+    labelNode.textContent = badgePayload.label;
+  }
+  const tooltipNode = badge.querySelector<HTMLElement>('[data-role="ads-analysis-badge-tooltip"]');
+  if (tooltipNode) {
+    tooltipNode.replaceChildren();
+    for (const line of badgePayload.tooltip.split('\n')) {
+      const row = document.createElement('div');
+      row.textContent = line;
+      tooltipNode.appendChild(row);
+    }
+  }
+}
+
+async function refreshShopeeAdsPerformanceAnalysisBadges(snapshot?: PageSnapshot | null) {
+  if (
+    !snapshot ||
+    snapshot.captureMode !== 'owned' ||
+    (snapshot.pageType !== 'shopee_ads_dashboard' &&
+      snapshot.pageType !== 'shopee_ads_product_detail')
+  ) {
+    document
+      .querySelectorAll<HTMLElement>('[data-role="ads-analysis-badge"]')
+      .forEach((element) => element.remove());
+    return;
+  }
+
+  const contexts = findShopeeAdsPerformanceTableContexts();
+  if (contexts.length === 0) {
+    return;
+  }
+
+  const storedEntries =
+    snapshot.pageType === 'shopee_ads_dashboard'
+      ? await readStoredRoasCalculatorEntries().catch(() => ({}))
+      : {};
+
+  for (const context of contexts) {
+    const rows = Array.from(context.rowTable.querySelectorAll<HTMLTableRowElement>('tbody tr'));
+    const linkRows = context.linkTable
+      ? Array.from(context.linkTable.querySelectorAll<HTMLTableRowElement>('tbody tr'))
+      : [];
+
+    rows.forEach((row, rowIndex) => {
+      const cells = Array.from(row.querySelectorAll<HTMLTableCellElement>('td'));
+      if (cells.length !== context.headerKeys.length) {
+        return;
+      }
+
+      const metrics = parseShopeeAdsPerformanceRowMetrics(cells, context.headerKeys);
+      let roasTargets: ReturnType<typeof computeRoasTierTargetsFromCalculatorState> | null =
+        snapshot.pageType === 'shopee_ads_product_detail'
+          ? computeRoasTierTargetsFromCalculatorState(roasCalculatorState)
+          : null;
+
+      if (snapshot.pageType === 'shopee_ads_dashboard' && context.linkTable) {
+        const detailUrl =
+          linkRows[rowIndex]
+            ?.querySelector<HTMLAnchorElement>('a[href*="/portal/marketing/pas/product/"]')
+            ?.href ?? null;
+        const persistenceKeyBase = detailUrl ? extractShopeeAdsProductDetailKey(detailUrl) : null;
+        const savedEntry = persistenceKeyBase
+          ? storedEntries[`shopee_ads_product_detail:${persistenceKeyBase}`]
+          : null;
+
+        roasTargets = savedEntry ? computeRoasTierTargetsFromCalculatorState(savedEntry) : null;
+      }
+
+      const badges = computeShopeeAdsAnalysisBadges(metrics, roasTargets);
+      context.headerKeys.forEach((key, cellIndex) => {
+        if (!key) {
+          return;
+        }
+
+        upsertShopeeAdsAnalysisBadge(cells[cellIndex], badges.get(key) ?? null);
+      });
+    });
+  }
+}
+
 function refreshShopeeAdsDashboardComputedMetrics(snapshot?: PageSnapshot | null) {
   if (!snapshot) {
     return;
@@ -1174,6 +1741,8 @@ function refreshShopeeAdsDashboardComputedMetrics(snapshot?: PageSnapshot | null
   if (roiValue) {
     roiValue.textContent = labels.roiLabel;
   }
+
+  void refreshShopeeAdsPerformanceAnalysisBadges(snapshot);
 }
 
 function clearAdsDashboardBootstrapRetry() {
@@ -2021,6 +2590,12 @@ function parseCompactMetricNumber(rawValue?: string | null) {
   const normalized = normalizeText(rawValue).toUpperCase().replace(/\s+/g, '');
   if (!normalized) {
     return null;
+  }
+
+  const thousandMatch = normalized.match(/^(\d{1,3}(?:[.,]\d{3})+)$/);
+  if (thousandMatch?.[1]) {
+    const digitsOnly = thousandMatch[1].replace(/[^\d]/g, '');
+    return digitsOnly ? Number.parseInt(digitsOnly, 10) : null;
   }
 
   const match = normalized.match(/^(\d+(?:[.,]\d+)?)(RB|JT|K|M)?\+?$/i);
@@ -4910,6 +5485,62 @@ function ensureOverlayStyle() {
       object-fit: contain;
       pointer-events: none;
       user-select: none;
+    }
+
+    .levelup-ads-analysis-badge {
+      display: inline-flex;
+      align-items: center;
+      margin-top: 6px;
+      padding: 4px 9px;
+      border-radius: 10px;
+      border: 1px solid rgba(251, 106, 53, 0.16);
+      background: rgba(251, 106, 53, 0.08);
+      color: #f97316;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.2;
+      white-space: nowrap;
+      position: relative;
+      cursor: help;
+    }
+
+    .levelup-ads-analysis-tooltip {
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 8px);
+      transform: translateX(-50%) translateY(4px);
+      min-width: 220px;
+      max-width: 280px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(15, 23, 42, 0.96);
+      color: #f8fafc;
+      font-size: 11px;
+      line-height: 1.5;
+      font-weight: 400;
+      white-space: normal;
+      opacity: 0;
+      pointer-events: none;
+      box-shadow: 0 16px 32px rgba(15, 23, 42, 0.22);
+      transition: opacity 140ms ease, transform 140ms ease;
+      z-index: 40;
+    }
+
+    .levelup-ads-analysis-tooltip::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 100%;
+      width: 10px;
+      height: 10px;
+      background: rgba(15, 23, 42, 0.96);
+      transform: translateX(-50%) rotate(45deg);
+    }
+
+    .levelup-ads-analysis-badge:hover .levelup-ads-analysis-tooltip,
+    .levelup-ads-analysis-badge:focus-within .levelup-ads-analysis-tooltip {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
     }
 
     .levelup-adspro-actual-tooltip {
@@ -8483,6 +9114,7 @@ function renderOverlay(snapshot: PageSnapshot) {
     if (snapshot.pageType === 'shopee_ads_dashboard') {
       removeOverlay();
     }
+    void refreshShopeeAdsPerformanceAnalysisBadges(snapshot);
     return;
   }
 
