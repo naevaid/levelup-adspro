@@ -2819,10 +2819,17 @@ function buildNormalizedProductSyncPayload(
   },
   fallbackShopName?: string | null,
 ): Omit<ProductDetailSnapshot, 'highlights'> & { highlights?: string[] } {
+  const monthlySoldHintValue = parseSalesMetricValue(input.monthlySoldHint);
+  const reviewCountHintValue = parseCompactMetricNumber(extractCompactMetricToken(input.reviewCountHint));
+  const monthlyRevenueHintValue = parseCompactMetricNumber(
+    extractCompactMetricToken(input.monthlyRevenueHint),
+  );
   const sold30d =
-    typeof input.sold30d === 'number' && Number.isFinite(input.sold30d)
+    typeof monthlySoldHintValue === 'number'
+      ? monthlySoldHintValue
+      : typeof input.sold30d === 'number' && Number.isFinite(input.sold30d)
       ? input.sold30d
-      : parseCompactMetricNumber(input.monthlySoldHint);
+      : undefined;
   const ratingStar =
     typeof input.ratingStar === 'number' && Number.isFinite(input.ratingStar)
       ? input.ratingStar
@@ -2831,16 +2838,20 @@ function buildNormalizedProductSyncPayload(
           return Number.isFinite(parsed) ? parsed : undefined;
         })();
   const reviewCount =
-    typeof input.reviewCount === 'number' && Number.isFinite(input.reviewCount)
+    typeof reviewCountHintValue === 'number'
+      ? reviewCountHintValue
+      : typeof input.reviewCount === 'number' && Number.isFinite(input.reviewCount)
       ? input.reviewCount
-      : parseCompactMetricNumber(input.reviewCountHint);
+      : undefined;
   const listingCtime =
     typeof input.listingCtime === 'number' && Number.isFinite(input.listingCtime)
       ? input.listingCtime
       : undefined;
   const representativePrice = getRepresentativePriceFromRange(input.priceMin, input.priceMax);
   const revenue30dEstimate =
-    typeof input.revenue30dEstimate === 'number' && Number.isFinite(input.revenue30dEstimate)
+    typeof monthlyRevenueHintValue === 'number'
+      ? monthlyRevenueHintValue
+      : typeof input.revenue30dEstimate === 'number' && Number.isFinite(input.revenue30dEstimate)
       ? input.revenue30dEstimate
       : typeof sold30d === 'number' && typeof representativePrice === 'number'
       ? sold30d * representativePrice

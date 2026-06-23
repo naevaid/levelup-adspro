@@ -821,7 +821,11 @@ export default function MarketResearchPage() {
                           <div className="mt-2 text-base font-semibold text-white">
                             {formatListingAgeFromCtime(
                               batch.preview.product?.listingCtime,
-                            )}
+                            ) !== "-"
+                              ? formatListingAgeFromCtime(
+                                  batch.preview.product?.listingCtime,
+                                )
+                              : batch.preview.product?.listingAgeHint || "-"}
                           </div>
                         </div>
                         <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
