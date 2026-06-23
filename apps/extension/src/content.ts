@@ -2791,6 +2791,101 @@ function getRepresentativeProductPrice(detail: ProductDetailSnapshot) {
   return null;
 }
 
+function getRepresentativePriceFromRange(
+  priceMin?: number | null,
+  priceMax?: number | null,
+) {
+  if (typeof priceMin === 'number' && typeof priceMax === 'number') {
+    return Math.round((priceMin + priceMax) / 2);
+  }
+
+  if (typeof priceMin === 'number') {
+    return priceMin;
+  }
+
+  if (typeof priceMax === 'number') {
+    return priceMax;
+  }
+
+  return null;
+}
+
+function buildNormalizedProductSyncPayload(
+  input: Partial<ProductDetailSnapshot> & {
+    productTitle: string;
+    productUrl: string;
+    shopName?: string | null;
+    highlights?: string[];
+  },
+  fallbackShopName?: string | null,
+): Omit<ProductDetailSnapshot, 'highlights'> & { highlights?: string[] } {
+  const sold30d =
+    typeof input.sold30d === 'number' && Number.isFinite(input.sold30d)
+      ? input.sold30d
+      : parseCompactMetricNumber(input.monthlySoldHint);
+  const ratingStar =
+    typeof input.ratingStar === 'number' && Number.isFinite(input.ratingStar)
+      ? input.ratingStar
+      : (() => {
+          const parsed = Number.parseFloat(normalizeText(input.ratingHint).replace(',', '.'));
+          return Number.isFinite(parsed) ? parsed : undefined;
+        })();
+  const reviewCount =
+    typeof input.reviewCount === 'number' && Number.isFinite(input.reviewCount)
+      ? input.reviewCount
+      : parseCompactMetricNumber(input.reviewCountHint);
+  const listingCtime =
+    typeof input.listingCtime === 'number' && Number.isFinite(input.listingCtime)
+      ? input.listingCtime
+      : undefined;
+  const representativePrice = getRepresentativePriceFromRange(input.priceMin, input.priceMax);
+  const revenue30dEstimate =
+    typeof input.revenue30dEstimate === 'number' && Number.isFinite(input.revenue30dEstimate)
+      ? input.revenue30dEstimate
+      : typeof sold30d === 'number' && typeof representativePrice === 'number'
+      ? sold30d * representativePrice
+      : undefined;
+  const monthlySoldHint =
+    normalizeText(input.monthlySoldHint) ||
+    (typeof sold30d === 'number' ? `${formatCompactCount(sold30d, 'Terjual/30 Hari')}` : undefined);
+  const ratingHint =
+    normalizeText(input.ratingHint) ||
+    (typeof ratingStar === 'number' ? formatDecimal(ratingStar, 1) : undefined);
+  const reviewCountHint =
+    normalizeText(input.reviewCountHint) ||
+    (typeof reviewCount === 'number' ? `${formatCompactCount(reviewCount, 'Ulasan')}` : undefined);
+  const monthlyRevenueHint =
+    normalizeText(input.monthlyRevenueHint) ||
+    (typeof revenue30dEstimate === 'number'
+      ? `± ${formatCompactCurrencyLabel(revenue30dEstimate)} /30 Hari`
+      : undefined);
+  const listingAgeHint =
+    normalizeText(input.listingAgeHint) ||
+    (typeof listingCtime === 'number'
+      ? formatListingAgeDays((Date.now() / 1000 - listingCtime) / 86400)
+      : undefined);
+
+  return {
+    ...input,
+    productTitle: normalizeText(input.productTitle) || 'Produk Shopee',
+    productUrl: normalizeText(input.productUrl),
+    shopName: normalizeText(input.shopName) || normalizeText(fallbackShopName) || null,
+    salesHint: normalizeText(input.salesHint) || undefined,
+    monthlySoldHint,
+    sold30d,
+    ratingHint,
+    ratingStar,
+    reviewCountHint,
+    reviewCount,
+    totalRevenueHint: normalizeText(input.totalRevenueHint) || undefined,
+    monthlyRevenueHint,
+    revenue30dEstimate,
+    listingAgeHint,
+    listingCtime,
+    highlights: input.highlights ?? [],
+  };
+}
+
 function cleanSearchContextLabel(rawValue?: string | null) {
   const normalized = normalizeText(rawValue);
   if (!normalized) {
@@ -9398,20 +9493,23 @@ function renderShopOverlay(snapshot: PageSnapshot, statusLabel: string) {
         const response = await sendBackgroundMessage<{ batchId: string; state: ExtensionState }>({
           type: 'SYNC_PRODUCT_PREVIEW',
           payload: {
-            product: {
-              productTitle:
-                normalizeText(shopProduct?.productTitle) || fallbackTitle || 'Produk Shopee',
-              productUrl,
-              imageUrl: shopProduct?.imageUrl,
-              shopName: snapshot.shopResearch?.shopName ?? null,
-              priceMin: shopProduct?.priceMin,
-              priceMax: shopProduct?.priceMax,
-              sold30d: shopProduct?.sold30d,
-              ratingStar: shopProduct?.ratingStar,
-              reviewCount: shopProduct?.reviewCount,
-              revenue30dEstimate: shopProduct?.revenue30dEstimate,
-              listingCtime: shopProduct?.listingCtime,
-            },
+            product: buildNormalizedProductSyncPayload(
+              {
+                productTitle:
+                  normalizeText(shopProduct?.productTitle) || fallbackTitle || 'Produk Shopee',
+                productUrl,
+                imageUrl: shopProduct?.imageUrl,
+                shopName: snapshot.shopResearch?.shopName ?? null,
+                priceMin: shopProduct?.priceMin,
+                priceMax: shopProduct?.priceMax,
+                sold30d: shopProduct?.sold30d,
+                ratingStar: shopProduct?.ratingStar,
+                reviewCount: shopProduct?.reviewCount,
+                revenue30dEstimate: shopProduct?.revenue30dEstimate,
+                listingCtime: shopProduct?.listingCtime,
+              },
+              snapshot.shopResearch?.shopName ?? null,
+            ),
           },
         });
         await refreshKnownState();
@@ -10252,10 +10350,13 @@ function renderOverlay(snapshot: PageSnapshot) {
         const response = await sendBackgroundMessage<{ batchId: string; state: ExtensionState }>({
           type: 'SYNC_PRODUCT_PREVIEW',
           payload: {
-            product: {
-              ...mergedDetail,
-              highlights: mergedDetail.highlights ?? [],
-            },
+            product: buildNormalizedProductSyncPayload(
+              {
+                ...mergedDetail,
+                highlights: mergedDetail.highlights ?? [],
+              },
+              mergedDetail.shopName,
+            ),
           },
         });
 
@@ -10507,27 +10608,30 @@ function renderOverlay(snapshot: PageSnapshot) {
         const response = await sendBackgroundMessage<{ batchId: string; state: ExtensionState }>({
           type: 'SYNC_PRODUCT_PREVIEW',
           payload: {
-            product: {
-              productTitle:
-                normalizeText(enrichedPreview.productTitle) || fallbackTitle || 'Produk Shopee',
-              productUrl,
-              imageUrl: enrichedPreview.imageUrl,
-              shopName: enrichedPreview.shopName ?? null,
-              priceMin: enrichedPreview.priceMin,
-              priceMax: enrichedPreview.priceMax,
-              salesHint: enrichedPreview.salesHint,
-              monthlySoldHint: enrichedPreview.monthlySoldHint,
-              sold30d: enrichedPreview.sold30d,
-              ratingHint: enrichedPreview.ratingHint,
-              ratingStar: enrichedPreview.ratingStar,
-              reviewCountHint: enrichedPreview.reviewCountHint,
-              reviewCount: enrichedPreview.reviewCount,
-              totalRevenueHint: enrichedPreview.totalRevenueHint,
-              monthlyRevenueHint: enrichedPreview.monthlyRevenueHint,
-              revenue30dEstimate: enrichedPreview.revenue30dEstimate,
-              listingAgeHint: enrichedPreview.listingAgeHint,
-              listingCtime: enrichedPreview.listingCtime,
-            },
+            product: buildNormalizedProductSyncPayload(
+              {
+                productTitle:
+                  normalizeText(enrichedPreview.productTitle) || fallbackTitle || 'Produk Shopee',
+                productUrl,
+                imageUrl: enrichedPreview.imageUrl,
+                shopName: enrichedPreview.shopName ?? null,
+                priceMin: enrichedPreview.priceMin,
+                priceMax: enrichedPreview.priceMax,
+                salesHint: enrichedPreview.salesHint,
+                monthlySoldHint: enrichedPreview.monthlySoldHint,
+                sold30d: enrichedPreview.sold30d,
+                ratingHint: enrichedPreview.ratingHint,
+                ratingStar: enrichedPreview.ratingStar,
+                reviewCountHint: enrichedPreview.reviewCountHint,
+                reviewCount: enrichedPreview.reviewCount,
+                totalRevenueHint: enrichedPreview.totalRevenueHint,
+                monthlyRevenueHint: enrichedPreview.monthlyRevenueHint,
+                revenue30dEstimate: enrichedPreview.revenue30dEstimate,
+                listingAgeHint: enrichedPreview.listingAgeHint,
+                listingCtime: enrichedPreview.listingCtime,
+              },
+              enrichedPreview.shopName ?? null,
+            ),
           },
         });
         await refreshKnownState();
