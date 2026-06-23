@@ -1704,6 +1704,7 @@ function detectPageType(url: URL): {
 } {
   const hostname = url.hostname.toLowerCase();
   const pathname = url.pathname.toLowerCase();
+  const isSellerHost = hostname.includes('seller');
 
   if (hostname.endsWith('shopee.co.id')) {
     if (pathname === '/search' || url.searchParams.has('keyword') || url.searchParams.has('q')) {
@@ -1715,7 +1716,7 @@ function detectPageType(url: URL): {
       };
     }
 
-    if (hostname.includes('seller') && pathname.includes('/portal/marketing/pas/product/')) {
+    if (isSellerHost && pathname.includes('/portal/marketing/pas/product/')) {
       return {
         pageType: 'shopee_ads_product_detail',
         captureMode: 'owned',
@@ -1725,7 +1726,7 @@ function detectPageType(url: URL): {
     }
 
     if (
-      hostname.includes('seller') &&
+      isSellerHost &&
       (pathname.startsWith('/portal/product') || pathname.startsWith('/product'))
     ) {
       return {
@@ -1736,7 +1737,7 @@ function detectPageType(url: URL): {
       };
     }
 
-    if (isProductHref(pathname)) {
+    if (!isSellerHost && isProductHref(pathname)) {
       return {
         pageType: 'shopee_public_product',
         captureMode: 'public',
@@ -1745,7 +1746,7 @@ function detectPageType(url: URL): {
       };
     }
 
-    if (isShopeeShopPath(pathname)) {
+    if (!isSellerHost && isShopeeShopPath(pathname)) {
       return {
         pageType: 'shopee_public_shop',
         captureMode: 'public',
@@ -1754,7 +1755,7 @@ function detectPageType(url: URL): {
       };
     }
 
-    if (hostname.includes('seller') && (pathname.includes('ads') || pathname.includes('marketing'))) {
+    if (isSellerHost && (pathname.includes('ads') || pathname.includes('marketing'))) {
       return {
         pageType: 'shopee_ads_dashboard',
         captureMode: 'owned',

@@ -1037,6 +1037,10 @@ function removeShopeeAdsDashboardEnhancement() {
 }
 
 function getShopeeAdsDashboardComputedMetricLabels(snapshot: PageSnapshot) {
+  if (snapshot.pageType !== 'shopee_ads_product_detail') {
+    return null;
+  }
+
   const adsDashboard = getStableShopeeAdsDashboard(snapshot);
   if (!adsDashboard) {
     return null;
@@ -1202,6 +1206,7 @@ function renderShopeeAdsDashboardEnhancement(snapshot: PageSnapshot) {
     return false;
   }
 
+  const isProductDetailPage = snapshot.pageType === 'shopee_ads_product_detail';
   const impressions = adsDashboard.impressions?.numericValue ?? null;
   const clicks = adsDashboard.clicks?.numericValue ?? null;
   const conversionSourceCount =
@@ -1235,77 +1240,13 @@ function renderShopeeAdsDashboardEnhancement(snapshot: PageSnapshot) {
     typeof actualAdSpend === 'number' && actualAdSpend > 0 && typeof revenue === 'number'
       ? revenue / actualAdSpend
       : null;
-  const hasRoasCostInputs = hasRequiredRoasCalculatorInput();
-  const roasMetrics = hasRoasCostInputs ? computeRoasMetrics() : null;
-  const soldUnits =
-    typeof conversionSourceCount === 'number' &&
-    Number.isFinite(conversionSourceCount) &&
-    conversionSourceCount >= 0
-      ? conversionSourceCount
-      : null;
-  const totalHpp =
-    roasMetrics &&
-    typeof soldUnits === 'number' &&
-    typeof roasCalculatorState.hpp === 'number' &&
-    Number.isFinite(roasCalculatorState.hpp)
-      ? roasCalculatorState.hpp * soldUnits
-      : null;
-  const totalOperational =
-    roasMetrics &&
-    typeof soldUnits === 'number' &&
-    typeof roasCalculatorState.operasional === 'number' &&
-    Number.isFinite(roasCalculatorState.operasional)
-      ? roasCalculatorState.operasional * soldUnits
-      : 0;
-  const totalServiceFee =
-    roasMetrics && typeof soldUnits === 'number' ? roasMetrics.totalBiayaShopee * soldUnits : null;
-  const netRevenue =
-    typeof revenue === 'number' && Number.isFinite(revenue) && revenue >= 0
-      ? revenue
-      : roasMetrics && typeof soldUnits === 'number'
-      ? roasMetrics.price * soldUnits
-      : null;
-  const netProfit =
-    roasMetrics &&
-    typeof totalHpp === 'number' &&
-    Number.isFinite(totalHpp) &&
-    typeof totalServiceFee === 'number' &&
-    Number.isFinite(totalServiceFee) &&
-    typeof netRevenue === 'number' &&
-    Number.isFinite(netRevenue)
-      ? netRevenue - totalHpp - totalOperational - totalServiceFee - (actualAdSpend ?? 0)
-      : null;
-  const totalInvestment =
-    typeof totalHpp === 'number' &&
-    Number.isFinite(totalHpp) &&
-    typeof totalServiceFee === 'number' &&
-    Number.isFinite(totalServiceFee)
-      ? totalHpp + totalOperational + totalServiceFee + (actualAdSpend ?? 0)
-      : null;
-  const roi =
-    typeof netProfit === 'number' &&
-    Number.isFinite(netProfit) &&
-    typeof totalInvestment === 'number' &&
-    Number.isFinite(totalInvestment) &&
-    totalInvestment > 0
-      ? (netProfit / totalInvestment) * 100
-      : null;
-  const totalHppLabel =
-    roasMetrics && typeof totalHpp === 'number'
-      ? formatCurrency(Math.round(totalHpp))
-      : 'Isi Kalkulator';
-  const totalServiceFeeLabel =
-    roasMetrics && typeof totalServiceFee === 'number'
-      ? formatCurrency(Math.round(totalServiceFee))
-      : 'Isi Kalkulator';
-  const netProfitLabel =
-    roasMetrics && typeof netProfit === 'number'
-      ? formatCurrency(Math.round(netProfit))
-      : 'Isi Kalkulator';
-  const roiLabel =
-    roasMetrics && typeof roi === 'number' && Number.isFinite(roi)
-      ? formatPercent(roi)
-      : 'Isi Kalkulator';
+  const computedMetricLabels = isProductDetailPage
+    ? getShopeeAdsDashboardComputedMetricLabels(snapshot)
+    : null;
+  const totalHppLabel = computedMetricLabels?.totalHppLabel ?? 'Isi Kalkulator';
+  const totalServiceFeeLabel = computedMetricLabels?.totalServiceFeeLabel ?? 'Isi Kalkulator';
+  const netProfitLabel = computedMetricLabels?.netProfitLabel ?? 'Isi Kalkulator';
+  const roiLabel = computedMetricLabels?.roiLabel ?? formatPercent(actualRoas);
 
   const anchor = findShopeeAdsSummaryAnchor();
   if (!anchor) {
@@ -1340,9 +1281,11 @@ function renderShopeeAdsDashboardEnhancement(snapshot: PageSnapshot) {
         <div class="levelup-adspro-dashboard-value">${formatPercent(acos)}</div>
       </div>
       <div class="levelup-adspro-dashboard-card">
-        <div class="levelup-adspro-dashboard-label">ROI</div>
-        <div class="levelup-adspro-dashboard-value" data-role="ads-roi-value">${roiLabel}</div>
+        <div class="levelup-adspro-dashboard-label">${isProductDetailPage ? 'ROI' : 'RPM'}</div>
+        <div class="levelup-adspro-dashboard-value" ${isProductDetailPage ? 'data-role="ads-roi-value"' : ''}>${isProductDetailPage ? roiLabel : formatCurrency(typeof rpm === 'number' ? Math.round(rpm) : undefined)}</div>
       </div>
+      ${isProductDetailPage
+        ? `
       <div class="levelup-adspro-dashboard-card">
         <div class="levelup-adspro-dashboard-label">RPM</div>
         <div class="levelup-adspro-dashboard-value">${formatCurrency(typeof rpm === 'number' ? Math.round(rpm) : undefined)}</div>
@@ -1358,7 +1301,8 @@ function renderShopeeAdsDashboardEnhancement(snapshot: PageSnapshot) {
       <div class="levelup-adspro-dashboard-card">
         <div class="levelup-adspro-dashboard-label">Keuntungan Bersih</div>
         <div class="levelup-adspro-dashboard-value" data-role="ads-net-profit-value">${netProfitLabel}</div>
-      </div>
+      </div>`
+        : ''}
     </div>
     <div class="levelup-adspro-dashboard-footer">
       <img
