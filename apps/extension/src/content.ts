@@ -1688,14 +1688,13 @@ function computeShopeeAdsAnalysisBadges(
         `Prospektif ROAS: ${roasTargets.prospektif.toFixed(1)}`,
       ];
 
-      let status = 'KURANG';
-      let achievedLabel = 'di bawah Rugi ROAS';
-      if (actualRoas >= roasTargets.rugi) {
-        status = 'CUKUP';
-        achievedLabel = `mencapai Rugi ROAS ${roasTargets.rugi.toFixed(1)}`;
-      }
+      let status = 'BURUK';
+      let achievedLabel =
+        actualRoas >= roasTargets.rugi
+          ? `baru melewati Rugi ROAS ${roasTargets.rugi.toFixed(1)} dan belum mencapai Kompetitif ROAS ${roasTargets.kompetitif.toFixed(1)}`
+          : `di bawah Rugi ROAS ${roasTargets.rugi.toFixed(1)}`;
       if (actualRoas >= roasTargets.kompetitif) {
-        status = 'BAGUS';
+        status = 'CUKUP';
         achievedLabel = `mencapai Kompetitif ROAS ${roasTargets.kompetitif.toFixed(1)}`;
       }
       if (actualRoas >= roasTargets.konservatif) {
@@ -1711,7 +1710,7 @@ function computeShopeeAdsAnalysisBadges(
         label: `${status} | ${roasFixed}`,
         tooltip: [...tierLines, `${status} Target ROAS ${achievedLabel}.`].join('\n'),
         tone:
-          status === 'KURANG'
+          status === 'BURUK'
             ? 'danger'
             : status === 'CUKUP'
               ? 'warning'
@@ -1731,7 +1730,7 @@ function computeShopeeAdsAnalysisBadges(
     badges.set('roas', {
       label: 'Isi Kalkulator',
       tooltip:
-        'Isi Kalkulator ROAS untuk menampilkan status KURANG/CUKUP/BAGUS/SEMPURNA berdasarkan tier Rugi/Kompetitif/Konservatif/Prospektif.',
+        'Isi Kalkulator ROAS untuk menampilkan status BURUK/CUKUP/BAGUS/SEMPURNA berdasarkan tier Rugi/Kompetitif/Konservatif/Prospektif.',
     });
   }
 
@@ -1880,7 +1879,7 @@ function upsertShopeeAdsAnalysisBadge(
   }
   if (
     badgePayload.tone === 'danger' &&
-    (badgePayload.label.startsWith('KURANG |') || badgePayload.label === 'BONCOS')
+    (badgePayload.label.startsWith('BURUK |') || badgePayload.label === 'BONCOS')
   ) {
     badge.dataset.flash = 'true';
   } else {
@@ -10871,6 +10870,39 @@ function isAdsDashboardRefreshTriggerTarget(target: EventTarget | null) {
   );
 }
 
+function shouldRefreshOwnedShopeeAdsFromMutation(mutation: MutationRecord) {
+  const changedNodes = [...Array.from(mutation.addedNodes), ...Array.from(mutation.removedNodes)];
+  const candidateElements = changedNodes
+    .map((node) =>
+      node instanceof Element ? node : node.parentElement instanceof Element ? node.parentElement : null,
+    )
+    .filter((element): element is Element => Boolean(element));
+
+  if (changedNodes.length === 0) {
+    if (!(mutation.target instanceof Element) || isManagedOverlayNode(mutation.target)) {
+      return false;
+    }
+
+    return Boolean(
+      mutation.target.closest(
+        'table, tbody, thead, tr, td, [role="table"], [role="row"], [role="grid"], [class*="table"], [class*="Table"], [class*="list"], [class*="List"], [class*="selector"], [class*="filter"]',
+      ),
+    );
+  }
+
+  return candidateElements.some((element) => {
+    if (isManagedOverlayNode(element)) {
+      return false;
+    }
+
+    return Boolean(
+      element.closest(
+        'table, tbody, thead, tr, td, [role="table"], [role="row"], [role="grid"], [class*="table"], [class*="Table"], [class*="list"], [class*="List"], [class*="selector"], [class*="filter"]',
+      ),
+    );
+  });
+}
+
 function watchAdsDashboardUserInteractions() {
   const handlePotentialRefresh = (event: Event) => {
     if (!isOwnedShopeeAdsPageSnapshot(lastSnapshot)) {
@@ -10923,10 +10955,7 @@ function startWatchingDomChanges() {
 }
 
 function syncDomObservationMode(snapshot?: PageSnapshot | null) {
-  if (
-    isOwnedShopeeAdsPageSnapshot(snapshot) ||
-    shouldPauseDomObservationForShop(snapshot)
-  ) {
+  if (shouldPauseDomObservationForShop(snapshot)) {
     stopWatchingDomChanges();
     return;
   }
@@ -10946,10 +10975,17 @@ function watchRouteChanges() {
 function watchDomChanges() {
   stopWatchingDomChanges();
   mutationObserver = new MutationObserver((mutations) => {
-    if (
-      isOwnedShopeeAdsPageSnapshot(lastSnapshot) ||
-      shouldPauseDomObservationForShop(lastSnapshot)
-    ) {
+    if (shouldPauseDomObservationForShop(lastSnapshot)) {
+      return;
+    }
+
+    if (isOwnedShopeeAdsPageSnapshot(lastSnapshot)) {
+      const shouldRefreshAds = mutations.some((mutation) =>
+        shouldRefreshOwnedShopeeAdsFromMutation(mutation),
+      );
+      if (shouldRefreshAds) {
+        queueAdsDashboardManualRefresh();
+      }
       return;
     }
 
