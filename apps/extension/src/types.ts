@@ -298,6 +298,12 @@ export type BackgroundMessage =
   | { type: 'SYNC_NOW' }
   | { type: 'SYNC_PRODUCT_URL'; payload: { productUrl: string } }
   | {
+      type: 'SYNC_PRODUCT_PREVIEW';
+      payload: {
+        product: Omit<ProductDetailSnapshot, 'highlights'> & { highlights?: string[] };
+      };
+    }
+  | {
       type: 'ENRICH_SEARCH_RESULTS';
       payload: { results: SearchResultPreview[] };
     };

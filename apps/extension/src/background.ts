@@ -1000,6 +1000,60 @@ async function handleSyncProductUrl(
   }
 }
 
+async function handleSyncProductPreview(
+  message: Extract<BackgroundMessage, { type: 'SYNC_PRODUCT_PREVIEW' }>,
+) {
+  const state = await ensureExtensionSessionState();
+
+  if (!state.extensionSession) {
+    throw new Error('Untuk melakukan sync, perlu login terlebih dahulu.');
+  }
+
+  const productUrl = normalizeText(message.payload.product.productUrl);
+  const productTitle = normalizeText(message.payload.product.productTitle);
+
+  if (!productUrl || !productTitle) {
+    throw new Error('Detail produk belum lengkap untuk disinkronkan.');
+  }
+
+  const snapshot: PageSnapshot = {
+    url: productUrl,
+    title: productTitle,
+    detectedAt: new Date().toISOString(),
+    pageType: 'shopee_public_product',
+    captureMode: 'public',
+    marketplace: 'shopee',
+    statusMessage: 'Produk disiapkan dari ringkasan riset.',
+    resultsPreview: [],
+    productDetail: {
+      ...message.payload.product,
+      productUrl,
+      productTitle,
+      highlights: message.payload.product.highlights ?? [],
+    },
+  };
+
+  const payload = buildSyncPayload(snapshot, state);
+  const response = await createIngestionBatch(
+    state.apiBaseUrl,
+    state.extensionSession.accessToken,
+    payload,
+  );
+
+  await patchExtensionState({
+    lastSync: {
+      status: 'success',
+      message: `Sync produk berhasil. Batch ${response.id} diterima.`,
+      at: new Date().toISOString(),
+    },
+  });
+
+  return {
+    batchId: response.id,
+    state: await getExtensionState(),
+  };
+}
+
 async function handleGetMarketplaceCategoryFees(
   filters?: MarketplaceCategoryFeeFilters,
 ) {
@@ -1152,6 +1206,8 @@ chrome.runtime.onMessage.addListener((message: BackgroundMessage, _sender, sendR
         return handleSyncNow();
       case 'SYNC_PRODUCT_URL':
         return handleSyncProductUrl(message);
+      case 'SYNC_PRODUCT_PREVIEW':
+        return handleSyncProductPreview(message);
       default:
         return getExtensionState();
     }

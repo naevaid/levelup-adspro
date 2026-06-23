@@ -9369,9 +9369,29 @@ function renderShopOverlay(snapshot: PageSnapshot, statusLabel: string) {
       button.textContent = 'Menyinkronkan...';
 
       try {
+        const shopProduct = snapshot.shopResearch?.products.find(
+          (product) => product.productUrl === productUrl,
+        );
+        const fallbackTitle = normalizeText(
+          button
+            .closest<HTMLElement>('.levelup-shop-result')
+            ?.querySelector<HTMLElement>('.levelup-shop-result-title')
+            ?.textContent,
+        );
+
         const response = await sendBackgroundMessage<{ batchId: string; state: ExtensionState }>({
-          type: 'SYNC_PRODUCT_URL',
-          payload: { productUrl },
+          type: 'SYNC_PRODUCT_PREVIEW',
+          payload: {
+            product: {
+              productTitle:
+                normalizeText(shopProduct?.productTitle) || fallbackTitle || 'Produk Shopee',
+              productUrl,
+              imageUrl: shopProduct?.imageUrl,
+              shopName: snapshot.shopResearch?.shopName ?? null,
+              priceMin: shopProduct?.priceMin,
+              priceMax: shopProduct?.priceMax,
+            },
+          },
         });
         await refreshKnownState();
         showToast(`Produk berhasil disimpan. Batch ${response.batchId} diterima.`, 'success');
@@ -10374,9 +10394,36 @@ function renderOverlay(snapshot: PageSnapshot) {
       button.textContent = 'Menyinkronkan...';
 
       try {
+        const marketResult = snapshot.resultsPreview.find(
+          (result) => result.productUrl === productUrl,
+        );
+        const fallbackTitle = normalizeText(
+          button
+            .closest<HTMLElement>('.levelup-result')
+            ?.querySelector<HTMLElement>('.levelup-result-title')
+            ?.textContent,
+        );
+
         const response = await sendBackgroundMessage<{ batchId: string; state: ExtensionState }>({
-          type: 'SYNC_PRODUCT_URL',
-          payload: { productUrl },
+          type: 'SYNC_PRODUCT_PREVIEW',
+          payload: {
+            product: {
+              productTitle:
+                normalizeText(marketResult?.productTitle) || fallbackTitle || 'Produk Shopee',
+              productUrl,
+              imageUrl: marketResult?.imageUrl,
+              shopName: marketResult?.shopName ?? null,
+              priceMin: marketResult?.priceMin,
+              priceMax: marketResult?.priceMax,
+              salesHint: marketResult?.salesHint,
+              monthlySoldHint: marketResult?.monthlySoldHint,
+              ratingHint: marketResult?.ratingHint,
+              reviewCountHint: marketResult?.reviewCountHint,
+              totalRevenueHint: marketResult?.totalRevenueHint,
+              monthlyRevenueHint: marketResult?.monthlyRevenueHint,
+              listingAgeHint: marketResult?.listingAgeHint,
+            },
+          },
         });
         await refreshKnownState();
         showToast(`Produk berhasil disimpan. Batch ${response.batchId} diterima.`, 'success');
