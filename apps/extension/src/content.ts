@@ -3282,15 +3282,26 @@ function mergeProductDetailEnrichment(
     salesHint: normalizeText(enrichment.salesHint) || detail.salesHint,
     monthlySoldHint:
       normalizeText(enrichment.monthlySoldHint) || detail.monthlySoldHint,
+    sold30d: typeof enrichment.sold30d === 'number' ? enrichment.sold30d : detail.sold30d,
     ratingHint: normalizeText(enrichment.ratingHint) || detail.ratingHint,
+    ratingStar:
+      typeof enrichment.ratingStar === 'number' ? enrichment.ratingStar : detail.ratingStar,
     reviewCountHint:
       normalizeText(enrichment.reviewCountHint) || detail.reviewCountHint,
+    reviewCount:
+      typeof enrichment.reviewCount === 'number' ? enrichment.reviewCount : detail.reviewCount,
     totalRevenueHint:
       normalizeText(enrichment.totalRevenueHint) || detail.totalRevenueHint,
     monthlyRevenueHint:
       normalizeText(enrichment.monthlyRevenueHint) || detail.monthlyRevenueHint,
+    revenue30dEstimate:
+      typeof enrichment.revenue30dEstimate === 'number'
+        ? enrichment.revenue30dEstimate
+        : detail.revenue30dEstimate,
     listingAgeHint:
       normalizeText(enrichment.listingAgeHint) || detail.listingAgeHint,
+    listingCtime:
+      typeof enrichment.listingCtime === 'number' ? enrichment.listingCtime : detail.listingCtime,
   };
 }
 
@@ -3318,11 +3329,16 @@ function toProductDetailEnrichmentPreview(
     priceMax: snapshot.productDetail.priceMax,
     salesHint: snapshot.productDetail.salesHint,
     monthlySoldHint: snapshot.productDetail.monthlySoldHint,
+    sold30d: snapshot.productDetail.sold30d,
     ratingHint: snapshot.productDetail.ratingHint,
+    ratingStar: snapshot.productDetail.ratingStar,
     reviewCountHint: snapshot.productDetail.reviewCountHint,
+    reviewCount: snapshot.productDetail.reviewCount,
     totalRevenueHint: snapshot.productDetail.totalRevenueHint,
     monthlyRevenueHint: snapshot.productDetail.monthlyRevenueHint,
+    revenue30dEstimate: snapshot.productDetail.revenue30dEstimate,
     listingAgeHint: snapshot.productDetail.listingAgeHint,
+    listingCtime: snapshot.productDetail.listingCtime,
   };
 }
 
@@ -9390,6 +9406,11 @@ function renderShopOverlay(snapshot: PageSnapshot, statusLabel: string) {
               shopName: snapshot.shopResearch?.shopName ?? null,
               priceMin: shopProduct?.priceMin,
               priceMax: shopProduct?.priceMax,
+              sold30d: shopProduct?.sold30d,
+              ratingStar: shopProduct?.ratingStar,
+              reviewCount: shopProduct?.reviewCount,
+              revenue30dEstimate: shopProduct?.revenue30dEstimate,
+              listingCtime: shopProduct?.listingCtime,
             },
           },
         });
@@ -10417,11 +10438,16 @@ function renderOverlay(snapshot: PageSnapshot) {
               priceMax: marketResult?.priceMax,
               salesHint: marketResult?.salesHint,
               monthlySoldHint: marketResult?.monthlySoldHint,
+              sold30d: marketResult?.sold30d,
               ratingHint: marketResult?.ratingHint,
+              ratingStar: marketResult?.ratingStar,
               reviewCountHint: marketResult?.reviewCountHint,
+              reviewCount: marketResult?.reviewCount,
               totalRevenueHint: marketResult?.totalRevenueHint,
               monthlyRevenueHint: marketResult?.monthlyRevenueHint,
+              revenue30dEstimate: marketResult?.revenue30dEstimate,
               listingAgeHint: marketResult?.listingAgeHint,
+              listingCtime: marketResult?.listingCtime,
             },
           },
         });

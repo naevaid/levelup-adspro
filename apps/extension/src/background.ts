@@ -363,15 +363,20 @@ async function fetchSingleSearchResultEnrichment(result: SearchResultPreview) {
     salesHint: totalSold ? `${totalSold} Terjual` : result.salesHint,
     monthlySoldHint:
       monthlySold ? `${monthlySold} Terjual/30 Hari` : result.monthlySoldHint,
+    sold30d: itemData?.sold,
     ratingHint: ratingStar ?? result.ratingHint,
+    ratingStar: itemData?.item_rating?.rating_star,
     reviewCountHint: reviewCount ? `${reviewCount} Ulasan` : result.reviewCountHint,
+    reviewCount: itemData?.cmt_count,
     totalRevenueHint: totalRevenue
       ? `± ${formatCompactCurrencyLabel(totalRevenue)} Total`
       : result.totalRevenueHint,
     monthlyRevenueHint: monthlyRevenue
       ? `± ${formatCompactCurrencyLabel(monthlyRevenue)} /30 Hari`
       : result.monthlyRevenueHint,
+    revenue30dEstimate: monthlyRevenue ?? undefined,
     listingAgeHint: formatListingAgeHint(itemData?.ctime) ?? result.listingAgeHint,
+    listingCtime: itemData?.ctime,
   } satisfies SearchResultEnrichment;
 }
 
@@ -785,8 +790,11 @@ function buildSyncPayload(
               priceMax: snapshot.productDetail?.priceMax,
               salesHint: snapshot.productDetail?.salesHint,
               monthlySoldHint: snapshot.productDetail?.monthlySoldHint,
+              sold30d: snapshot.productDetail?.sold30d,
               ratingHint: snapshot.productDetail?.ratingHint,
               reviewCountHint: snapshot.productDetail?.reviewCountHint,
+              ratingStar: snapshot.productDetail?.ratingStar,
+              reviewCount: snapshot.productDetail?.reviewCount,
               favoriteCountHint: snapshot.productDetail?.favoriteCountHint,
               shippedFromHint: snapshot.productDetail?.shippedFromHint,
               positiveKeywords: snapshot.productDetail?.positiveKeywords,
@@ -794,7 +802,9 @@ function buildSyncPayload(
               competitorProducts: snapshot.productDetail?.competitorProducts,
               totalRevenueHint: snapshot.productDetail?.totalRevenueHint,
               monthlyRevenueHint: snapshot.productDetail?.monthlyRevenueHint,
+              revenue30dEstimate: snapshot.productDetail?.revenue30dEstimate,
               listingAgeHint: snapshot.productDetail?.listingAgeHint,
+              listingCtime: snapshot.productDetail?.listingCtime,
             },
             highlights: snapshot.productDetail?.highlights ?? [],
           }
@@ -818,8 +828,13 @@ function buildSyncPayload(
               monthlySoldHint: result.monthlySoldHint,
               ratingHint: result.ratingHint,
               reviewCountHint: result.reviewCountHint,
+              sold30d: result.sold30d,
+              ratingStar: result.ratingStar,
+              reviewCount: result.reviewCount,
               monthlyRevenueHint: result.monthlyRevenueHint,
+              revenue30dEstimate: result.revenue30dEstimate,
               listingAgeHint: result.listingAgeHint,
+              listingCtime: result.listingCtime,
             })),
           }
         : snapshot.captureMode === 'public' && snapshot.pageType === 'shopee_public_shop'

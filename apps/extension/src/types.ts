@@ -154,11 +154,16 @@ export type SearchResultPreview = {
   priceMax?: number;
   salesHint?: string;
   monthlySoldHint?: string;
+  sold30d?: number;
   ratingHint?: string;
+  ratingStar?: number;
   reviewCountHint?: string;
+  reviewCount?: number;
   totalRevenueHint?: string;
   monthlyRevenueHint?: string;
+  revenue30dEstimate?: number;
   listingAgeHint?: string;
+  listingCtime?: number;
   deliveryHint?: string;
 };
 
@@ -175,8 +180,11 @@ export type ProductDetailSnapshot = {
   priceMax?: number;
   salesHint?: string;
   monthlySoldHint?: string;
+  sold30d?: number;
   ratingHint?: string;
+  ratingStar?: number;
   reviewCountHint?: string;
+  reviewCount?: number;
   favoriteCountHint?: string;
   shippedFromHint?: string;
   positiveKeywords?: string[];
@@ -187,7 +195,9 @@ export type ProductDetailSnapshot = {
   }>;
   totalRevenueHint?: string;
   monthlyRevenueHint?: string;
+  revenue30dEstimate?: number;
   listingAgeHint?: string;
+  listingCtime?: number;
   highlights: string[];
 };
 

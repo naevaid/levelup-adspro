@@ -25,6 +25,11 @@ type IngestionPreview =
         priceMin: number | null;
         priceMax: number | null;
         salesHint: string | null;
+        sold30d: number | null;
+        ratingStar: number | null;
+        reviewCount: number | null;
+        listingCtime: number | null;
+        revenue30dEstimate: number | null;
       }>;
     }
   | {
@@ -38,8 +43,16 @@ type IngestionPreview =
         priceMin: number | null;
         priceMax: number | null;
         salesHint: string | null;
+        monthlySoldHint: string | null;
         ratingHint: string | null;
         reviewCountHint: string | null;
+        monthlyRevenueHint: string | null;
+        listingAgeHint: string | null;
+        sold30d: number | null;
+        ratingStar: number | null;
+        reviewCount: number | null;
+        listingCtime: number | null;
+        revenue30dEstimate: number | null;
       } | null;
       salesHistory: {
         currentTotalSold: number | null;
@@ -593,6 +606,11 @@ export class IngestionService {
           priceMin?: number;
           priceMax?: number;
           salesHint?: string;
+          sold30d?: number;
+          ratingStar?: number;
+          reviewCount?: number;
+          listingCtime?: number;
+          revenue30dEstimate?: number;
         }>;
         product?: {
           productTitle?: string;
@@ -602,8 +620,16 @@ export class IngestionService {
           priceMin?: number;
           priceMax?: number;
           salesHint?: string;
+          monthlySoldHint?: string;
           ratingHint?: string;
           reviewCountHint?: string;
+          monthlyRevenueHint?: string;
+          listingAgeHint?: string;
+          sold30d?: number;
+          ratingStar?: number;
+          reviewCount?: number;
+          listingCtime?: number;
+          revenue30dEstimate?: number;
         };
         highlights?: string[];
       };
@@ -630,6 +656,27 @@ export class IngestionService {
             priceMin: item.priceMin ?? null,
             priceMax: item.priceMax ?? null,
             salesHint: item.salesHint ?? null,
+            sold30d:
+              typeof item.sold30d === 'number' && Number.isFinite(item.sold30d)
+                ? item.sold30d
+                : null,
+            ratingStar:
+              typeof item.ratingStar === 'number' && Number.isFinite(item.ratingStar)
+                ? item.ratingStar
+                : null,
+            reviewCount:
+              typeof item.reviewCount === 'number' && Number.isFinite(item.reviewCount)
+                ? item.reviewCount
+                : null,
+            listingCtime:
+              typeof item.listingCtime === 'number' && Number.isFinite(item.listingCtime)
+                ? item.listingCtime
+                : null,
+            revenue30dEstimate:
+              typeof item.revenue30dEstimate === 'number' &&
+              Number.isFinite(item.revenue30dEstimate)
+                ? item.revenue30dEstimate
+                : null,
           })),
       };
     }
@@ -647,9 +694,40 @@ export class IngestionService {
               priceMin: rawPayload.content.product.priceMin ?? null,
               priceMax: rawPayload.content.product.priceMax ?? null,
               salesHint: rawPayload.content.product.salesHint ?? null,
+              monthlySoldHint:
+                rawPayload.content.product.monthlySoldHint ?? null,
               ratingHint: rawPayload.content.product.ratingHint ?? null,
               reviewCountHint:
                 rawPayload.content.product.reviewCountHint ?? null,
+              monthlyRevenueHint:
+                rawPayload.content.product.monthlyRevenueHint ?? null,
+              listingAgeHint:
+                rawPayload.content.product.listingAgeHint ?? null,
+              sold30d:
+                typeof rawPayload.content.product.sold30d === 'number' &&
+                Number.isFinite(rawPayload.content.product.sold30d)
+                  ? rawPayload.content.product.sold30d
+                  : null,
+              ratingStar:
+                typeof rawPayload.content.product.ratingStar === 'number' &&
+                Number.isFinite(rawPayload.content.product.ratingStar)
+                  ? rawPayload.content.product.ratingStar
+                  : null,
+              reviewCount:
+                typeof rawPayload.content.product.reviewCount === 'number' &&
+                Number.isFinite(rawPayload.content.product.reviewCount)
+                  ? rawPayload.content.product.reviewCount
+                  : null,
+              listingCtime:
+                typeof rawPayload.content.product.listingCtime === 'number' &&
+                Number.isFinite(rawPayload.content.product.listingCtime)
+                  ? rawPayload.content.product.listingCtime
+                  : null,
+              revenue30dEstimate:
+                typeof rawPayload.content.product.revenue30dEstimate === 'number' &&
+                Number.isFinite(rawPayload.content.product.revenue30dEstimate)
+                  ? rawPayload.content.product.revenue30dEstimate
+                  : null,
             }
           : null,
         salesHistory: null,

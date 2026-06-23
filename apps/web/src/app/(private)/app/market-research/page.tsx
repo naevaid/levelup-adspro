@@ -60,6 +60,11 @@ type IngestionBatchSummary = {
           priceMin: number | null;
           priceMax: number | null;
           salesHint: string | null;
+          sold30d: number | null;
+          ratingStar: number | null;
+          reviewCount: number | null;
+          listingCtime: number | null;
+          revenue30dEstimate: number | null;
         }>;
       }
     | {
@@ -73,8 +78,16 @@ type IngestionBatchSummary = {
           priceMin: number | null;
           priceMax: number | null;
           salesHint: string | null;
+          monthlySoldHint: string | null;
           ratingHint: string | null;
           reviewCountHint: string | null;
+          monthlyRevenueHint: string | null;
+          listingAgeHint: string | null;
+          sold30d: number | null;
+          ratingStar: number | null;
+          reviewCount: number | null;
+          listingCtime: number | null;
+          revenue30dEstimate: number | null;
         } | null;
         salesHistory: {
           currentTotalSold: number | null;
@@ -127,6 +140,36 @@ function formatUnits(value: number | null | undefined) {
   return `${value.toLocaleString("id-ID")} unit`;
 }
 
+function formatPcs(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "-";
+  }
+
+  return `${value.toLocaleString("id-ID")} pcs`;
+}
+
+function formatListingAgeFromCtime(ctimeSeconds: number | null | undefined) {
+  if (typeof ctimeSeconds !== "number" || !Number.isFinite(ctimeSeconds)) {
+    return "-";
+  }
+
+  const ageMs = Date.now() - ctimeSeconds * 1000;
+  if (!Number.isFinite(ageMs) || ageMs < 0) {
+    return "-";
+  }
+
+  const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+  if (ageDays <= 0) {
+    return "Hari ini";
+  }
+
+  if (ageDays === 1) {
+    return "1 hari";
+  }
+
+  return `${ageDays.toLocaleString("id-ID")} hari`;
+}
+
 function formatPriceRange(
   priceMin: number | null | undefined,
   priceMax: number | null | undefined,
@@ -154,9 +197,11 @@ function formatPriceRange(
 }
 
 function countPreviewItemsWithSales(
-  items: Array<{ salesHint: string | null }>,
+  items: Array<{ salesHint: string | null; sold30d: number | null }>,
 ) {
-  return items.filter((item) => Boolean(item.salesHint)).length;
+  return items.filter(
+    (item) => (item.sold30d ?? 0) > 0 || Boolean(item.salesHint),
+  ).length;
 }
 
 function countPreviewItemsWithPrice(
@@ -642,6 +687,39 @@ export default function MarketResearchPage() {
                         <p className="mt-1 text-xs text-slate-400">
                           {result.salesHint || "Belum ada sinyal terjual"}
                         </p>
+                        <div className="mt-3 grid gap-2 text-xs text-slate-300">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-slate-400">Terjual 30 Hari</span>
+                            <span className="font-medium text-slate-100">
+                              {formatPcs(result.sold30d)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-slate-400">Rating / Ulasan</span>
+                            <span className="font-medium text-slate-100">
+                              {typeof result.ratingStar === "number" &&
+                              Number.isFinite(result.ratingStar) &&
+                              typeof result.reviewCount === "number" &&
+                              Number.isFinite(result.reviewCount)
+                                ? `${result.ratingStar.toFixed(1)} / ${result.reviewCount.toLocaleString(
+                                    "id-ID",
+                                  )}`
+                                : "-"}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-slate-400">Umur Listing</span>
+                            <span className="font-medium text-slate-100">
+                              {formatListingAgeFromCtime(result.listingCtime)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-slate-400">Omset Kotor</span>
+                            <span className="font-medium text-slate-100">
+                              {formatCurrency(result.revenue30dEstimate)}
+                            </span>
+                          </div>
+                        </div>
                         {result.productUrl ? (
                           <a
                             href={result.productUrl}
@@ -700,7 +778,10 @@ export default function MarketResearchPage() {
                           batch.preview.pageTitle ||
                           "Detail produk belum terbaca"}
                       </h3>
-                      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                      <p className="mt-2 text-sm muted-text">
+                        {batch.preview.product?.shopName || "Toko belum terbaca"}
+                      </p>
+                      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                         <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
                           Harga
                           <div className="mt-2 text-base font-semibold text-white">
@@ -711,31 +792,45 @@ export default function MarketResearchPage() {
                           </div>
                         </div>
                         <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
-                          Toko
+                          Terjual 30 Hari
                           <div className="mt-2 text-base font-semibold text-white">
-                            {batch.preview.product?.shopName ||
-                              "Belum terbaca"}
-                          </div>
-                        </div>
-                        <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
-                          Penjualan
-                          <div className="mt-2 text-base font-semibold text-white">
-                            {batch.preview.product?.salesHint || "-"}
+                            {formatPcs(batch.preview.product?.sold30d)}
                           </div>
                           <div className="mt-1 text-xs text-slate-400">
-                            Total terbaca:{" "}
-                            {formatUnits(
-                              batch.preview.salesHistory?.currentTotalSold,
-                            )}
+                            {batch.preview.product?.salesHint || "-"}
                           </div>
                         </div>
                         <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
                           Rating / Ulasan
                           <div className="mt-2 text-base font-semibold text-white">
-                            {batch.preview.product?.ratingHint || "-"}
+                            {typeof batch.preview.product?.ratingStar === "number" &&
+                            Number.isFinite(batch.preview.product.ratingStar) &&
+                            typeof batch.preview.product?.reviewCount === "number" &&
+                            Number.isFinite(batch.preview.product.reviewCount)
+                              ? `${batch.preview.product.ratingStar.toFixed(1)} / ${batch.preview.product.reviewCount.toLocaleString(
+                                  "id-ID",
+                                )}`
+                              : batch.preview.product?.ratingHint || "-"}
                           </div>
                           <div className="mt-1 text-xs text-slate-400">
                             {batch.preview.product?.reviewCountHint || "-"}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
+                          Umur Listing
+                          <div className="mt-2 text-base font-semibold text-white">
+                            {formatListingAgeFromCtime(
+                              batch.preview.product?.listingCtime,
+                            )}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
+                          Omset Kotor (30 Hari)
+                          <div className="mt-2 text-base font-semibold text-white">
+                            {formatCurrency(batch.preview.product?.revenue30dEstimate)}
+                          </div>
+                          <div className="mt-1 text-xs text-slate-400">
+                            {batch.preview.product?.monthlyRevenueHint || "-"}
                           </div>
                         </div>
                       </div>
