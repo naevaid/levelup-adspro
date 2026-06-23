@@ -38,6 +38,10 @@ let adsDashboardFollowupRefreshTimeoutId: number | null = null;
 let adsDashboardBootstrapRetryTimeoutId: number | null = null;
 let adsDashboardBootstrapRetryCount = 0;
 let isDomObserverActive = false;
+let currentDomObservationRoot: Node | null = null;
+let adsDashboardTransientWatchUntil = 0;
+let adsDashboardTransientWatchStopTimeoutId: number | null = null;
+let adsDashboardTransientWatchIdleTimeoutId: number | null = null;
 let roasProductSurfaceRenderNonce = 0;
 let toastDismissTimeoutId: number | null = null;
 let shopSortInteractionTimeoutId: number | null = null;
@@ -53,6 +57,8 @@ const TOAST_STYLE_ID = 'levelup-adspro-toast-style';
 const TOAST_ROOT_ID = 'levelup-adspro-toast-root';
 const ADS_DASHBOARD_ENHANCEMENT_ID = 'levelup-adspro-shopee-ads-enhancement';
 const ADS_DASHBOARD_BOOTSTRAP_RETRY_DELAYS_MS = [500, 1200, 2200, 3600] as const;
+const ADS_DASHBOARD_TRANSIENT_WATCH_MAX_MS = 5000;
+const ADS_DASHBOARD_TRANSIENT_WATCH_IDLE_MS = 1200;
 const INITIAL_VISIBLE_RESULTS = 10;
 const LOAD_MORE_STEP = 10;
 const LOAD_MORE_FETCH_ATTEMPTS = 6;
@@ -10812,6 +10818,14 @@ function isOwnedShopeeAdsPageSnapshot(snapshot?: PageSnapshot | null) {
   );
 }
 
+function isShopeeAdsDashboardPageSnapshot(snapshot?: PageSnapshot | null) {
+  return snapshot?.captureMode === 'owned' && snapshot.pageType === 'shopee_ads_dashboard';
+}
+
+function isShopeeAdsProductDetailPageSnapshot(snapshot?: PageSnapshot | null) {
+  return snapshot?.captureMode === 'owned' && snapshot.pageType === 'shopee_ads_product_detail';
+}
+
 function queueRefresh() {
   if (isOverlayInteractionLocked || isShopSortInteractionLocked) {
     hasDeferredRefresh = true;
@@ -10833,6 +10847,10 @@ function queueRefresh() {
 function queueAdsDashboardManualRefresh() {
   if (!isOwnedShopeeAdsPageSnapshot(lastSnapshot)) {
     return;
+  }
+
+  if (isShopeeAdsDashboardPageSnapshot(lastSnapshot)) {
+    beginAdsDashboardTransientWatch();
   }
 
   if (adsDashboardRefreshTimeoutId) {
@@ -10903,6 +10921,67 @@ function shouldRefreshOwnedShopeeAdsFromMutation(mutation: MutationRecord) {
   });
 }
 
+function isAdsDashboardTransientWatchActive() {
+  return Date.now() < adsDashboardTransientWatchUntil;
+}
+
+function clearAdsDashboardTransientWatchTimers() {
+  if (adsDashboardTransientWatchStopTimeoutId) {
+    window.clearTimeout(adsDashboardTransientWatchStopTimeoutId);
+    adsDashboardTransientWatchStopTimeoutId = null;
+  }
+
+  if (adsDashboardTransientWatchIdleTimeoutId) {
+    window.clearTimeout(adsDashboardTransientWatchIdleTimeoutId);
+    adsDashboardTransientWatchIdleTimeoutId = null;
+  }
+}
+
+function endAdsDashboardTransientWatch() {
+  adsDashboardTransientWatchUntil = 0;
+  clearAdsDashboardTransientWatchTimers();
+  syncDomObservationMode(lastSnapshot);
+}
+
+function scheduleAdsDashboardTransientWatchIdleStop() {
+  if (!isShopeeAdsDashboardPageSnapshot(lastSnapshot)) {
+    endAdsDashboardTransientWatch();
+    return;
+  }
+
+  if (adsDashboardTransientWatchIdleTimeoutId) {
+    window.clearTimeout(adsDashboardTransientWatchIdleTimeoutId);
+  }
+
+  adsDashboardTransientWatchIdleTimeoutId = window.setTimeout(() => {
+    adsDashboardTransientWatchIdleTimeoutId = null;
+    endAdsDashboardTransientWatch();
+  }, ADS_DASHBOARD_TRANSIENT_WATCH_IDLE_MS);
+}
+
+function getOwnedShopeeAdsObservationRoot() {
+  const context = findShopeeAdsPerformanceTableContexts()[0];
+  if (!context) {
+    return document.body;
+  }
+
+  return context.rowTable.parentElement ?? context.rowTable;
+}
+
+function beginAdsDashboardTransientWatch() {
+  if (!isShopeeAdsDashboardPageSnapshot(lastSnapshot)) {
+    return;
+  }
+
+  adsDashboardTransientWatchUntil = Date.now() + ADS_DASHBOARD_TRANSIENT_WATCH_MAX_MS;
+  clearAdsDashboardTransientWatchTimers();
+  adsDashboardTransientWatchStopTimeoutId = window.setTimeout(() => {
+    adsDashboardTransientWatchStopTimeoutId = null;
+    endAdsDashboardTransientWatch();
+  }, ADS_DASHBOARD_TRANSIENT_WATCH_MAX_MS);
+  syncDomObservationMode(lastSnapshot);
+}
+
 function watchAdsDashboardUserInteractions() {
   const handlePotentialRefresh = (event: Event) => {
     if (!isOwnedShopeeAdsPageSnapshot(lastSnapshot)) {
@@ -10923,6 +11002,7 @@ function watchAdsDashboardUserInteractions() {
 function stopWatchingDomChanges() {
   mutationObserver?.disconnect();
   isDomObserverActive = false;
+  currentDomObservationRoot = null;
 }
 
 function shouldPauseDomObservationForShop(snapshot?: PageSnapshot | null) {
@@ -10942,25 +11022,51 @@ function shouldPauseDomObservationForShop(snapshot?: PageSnapshot | null) {
   return hasLoadedShopResearch && !isLoading;
 }
 
-function startWatchingDomChanges() {
-  if (!mutationObserver || isDomObserverActive) {
+function startWatchingDomChanges(root: Node = document.body) {
+  if (!mutationObserver) {
     return;
   }
 
-  mutationObserver.observe(document.body, {
+  if (isDomObserverActive && currentDomObservationRoot === root) {
+    return;
+  }
+
+  mutationObserver.disconnect();
+  mutationObserver.observe(root, {
     childList: true,
     subtree: true,
   });
   isDomObserverActive = true;
+  currentDomObservationRoot = root;
 }
 
 function syncDomObservationMode(snapshot?: PageSnapshot | null) {
+  if (!isShopeeAdsDashboardPageSnapshot(snapshot) && adsDashboardTransientWatchUntil > 0) {
+    clearAdsDashboardTransientWatchTimers();
+    adsDashboardTransientWatchUntil = 0;
+  }
+
   if (shouldPauseDomObservationForShop(snapshot)) {
     stopWatchingDomChanges();
     return;
   }
 
-  startWatchingDomChanges();
+  if (isShopeeAdsProductDetailPageSnapshot(snapshot)) {
+    stopWatchingDomChanges();
+    return;
+  }
+
+  if (isShopeeAdsDashboardPageSnapshot(snapshot)) {
+    if (!isAdsDashboardTransientWatchActive()) {
+      stopWatchingDomChanges();
+      return;
+    }
+
+    startWatchingDomChanges(getOwnedShopeeAdsObservationRoot());
+    return;
+  }
+
+  startWatchingDomChanges(document.body);
 }
 
 function watchRouteChanges() {
@@ -10979,12 +11085,21 @@ function watchDomChanges() {
       return;
     }
 
-    if (isOwnedShopeeAdsPageSnapshot(lastSnapshot)) {
+    if (isShopeeAdsProductDetailPageSnapshot(lastSnapshot)) {
+      return;
+    }
+
+    if (isShopeeAdsDashboardPageSnapshot(lastSnapshot)) {
+      if (!isAdsDashboardTransientWatchActive()) {
+        return;
+      }
+
       const shouldRefreshAds = mutations.some((mutation) =>
         shouldRefreshOwnedShopeeAdsFromMutation(mutation),
       );
       if (shouldRefreshAds) {
         queueAdsDashboardManualRefresh();
+        scheduleAdsDashboardTransientWatchIdleStop();
       }
       return;
     }
