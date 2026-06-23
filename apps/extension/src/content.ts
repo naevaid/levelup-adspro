@@ -1189,6 +1189,17 @@ function getShopeeAdsDashboardComputedMetricLabels(snapshot: PageSnapshot) {
       roasMetrics && typeof netProfit === 'number'
         ? formatCurrency(Math.round(netProfit))
         : 'Isi Kalkulator',
+    netProfitTooltip:
+      roasMetrics &&
+      typeof netRevenue === 'number' &&
+      typeof totalHpp === 'number' &&
+      typeof totalServiceFee === 'number'
+        ? [
+            'Keuntungan Bersih = Penjualan - Total HPP - Operasional - Biaya Layanan - Biaya Iklan Aktual',
+            `= ${formatCurrency(Math.round(netRevenue))} - ${formatCurrency(Math.round(totalHpp))} - ${formatCurrency(Math.round(totalOperational))} - ${formatCurrency(Math.round(totalServiceFee))} - ${formatCurrency(Math.round(actualAdSpend ?? 0))}`,
+            'Biaya Iklan Aktual sudah termasuk PPN iklan 11%.',
+          ].join('<br/>')
+        : 'Keuntungan Bersih memperhitungkan Biaya Iklan Aktual yang sudah termasuk PPN iklan 11%.',
     roiLabel:
       !roasMetrics ? 'Isi Kalkulator' : typeof roi === 'number' && Number.isFinite(roi) ? formatPercent(roi) : '-',
   };
@@ -1968,6 +1979,12 @@ function refreshShopeeAdsDashboardComputedMetrics(snapshot?: PageSnapshot | null
   if (netProfitValue) {
     netProfitValue.textContent = labels.netProfitLabel;
   }
+  const netProfitTooltip = enhancement.querySelector<HTMLElement>(
+    '[data-role="ads-net-profit-tooltip"]',
+  );
+  if (netProfitTooltip) {
+    netProfitTooltip.innerHTML = labels.netProfitTooltip;
+  }
 
   const roiValue = enhancement.querySelector<HTMLElement>('[data-role="ads-roi-value"]');
   if (roiValue) {
@@ -2053,6 +2070,9 @@ function renderShopeeAdsDashboardEnhancement(snapshot: PageSnapshot) {
   const totalHppLabel = computedMetricLabels?.totalHppLabel ?? 'Isi Kalkulator';
   const totalServiceFeeLabel = computedMetricLabels?.totalServiceFeeLabel ?? 'Isi Kalkulator';
   const netProfitLabel = computedMetricLabels?.netProfitLabel ?? 'Isi Kalkulator';
+  const netProfitTooltipLabel =
+    computedMetricLabels?.netProfitTooltip ??
+    'Keuntungan Bersih memperhitungkan Biaya Iklan Aktual yang sudah termasuk PPN iklan 11%.';
   const roiLabel = computedMetricLabels?.roiLabel ?? formatPercent(actualRoas);
 
   const anchor = findShopeeAdsSummaryAnchor();
@@ -2106,7 +2126,7 @@ function renderShopeeAdsDashboardEnhancement(snapshot: PageSnapshot) {
         <div class="levelup-adspro-dashboard-value" data-role="ads-total-service-fee-value">${totalServiceFeeLabel}</div>
       </div>
       <div class="levelup-adspro-dashboard-card">
-        <div class="levelup-adspro-dashboard-label">Keuntungan Bersih</div>
+        <div class="levelup-adspro-dashboard-label">Keuntungan Bersih <span class="levelup-adspro-info-inline" tabindex="0" aria-label="Info Keuntungan Bersih">ⓘ<span class="levelup-adspro-actual-tooltip" data-role="ads-net-profit-tooltip">${netProfitTooltipLabel}</span></span></div>
         <div class="levelup-adspro-dashboard-value" data-role="ads-net-profit-value">${netProfitLabel}</div>
       </div>`
         : ''}
@@ -6023,6 +6043,31 @@ function ensureOverlayStyle() {
       white-space: nowrap;
       cursor: help;
       pointer-events: auto;
+    }
+
+    .levelup-adspro-info-inline {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      margin-left: 6px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.16);
+      color: #64748b;
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1;
+      cursor: help;
+      vertical-align: middle;
+      pointer-events: auto;
+    }
+
+    .levelup-adspro-info-inline:hover .levelup-adspro-actual-tooltip,
+    .levelup-adspro-info-inline:focus-within .levelup-adspro-actual-tooltip {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
     }
 
     @media (max-width: 960px) {
