@@ -4508,7 +4508,7 @@ function ensureOverlayStyle() {
     }
 
     #${OVERLAY_ID} .levelup-product-inline-shell {
-      border: 1px solid rgba(251, 106, 53, 0.2);
+      border: 2px solid rgba(251, 106, 53, 0.26);
       border-radius: 16px;
       background: rgba(255, 252, 250, 0.98);
       box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
@@ -4523,7 +4523,7 @@ function ensureOverlayStyle() {
 
     #${OVERLAY_ID} .levelup-product-inline-form {
       position: relative;
-      border: 1px solid rgba(251, 106, 53, 0.14);
+      border: 2px solid rgba(251, 106, 53, 0.16);
       border-radius: 16px;
       background: rgba(255, 247, 243, 0.7);
       padding: 12px;
@@ -7485,22 +7485,28 @@ async function openRoasCategoryPicker() {
         activeSubIndex = Number.parseInt(subIndexRaw, 10);
       }
 
-      applyRoasCategorySelection(
-        {
-          primary:
-            normalizeText(primaryCategory) || normalizeText(activePrimaryCategoryLabel) || '',
-          secondary: normalizeText(secondaryCategory) || null,
-          name: decodeURIComponent(name),
-          pct,
-          gratisOngkirPctRegular,
-          gratisOngkirCapRegular,
-          gratisOngkirPctSpecial,
-          gratisOngkirCapSpecial,
-        },
-        'manual',
-      );
+      const button = target as HTMLButtonElement;
+      button.disabled = true;
+      button.textContent = 'Memilih...';
+
+      const selection = {
+        primary: normalizeText(primaryCategory) || normalizeText(activePrimaryCategoryLabel) || '',
+        secondary: normalizeText(secondaryCategory) || null,
+        name: decodeURIComponent(name),
+        pct,
+        gratisOngkirPctRegular,
+        gratisOngkirCapRegular,
+        gratisOngkirPctSpecial,
+        gratisOngkirCapSpecial,
+      };
+
       modal.remove();
-      rerenderCurrentRoasSurface();
+      showToast('Kategori dipilih. Menghitung ulang ROAS...', 'success');
+
+      window.setTimeout(() => {
+        applyRoasCategorySelection(selection, 'manual');
+        rerenderCurrentRoasSurface();
+      }, 0);
     }
   });
 
