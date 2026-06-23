@@ -1721,8 +1721,10 @@ function computeShopeeAdsAnalysisBadges(
       });
     } else {
       badges.set('roas', {
-        label: 'ROAS | -',
-        tooltip: `Nilai ROAS belum tersedia pada periode ini.`,
+        label: 'BONCOS',
+        tooltip:
+          'Nilai ROAS belum tersedia pada periode ini. Belum ada hasil penjualan iklan yang cukup untuk membentuk ROAS.',
+        tone: 'danger',
       });
     }
   } else {
@@ -1875,6 +1877,14 @@ function upsertShopeeAdsAnalysisBadge(
     badge.dataset.tone = badgePayload.tone;
   } else {
     delete badge.dataset.tone;
+  }
+  if (
+    badgePayload.tone === 'danger' &&
+    (badgePayload.label.startsWith('KURANG |') || badgePayload.label === 'BONCOS')
+  ) {
+    badge.dataset.flash = 'true';
+  } else {
+    delete badge.dataset.flash;
   }
 }
 
@@ -4480,9 +4490,12 @@ function ensureOverlayStyle() {
 
     #${OVERLAY_ID} .levelup-modal-title {
       font-size: 14px;
-      font-weight: 600;
+      font-weight: 500;
       color: #111827;
       line-height: 1.4;
+      text-shadow: none;
+      -webkit-text-stroke: 0;
+      font-synthesis: none;
     }
 
     #${OVERLAY_ID} .levelup-modal-actions {
@@ -4690,8 +4703,11 @@ function ensureOverlayStyle() {
 
     #${OVERLAY_ID} .levelup-roas-field-label {
       font-size: 12px;
-      font-weight: 600;
+      font-weight: 500;
       color: #9a3412;
+      text-shadow: none;
+      -webkit-text-stroke: 0;
+      font-synthesis: none;
     }
 
     #${OVERLAY_ID} .levelup-roas-field-row {
@@ -4922,7 +4938,10 @@ function ensureOverlayStyle() {
       padding-top: 2px;
       font-size: 12px;
       color: #111827;
-      font-weight: 600;
+      font-weight: 500;
+      text-shadow: none;
+      -webkit-text-stroke: 0;
+      font-synthesis: none;
     }
 
     #${OVERLAY_ID} .levelup-roas-toggle-inline {
@@ -4931,9 +4950,12 @@ function ensureOverlayStyle() {
       gap: 8px;
       font-size: 12px;
       color: #111827;
-      font-weight: 600;
+      font-weight: 500;
       white-space: nowrap;
       flex-shrink: 0;
+      text-shadow: none;
+      -webkit-text-stroke: 0;
+      font-synthesis: none;
     }
 
     #${OVERLAY_ID} .levelup-toggle {
@@ -5000,9 +5022,12 @@ function ensureOverlayStyle() {
       padding: 10px 12px;
       border-bottom: 1px solid rgba(251, 106, 53, 0.14);
       font-size: 12px;
-      font-weight: 700;
+      font-weight: 600;
       color: #9a3412;
       background: rgba(251, 106, 53, 0.07);
+      text-shadow: none;
+      -webkit-text-stroke: 0;
+      font-synthesis: none;
     }
 
     #${OVERLAY_ID} .levelup-category-list {
@@ -5024,9 +5049,12 @@ function ensureOverlayStyle() {
       padding: 10px 10px;
       background: rgba(255, 255, 255, 0.84);
       font-size: 12px;
-      font-weight: 600;
+      font-weight: 500;
       color: #111827;
       cursor: pointer;
+      text-shadow: none;
+      -webkit-text-stroke: 0;
+      font-synthesis: none;
     }
 
     #${OVERLAY_ID} .levelup-category-item[data-active="true"] {
@@ -5370,8 +5398,11 @@ function ensureOverlayStyle() {
       border-radius: 999px;
       padding: 9px 14px;
       font-size: 12px;
-      font-weight: 600;
+      font-weight: 500;
       cursor: pointer;
+      text-shadow: none;
+      -webkit-text-stroke: 0;
+      font-synthesis: none;
     }
 
     #${OVERLAY_ID} .levelup-button-primary {
@@ -5884,6 +5915,11 @@ function ensureOverlayStyle() {
       color: #b91c1c;
     }
 
+    .levelup-ads-analysis-badge[data-flash="true"] {
+      animation: levelupAdsBadgePulse 1.8s ease-in-out infinite;
+      will-change: opacity, box-shadow;
+    }
+
     .levelup-ads-analysis-badge[data-tone="warning"] {
       border-color: rgba(245, 158, 11, 0.24);
       background: rgba(245, 158, 11, 0.12);
@@ -5900,6 +5936,18 @@ function ensureOverlayStyle() {
       border-color: rgba(99, 102, 241, 0.24);
       background: rgba(99, 102, 241, 0.12);
       color: #4338ca;
+    }
+
+    @keyframes levelupAdsBadgePulse {
+      0%,
+      100% {
+        opacity: 1;
+        box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
+      }
+      50% {
+        opacity: 0.78;
+        box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.08);
+      }
     }
 
     td[data-levelup-ads-badge="true"] {
