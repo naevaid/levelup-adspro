@@ -571,25 +571,33 @@ function cloneRoasCalculatorState(): RoasCalculatorState {
 function extractShopeeAdsProductDetailKey(rawUrl: string) {
   try {
     const url = new URL(rawUrl);
-    const matchedPath =
-      url.pathname.match(/\/portal\/marketing\/pas\/product\/([^/?#]+)/i) ??
-      url.pathname.match(/\/marketing\/pas\/product\/([^/?#]+)/i);
-    if (matchedPath?.[1]) {
-      return matchedPath[1];
-    }
-
     const queryKey =
       url.searchParams.get('product_id') ??
       url.searchParams.get('productId') ??
       url.searchParams.get('ads_id') ??
       url.searchParams.get('adsId') ??
+      url.searchParams.get('item_id') ??
+      url.searchParams.get('itemId') ??
       url.searchParams.get('id');
-
     if (queryKey) {
       return queryKey;
     }
 
-    return `${url.origin}${url.pathname}`;
+    const matchedPath =
+      url.pathname.match(/\/portal\/marketing\/pas\/product\/(?:[^/?#]+\/)?([^/?#]+)/i) ??
+      url.pathname.match(/\/marketing\/pas\/product\/(?:[^/?#]+\/)?([^/?#]+)/i);
+    const pathKey = matchedPath?.[1]?.trim();
+    if (
+      pathKey &&
+      !['manual', 'detail', 'overview', 'dashboard', 'performance', 'report'].includes(
+        pathKey.toLowerCase(),
+      )
+    ) {
+      return pathKey;
+    }
+
+    const normalizedSearch = url.searchParams.toString();
+    return normalizedSearch ? `${url.origin}${url.pathname}?${normalizedSearch}` : `${url.origin}${url.pathname}`;
   } catch {
     return null;
   }
@@ -1126,9 +1134,7 @@ function getShopeeAdsDashboardComputedMetricLabels(snapshot: PageSnapshot) {
         ? formatCurrency(Math.round(netProfit))
         : 'Isi Kalkulator',
     roiLabel:
-      roasMetrics && typeof roi === 'number' && Number.isFinite(roi)
-        ? formatPercent(roi)
-        : 'Isi Kalkulator',
+      !roasMetrics ? 'Isi Kalkulator' : typeof roi === 'number' && Number.isFinite(roi) ? formatPercent(roi) : '-',
   };
 }
 
