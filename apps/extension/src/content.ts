@@ -10020,7 +10020,7 @@ function renderOverlay(snapshot: PageSnapshot) {
           </div>
         </div>
         <div class="levelup-header-actions">
-          <button type="button" class="levelup-button levelup-button-primary" data-action="sync">Sinkronkan Sekarang</button>
+          <button type="button" class="levelup-button levelup-button-primary" data-action="sync">Simpan Produk</button>
           <button type="button" class="levelup-button levelup-button-secondary" data-action="roas">Kalkulator ROAS</button>
         </div>
       </div>
@@ -10216,13 +10216,62 @@ function renderOverlay(snapshot: PageSnapshot) {
 
     syncButton.disabled = true;
     const previousLabel = syncButton.textContent;
-    syncButton.textContent = 'Menyinkronkan...';
+    const isProductDetailPage = snapshot.pageType === 'shopee_public_product';
+    syncButton.textContent = isProductDetailPage ? 'Menyimpan...' : 'Menyinkronkan...';
 
     try {
-      await sendBackgroundMessage<{ batchId: string; state: ExtensionState }>({
+      if (isProductDetailPage) {
+        if (!snapshot.productDetail) {
+          throw new Error('Detail produk belum berhasil dibaca dari halaman.');
+        }
+
+        const detailPreview = toProductDetailEnrichmentPreview(snapshot);
+        let mergedDetail = snapshot.productDetail;
+        const needsNumericEnrichment =
+          typeof mergedDetail.sold30d !== 'number' ||
+          typeof mergedDetail.ratingStar !== 'number' ||
+          typeof mergedDetail.reviewCount !== 'number' ||
+          typeof mergedDetail.listingCtime !== 'number' ||
+          typeof mergedDetail.revenue30dEstimate !== 'number';
+
+        if (needsNumericEnrichment && detailPreview) {
+          const enrichedEntries = await sendBackgroundMessage<SearchResultEnrichment[]>({
+            type: 'ENRICH_SEARCH_RESULTS',
+            payload: {
+              results: [detailPreview],
+            },
+          }).catch(() => []);
+
+          const enrichment = enrichedEntries[0] ?? null;
+          if (enrichment) {
+            cacheResolvedSearchResultEnrichment(enrichment);
+            mergedDetail = mergeProductDetailEnrichment(mergedDetail, enrichment);
+          }
+        }
+
+        const response = await sendBackgroundMessage<{ batchId: string; state: ExtensionState }>({
+          type: 'SYNC_PRODUCT_PREVIEW',
+          payload: {
+            product: {
+              ...mergedDetail,
+              highlights: mergedDetail.highlights ?? [],
+            },
+          },
+        });
+
+        await refreshKnownState();
+        showToast(`Produk berhasil disimpan. Batch ${response.batchId} diterima.`, 'success');
+        if (lastSnapshot) {
+          renderOverlay(lastSnapshot);
+        }
+        return;
+      }
+
+      const response = await sendBackgroundMessage<{ batchId: string; state: ExtensionState }>({
         type: 'SYNC_NOW',
       });
       await refreshKnownState();
+      showToast(`Sync berhasil. Batch ${response.batchId} diterima.`, 'success');
       if (lastSnapshot) {
         renderOverlay(lastSnapshot);
       }
@@ -10232,7 +10281,8 @@ function renderOverlay(snapshot: PageSnapshot) {
         error instanceof Error ? error.message : 'Sync gagal dari overlay.';
     } finally {
       syncButton.disabled = false;
-      syncButton.textContent = previousLabel ?? 'Sinkronkan Sekarang';
+      syncButton.textContent =
+        previousLabel ?? (isProductDetailPage ? 'Simpan Produk' : 'Sinkronkan Sekarang');
     }
   });
 
@@ -10424,30 +10474,59 @@ function renderOverlay(snapshot: PageSnapshot) {
             ?.querySelector<HTMLElement>('.levelup-result-title')
             ?.textContent,
         );
+        const basePreview: SearchResultPreview = marketResult
+          ? marketResult
+          : {
+              position: 0,
+              productTitle: fallbackTitle || 'Produk Shopee',
+              productUrl,
+              shopName: null,
+            };
+        const needsNumericEnrichment =
+          typeof basePreview.sold30d !== 'number' ||
+          typeof basePreview.ratingStar !== 'number' ||
+          typeof basePreview.reviewCount !== 'number' ||
+          typeof basePreview.listingCtime !== 'number' ||
+          typeof basePreview.revenue30dEstimate !== 'number';
+        let enrichedPreview = basePreview;
 
+        if (needsNumericEnrichment) {
+          const enrichedEntries = await sendBackgroundMessage<SearchResultEnrichment[]>({
+            type: 'ENRICH_SEARCH_RESULTS',
+            payload: {
+              results: [basePreview],
+            },
+          }).catch(() => []);
+
+          const enrichment = enrichedEntries[0] ?? null;
+          if (enrichment) {
+            cacheResolvedSearchResultEnrichment(enrichment);
+            enrichedPreview = mergeSearchResultEnrichment(basePreview, enrichment);
+          }
+        }
         const response = await sendBackgroundMessage<{ batchId: string; state: ExtensionState }>({
           type: 'SYNC_PRODUCT_PREVIEW',
           payload: {
             product: {
               productTitle:
-                normalizeText(marketResult?.productTitle) || fallbackTitle || 'Produk Shopee',
+                normalizeText(enrichedPreview.productTitle) || fallbackTitle || 'Produk Shopee',
               productUrl,
-              imageUrl: marketResult?.imageUrl,
-              shopName: marketResult?.shopName ?? null,
-              priceMin: marketResult?.priceMin,
-              priceMax: marketResult?.priceMax,
-              salesHint: marketResult?.salesHint,
-              monthlySoldHint: marketResult?.monthlySoldHint,
-              sold30d: marketResult?.sold30d,
-              ratingHint: marketResult?.ratingHint,
-              ratingStar: marketResult?.ratingStar,
-              reviewCountHint: marketResult?.reviewCountHint,
-              reviewCount: marketResult?.reviewCount,
-              totalRevenueHint: marketResult?.totalRevenueHint,
-              monthlyRevenueHint: marketResult?.monthlyRevenueHint,
-              revenue30dEstimate: marketResult?.revenue30dEstimate,
-              listingAgeHint: marketResult?.listingAgeHint,
-              listingCtime: marketResult?.listingCtime,
+              imageUrl: enrichedPreview.imageUrl,
+              shopName: enrichedPreview.shopName ?? null,
+              priceMin: enrichedPreview.priceMin,
+              priceMax: enrichedPreview.priceMax,
+              salesHint: enrichedPreview.salesHint,
+              monthlySoldHint: enrichedPreview.monthlySoldHint,
+              sold30d: enrichedPreview.sold30d,
+              ratingHint: enrichedPreview.ratingHint,
+              ratingStar: enrichedPreview.ratingStar,
+              reviewCountHint: enrichedPreview.reviewCountHint,
+              reviewCount: enrichedPreview.reviewCount,
+              totalRevenueHint: enrichedPreview.totalRevenueHint,
+              monthlyRevenueHint: enrichedPreview.monthlyRevenueHint,
+              revenue30dEstimate: enrichedPreview.revenue30dEstimate,
+              listingAgeHint: enrichedPreview.listingAgeHint,
+              listingCtime: enrichedPreview.listingCtime,
             },
           },
         });
