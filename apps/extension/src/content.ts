@@ -1036,6 +1036,136 @@ function removeShopeeAdsDashboardEnhancement() {
     .forEach((element) => element.remove());
 }
 
+function getShopeeAdsDashboardComputedMetricLabels(snapshot: PageSnapshot) {
+  const adsDashboard = getStableShopeeAdsDashboard(snapshot);
+  if (!adsDashboard) {
+    return null;
+  }
+
+  const conversionSourceCount =
+    snapshot.pageType === 'shopee_ads_product_detail'
+      ? adsDashboard.unitsSold?.numericValue ?? null
+      : adsDashboard.orders?.numericValue ?? null;
+  const revenue = adsDashboard.revenue?.numericValue ?? null;
+  const baseAdSpend = adsDashboard.adSpend?.numericValue ?? null;
+  const actualAdSpend =
+    typeof baseAdSpend === 'number' && Number.isFinite(baseAdSpend)
+      ? Math.round(baseAdSpend * (1 + SHOPEE_AD_TAX_RATE))
+      : null;
+  const hasRoasCostInputs = hasRequiredRoasCalculatorInput();
+  const roasMetrics = hasRoasCostInputs ? computeRoasMetrics() : null;
+  const soldUnits =
+    typeof conversionSourceCount === 'number' &&
+    Number.isFinite(conversionSourceCount) &&
+    conversionSourceCount >= 0
+      ? conversionSourceCount
+      : null;
+  const totalHpp =
+    roasMetrics &&
+    typeof soldUnits === 'number' &&
+    typeof roasCalculatorState.hpp === 'number' &&
+    Number.isFinite(roasCalculatorState.hpp)
+      ? roasCalculatorState.hpp * soldUnits
+      : null;
+  const totalOperational =
+    roasMetrics &&
+    typeof soldUnits === 'number' &&
+    typeof roasCalculatorState.operasional === 'number' &&
+    Number.isFinite(roasCalculatorState.operasional)
+      ? roasCalculatorState.operasional * soldUnits
+      : 0;
+  const totalServiceFee =
+    roasMetrics && typeof soldUnits === 'number' ? roasMetrics.totalBiayaShopee * soldUnits : null;
+  const netRevenue =
+    typeof revenue === 'number' && Number.isFinite(revenue) && revenue >= 0
+      ? revenue
+      : roasMetrics && typeof soldUnits === 'number'
+        ? roasMetrics.price * soldUnits
+        : null;
+  const netProfit =
+    roasMetrics &&
+    typeof totalHpp === 'number' &&
+    Number.isFinite(totalHpp) &&
+    typeof totalServiceFee === 'number' &&
+    Number.isFinite(totalServiceFee) &&
+    typeof netRevenue === 'number' &&
+    Number.isFinite(netRevenue)
+      ? netRevenue - totalHpp - totalOperational - totalServiceFee - (actualAdSpend ?? 0)
+      : null;
+  const totalInvestment =
+    typeof totalHpp === 'number' &&
+    Number.isFinite(totalHpp) &&
+    typeof totalServiceFee === 'number' &&
+    Number.isFinite(totalServiceFee)
+      ? totalHpp + totalOperational + totalServiceFee + (actualAdSpend ?? 0)
+      : null;
+  const roi =
+    typeof netProfit === 'number' &&
+    Number.isFinite(netProfit) &&
+    typeof totalInvestment === 'number' &&
+    Number.isFinite(totalInvestment) &&
+    totalInvestment > 0
+      ? (netProfit / totalInvestment) * 100
+      : null;
+
+  return {
+    totalHppLabel:
+      roasMetrics && typeof totalHpp === 'number'
+        ? formatCurrency(Math.round(totalHpp))
+        : 'Isi Kalkulator',
+    totalServiceFeeLabel:
+      roasMetrics && typeof totalServiceFee === 'number'
+        ? formatCurrency(Math.round(totalServiceFee))
+        : 'Isi Kalkulator',
+    netProfitLabel:
+      roasMetrics && typeof netProfit === 'number'
+        ? formatCurrency(Math.round(netProfit))
+        : 'Isi Kalkulator',
+    roiLabel:
+      roasMetrics && typeof roi === 'number' && Number.isFinite(roi)
+        ? formatPercent(roi)
+        : 'Isi Kalkulator',
+  };
+}
+
+function refreshShopeeAdsDashboardComputedMetrics(snapshot?: PageSnapshot | null) {
+  if (!snapshot) {
+    return;
+  }
+
+  const enhancement = document.getElementById(ADS_DASHBOARD_ENHANCEMENT_ID);
+  if (!enhancement) {
+    return;
+  }
+
+  const labels = getShopeeAdsDashboardComputedMetricLabels(snapshot);
+  if (!labels) {
+    return;
+  }
+
+  const totalHppValue = enhancement.querySelector<HTMLElement>('[data-role="ads-total-hpp-value"]');
+  if (totalHppValue) {
+    totalHppValue.textContent = labels.totalHppLabel;
+  }
+
+  const totalServiceFeeValue = enhancement.querySelector<HTMLElement>(
+    '[data-role="ads-total-service-fee-value"]',
+  );
+  if (totalServiceFeeValue) {
+    totalServiceFeeValue.textContent = labels.totalServiceFeeLabel;
+  }
+
+  const netProfitValue = enhancement.querySelector<HTMLElement>('[data-role="ads-net-profit-value"]');
+  if (netProfitValue) {
+    netProfitValue.textContent = labels.netProfitLabel;
+  }
+
+  const roiValue = enhancement.querySelector<HTMLElement>('[data-role="ads-roi-value"]');
+  if (roiValue) {
+    roiValue.textContent = labels.roiLabel;
+  }
+}
+
 function clearAdsDashboardBootstrapRetry() {
   if (adsDashboardBootstrapRetryTimeoutId) {
     window.clearTimeout(adsDashboardBootstrapRetryTimeoutId);
@@ -1198,16 +1328,20 @@ function renderShopeeAdsDashboardEnhancement(snapshot: PageSnapshot) {
   enhancement.innerHTML = `
     <div class="levelup-adspro-dashboard-grid">
       <div class="levelup-adspro-dashboard-card">
-        <div class="levelup-adspro-dashboard-label">Tingkat Konversi</div>
-        <div class="levelup-adspro-dashboard-value">${formatPercent(conversionRate)}</div>
-      </div>
-      <div class="levelup-adspro-dashboard-card">
         <div class="levelup-adspro-dashboard-label">Biaya Per-Klik</div>
         <div class="levelup-adspro-dashboard-value">${formatCurrency(typeof costPerClick === 'number' ? Math.round(costPerClick) : undefined)}</div>
       </div>
       <div class="levelup-adspro-dashboard-card">
+        <div class="levelup-adspro-dashboard-label">Tingkat Konversi</div>
+        <div class="levelup-adspro-dashboard-value">${formatPercent(conversionRate)}</div>
+      </div>
+      <div class="levelup-adspro-dashboard-card">
         <div class="levelup-adspro-dashboard-label">ACOS</div>
         <div class="levelup-adspro-dashboard-value">${formatPercent(acos)}</div>
+      </div>
+      <div class="levelup-adspro-dashboard-card">
+        <div class="levelup-adspro-dashboard-label">ROI</div>
+        <div class="levelup-adspro-dashboard-value" data-role="ads-roi-value">${roiLabel}</div>
       </div>
       <div class="levelup-adspro-dashboard-card">
         <div class="levelup-adspro-dashboard-label">RPM</div>
@@ -1215,19 +1349,15 @@ function renderShopeeAdsDashboardEnhancement(snapshot: PageSnapshot) {
       </div>
       <div class="levelup-adspro-dashboard-card">
         <div class="levelup-adspro-dashboard-label">Total HPP</div>
-        <div class="levelup-adspro-dashboard-value">${totalHppLabel}</div>
+        <div class="levelup-adspro-dashboard-value" data-role="ads-total-hpp-value">${totalHppLabel}</div>
       </div>
       <div class="levelup-adspro-dashboard-card">
         <div class="levelup-adspro-dashboard-label">Biaya Layanan</div>
-        <div class="levelup-adspro-dashboard-value">${totalServiceFeeLabel}</div>
+        <div class="levelup-adspro-dashboard-value" data-role="ads-total-service-fee-value">${totalServiceFeeLabel}</div>
       </div>
       <div class="levelup-adspro-dashboard-card">
         <div class="levelup-adspro-dashboard-label">Keuntungan Bersih</div>
-        <div class="levelup-adspro-dashboard-value">${netProfitLabel}</div>
-      </div>
-      <div class="levelup-adspro-dashboard-card">
-        <div class="levelup-adspro-dashboard-label">ROI</div>
-        <div class="levelup-adspro-dashboard-value">${roiLabel}</div>
+        <div class="levelup-adspro-dashboard-value" data-role="ads-net-profit-value">${netProfitLabel}</div>
       </div>
     </div>
     <div class="levelup-adspro-dashboard-footer">
@@ -1675,6 +1805,8 @@ function renderShopeeAdsProductDetailOverlay(snapshot: PageSnapshot) {
       }
     }
 
+    refreshShopeeAdsDashboardComputedMetrics(lastSnapshot);
+
     const tierElements = Array.from(overlay.querySelectorAll<HTMLElement>('.levelup-roas-tier'));
     for (const element of tierElements) {
       const key = element.dataset.key as
@@ -1754,6 +1886,8 @@ function renderShopeeAdsProductDetailOverlay(snapshot: PageSnapshot) {
     try {
       await saveRoasCalculatorStateForSnapshot(lastSnapshot);
       showToast('Data Kalkulator ROAS berhasil disimpan untuk iklan ini.', 'success');
+      refreshShopeeAdsDashboardComputedMetrics(lastSnapshot);
+      rerenderCurrentRoasSurface();
     } catch (error) {
       showToast(
         error instanceof Error ? error.message : 'Gagal menyimpan data Kalkulator ROAS.',
@@ -6854,6 +6988,8 @@ function openRoasCalculator(detail: ProductDetailSnapshot | null | undefined) {
           .join('');
       }
     }
+
+    refreshShopeeAdsDashboardComputedMetrics(lastSnapshot);
 
     const tierElements = Array.from(modal.querySelectorAll<HTMLElement>('.levelup-roas-tier'));
     for (const element of tierElements) {
