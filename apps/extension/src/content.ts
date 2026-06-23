@@ -290,6 +290,8 @@ type ShopeeAdsPerformanceHeaderDefinition = {
 
 type ShopeeAdsPerformanceTableContext = {
   headerKeys: Array<ShopeeAdsPerformanceMetricKey | null>;
+  headerTable: HTMLTableElement;
+  headerCells: HTMLTableCellElement[];
   rowTable: HTMLTableElement;
   linkTable: HTMLTableElement | null;
 };
@@ -297,6 +299,8 @@ type ShopeeAdsPerformanceTableContext = {
 type ShopeeAdsPerformanceRowMetrics = Partial<
   Record<ShopeeAdsPerformanceMetricKey, number | null>
 >;
+
+const ADS_ANALYSIS_TOOLTIP_ROOT_ID = 'levelup-ads-analysis-tooltip-root';
 
 const SHOPEE_ADS_PERFORMANCE_HEADERS: ShopeeAdsPerformanceHeaderDefinition[] = [
   { key: 'dailyBudget', label: 'Modal Harian' },
@@ -1377,6 +1381,58 @@ function findShopeeAdsPerformanceTableContexts() {
   const contexts: ShopeeAdsPerformanceTableContext[] = [];
   const usedRowTables = new Set<HTMLTableElement>();
 
+  const scoreCandidateRowTable = (
+    headerKeys: Array<ShopeeAdsPerformanceMetricKey | null>,
+    candidate: HTMLTableElement,
+  ) => {
+    const firstRow = candidate.querySelector('tbody tr');
+    const cells = firstRow ? Array.from(firstRow.querySelectorAll<HTMLTableCellElement>('td')) : [];
+    if (cells.length !== headerKeys.length) {
+      return -1;
+    }
+
+    let score = 0;
+    headerKeys.forEach((key, index) => {
+      if (!key) {
+        return;
+      }
+
+      const text = normalizeText(cells[index]?.textContent);
+      if (!text) {
+        return;
+      }
+
+      const hasDigit = /\d/.test(text);
+      switch (key) {
+        case 'adSpend':
+        case 'revenue':
+        case 'costPerConversion':
+          score += /rp/i.test(text) ? 2 : hasDigit ? 1 : 0;
+          break;
+        case 'ctr':
+        case 'addToCartRate':
+        case 'conversionRate':
+        case 'acos':
+          score += /%/.test(text) ? 2 : hasDigit ? 1 : 0;
+          break;
+        case 'roas':
+          score += hasDigit ? 1 : 0;
+          break;
+        case 'impressions':
+        case 'clicks':
+        case 'addToCart':
+        case 'conversions':
+        case 'unitsSold':
+          score += hasDigit ? 1 : 0;
+          break;
+        default:
+          break;
+      }
+    });
+
+    return score;
+  };
+
   for (let index = 0; index < tables.length; index += 1) {
     const headerCells = Array.from(tables[index].querySelectorAll('thead th'));
     if (headerCells.length === 0) {
@@ -1390,6 +1446,10 @@ function findShopeeAdsPerformanceTableContexts() {
     }
 
     let rowTable: HTMLTableElement | null = null;
+    let fallbackRowTable: HTMLTableElement | null = null;
+    let bestRowTable: HTMLTableElement | null = null;
+    let bestScore = -1;
+
     for (let cursor = index + 1; cursor < tables.length; cursor += 1) {
       const candidate = tables[cursor];
       if (usedRowTables.has(candidate)) {
@@ -1399,10 +1459,19 @@ function findShopeeAdsPerformanceTableContexts() {
       const firstRow = candidate.querySelector('tbody tr');
       const cellCount = firstRow?.querySelectorAll('td').length ?? 0;
       if (cellCount === headerKeys.length) {
-        rowTable = candidate;
-        break;
+        if (!fallbackRowTable) {
+          fallbackRowTable = candidate;
+        }
+
+        const score = scoreCandidateRowTable(headerKeys, candidate);
+        if (score > bestScore) {
+          bestScore = score;
+          bestRowTable = candidate;
+        }
       }
     }
+
+    rowTable = bestScore > 0 ? bestRowTable : fallbackRowTable;
 
     if (!rowTable) {
       continue;
@@ -1426,6 +1495,8 @@ function findShopeeAdsPerformanceTableContexts() {
 
     contexts.push({
       headerKeys,
+      headerTable: tables[index],
+      headerCells,
       rowTable,
       linkTable,
     });
@@ -1440,12 +1511,25 @@ function parseShopeeAdsPerformanceRowMetrics(
 ) {
   const metrics: ShopeeAdsPerformanceRowMetrics = {};
 
+  const getCellTextWithoutManagedElements = (cell?: HTMLTableCellElement | null) => {
+    if (!cell) {
+      return '';
+    }
+
+    const clone = cell.cloneNode(true) as HTMLTableCellElement;
+    clone
+      .querySelectorAll<HTMLElement>('[data-levelup-ads-managed="true"]')
+      .forEach((element) => element.remove());
+
+    return normalizeText(clone.textContent);
+  };
+
   headerKeys.forEach((key, index) => {
     if (!key) {
       return;
     }
 
-    const rawText = normalizeText(cells[index]?.textContent);
+    const rawText = getCellTextWithoutManagedElements(cells[index]);
     if (!rawText) {
       metrics[key] = null;
       return;
@@ -1488,7 +1572,10 @@ function computeShopeeAdsAnalysisBadges(
   metrics: ShopeeAdsPerformanceRowMetrics,
   roasTargets: ReturnType<typeof computeRoasTierTargetsFromCalculatorState> | null,
 ) {
-  const badges = new Map<ShopeeAdsPerformanceMetricKey, { label: string; tooltip: string }>();
+  const badges = new Map<
+    ShopeeAdsPerformanceMetricKey,
+    { label: string; tooltip: string; tone?: 'danger' | 'warning' | 'success' | 'premium' }
+  >();
   const impressions = metrics.impressions ?? null;
   const clicks = metrics.clicks ?? null;
   const addToCart = metrics.addToCart ?? null;
@@ -1499,49 +1586,79 @@ function computeShopeeAdsAnalysisBadges(
 
   if (typeof impressions === 'number' && impressions > 0 && typeof adSpend === 'number') {
     const cpm = (adSpend / impressions) * 1000;
+    const cpmRounded = Math.round(cpm);
     badges.set('impressions', {
       label: formatAnalysisBadgeText(cpm, 'CPM', 'currency'),
-      tooltip: `CPM = Biaya Iklan ÷ Iklan Dilihat × 1000`,
+      tooltip: [
+        'CPM = Biaya Iklan ÷ Iklan Dilihat × 1000',
+        `= Rp${Math.round(adSpend).toLocaleString('id-ID')} ÷ ${Math.round(impressions).toLocaleString('id-ID')} × 1000`,
+        `= Rp${cpmRounded.toLocaleString('id-ID')}`,
+      ].join('\n'),
     });
   }
 
   if (typeof clicks === 'number' && clicks > 0 && typeof adSpend === 'number') {
     const cpc = adSpend / clicks;
+    const cpcRounded = Math.round(cpc);
     badges.set('clicks', {
       label: formatAnalysisBadgeText(cpc, 'CPC', 'currency'),
-      tooltip: `CPC = Biaya Iklan ÷ Jumlah Klik`,
+      tooltip: [
+        'CPC = Biaya Iklan ÷ Jumlah Klik',
+        `= Rp${Math.round(adSpend).toLocaleString('id-ID')} ÷ ${Math.round(clicks).toLocaleString('id-ID')}`,
+        `= Rp${cpcRounded.toLocaleString('id-ID')}`,
+      ].join('\n'),
     });
   }
 
   if (typeof adSpend === 'number' && Number.isFinite(adSpend)) {
     const actual = adSpend * (1 + SHOPEE_AD_TAX_RATE);
+    const actualRounded = Math.round(actual);
     badges.set('adSpend', {
       label: formatAnalysisBadgeText(actual, 'Aktual', 'currency'),
-      tooltip: `Biaya Iklan Rp${Math.round(adSpend).toLocaleString('id-ID')} Aktual (setelah ditambah pajak PPN Iklan 11%)`,
+      tooltip: [
+        `Biaya Iklan Rp${Math.round(adSpend).toLocaleString('id-ID')} Aktual (setelah ditambah pajak PPN Iklan 11%)`,
+        `= Rp${Math.round(adSpend).toLocaleString('id-ID')} × 1,11`,
+        `= Rp${actualRounded.toLocaleString('id-ID')}`,
+      ].join('\n'),
     });
   }
 
   if (typeof clicks === 'number' && clicks > 0 && typeof revenue === 'number') {
     const rpc = revenue / clicks;
+    const rpcRounded = Math.round(rpc);
     badges.set('revenue', {
       label: formatAnalysisBadgeText(rpc, 'RPC', 'currency'),
-      tooltip: `RPC = Penjualan dari Iklan ÷ Jumlah Klik`,
+      tooltip: [
+        'RPC = Penjualan dari Iklan ÷ Jumlah Klik',
+        `= Rp${Math.round(revenue).toLocaleString('id-ID')} ÷ ${Math.round(clicks).toLocaleString('id-ID')}`,
+        `= Rp${rpcRounded.toLocaleString('id-ID')}`,
+      ].join('\n'),
     });
   }
 
   if (typeof addToCart === 'number' && addToCart > 0 && typeof adSpend === 'number') {
     const cpatc = adSpend / addToCart;
+    const cpatcRounded = Math.round(cpatc);
     badges.set('addToCart', {
       label: formatAnalysisBadgeText(cpatc, 'CPATC', 'currency'),
-      tooltip: `CPATC = Biaya Iklan ÷ Tambah ke Keranjang`,
+      tooltip: [
+        'CPATC = Biaya Iklan ÷ Tambah ke Keranjang',
+        `= Rp${Math.round(adSpend).toLocaleString('id-ID')} ÷ ${Math.round(addToCart).toLocaleString('id-ID')}`,
+        `= Rp${cpatcRounded.toLocaleString('id-ID')}`,
+      ].join('\n'),
     });
   }
 
   if (typeof unitsSold === 'number' && unitsSold > 0 && typeof revenue === 'number') {
     const rpu = revenue / unitsSold;
+    const rpuRounded = Math.round(rpu);
     badges.set('unitsSold', {
       label: formatAnalysisBadgeText(rpu, 'RPU', 'currency'),
-      tooltip: `RPU = Penjualan dari Iklan ÷ Produk Terjual`,
+      tooltip: [
+        'RPU = Penjualan dari Iklan ÷ Produk Terjual',
+        `= Rp${Math.round(revenue).toLocaleString('id-ID')} ÷ ${Math.round(unitsSold).toLocaleString('id-ID')}`,
+        `= Rp${rpuRounded.toLocaleString('id-ID')}`,
+      ].join('\n'),
     });
   }
 
@@ -1582,6 +1699,14 @@ function computeShopeeAdsAnalysisBadges(
       badges.set('roas', {
         label: `${status} | ${roasFixed}`,
         tooltip: [...tierLines, `${status} Target ROAS ${achievedLabel}.`].join('\n'),
+        tone:
+          status === 'KURANG'
+            ? 'danger'
+            : status === 'CUKUP'
+              ? 'warning'
+              : status === 'BAGUS'
+                ? 'success'
+                : 'premium',
       });
     } else {
       badges.set('roas', {
@@ -1600,16 +1725,121 @@ function computeShopeeAdsAnalysisBadges(
   return badges;
 }
 
+function ensureAdsAnalysisTooltipRoot() {
+  const existing = document.getElementById(ADS_ANALYSIS_TOOLTIP_ROOT_ID);
+  if (existing) {
+    return existing;
+  }
+
+  const root = document.createElement('div');
+  root.id = ADS_ANALYSIS_TOOLTIP_ROOT_ID;
+  root.dataset.levelupAdsManaged = 'true';
+  root.hidden = true;
+  document.body.appendChild(root);
+  return root;
+}
+
+let hasAdsAnalysisTooltipListener = false;
+
+function ensureAdsAnalysisTooltipListener() {
+  if (hasAdsAnalysisTooltipListener) {
+    return;
+  }
+
+  hasAdsAnalysisTooltipListener = true;
+
+  const show = (badge: HTMLElement) => {
+    const tooltip = badge.dataset.tooltip ?? '';
+    if (!tooltip) {
+      return;
+    }
+
+    const root = ensureAdsAnalysisTooltipRoot();
+    root.replaceChildren();
+
+    const panel = document.createElement('div');
+    panel.className = 'levelup-ads-analysis-tooltip-panel';
+    for (const line of tooltip.split('\n')) {
+      const row = document.createElement('div');
+      row.textContent = line;
+      panel.appendChild(row);
+    }
+    root.appendChild(panel);
+
+    root.hidden = false;
+
+    const rect = badge.getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const preferredTop = rect.top - panelRect.height - 10;
+    const fallbackTop = rect.bottom + 10;
+    const canShowTop = preferredTop >= 8;
+    const top = canShowTop ? preferredTop : fallbackTop;
+    const left = Math.max(8, Math.min(window.innerWidth - panelRect.width - 8, centerX - panelRect.width / 2));
+
+    root.style.left = `${Math.round(left)}px`;
+    root.style.top = `${Math.round(top)}px`;
+    root.dataset.placement = canShowTop ? 'top' : 'bottom';
+  };
+
+  const hide = () => {
+    const root = document.getElementById(ADS_ANALYSIS_TOOLTIP_ROOT_ID);
+    if (!root) {
+      return;
+    }
+
+    root.hidden = true;
+    root.replaceChildren();
+  };
+
+  document.addEventListener('mouseover', (event) => {
+    const target = event.target as Element | null;
+    const badge = target?.closest<HTMLElement>('.levelup-ads-analysis-badge') ?? null;
+    if (!badge) {
+      return;
+    }
+
+    show(badge);
+  });
+
+  document.addEventListener('mouseout', (event) => {
+    const target = event.target as Element | null;
+    const badge = target?.closest<HTMLElement>('.levelup-ads-analysis-badge') ?? null;
+    if (!badge) {
+      return;
+    }
+
+    const related = event.relatedTarget as Element | null;
+    if (related && badge.contains(related)) {
+      return;
+    }
+
+    hide();
+  });
+
+  window.addEventListener('scroll', hide, true);
+  window.addEventListener('resize', hide, true);
+}
+
 function upsertShopeeAdsAnalysisBadge(
   cell: HTMLTableCellElement,
-  badgePayload: { label: string; tooltip: string } | null,
+  badgePayload:
+    | { label: string; tooltip: string; tone?: 'danger' | 'warning' | 'success' | 'premium' }
+    | null,
 ) {
   const existing = cell.querySelector<HTMLElement>('[data-role="ads-analysis-badge"]');
 
   if (!badgePayload?.label) {
     existing?.remove();
+    cell.removeAttribute('data-levelup-ads-badge');
     return;
   }
+
+  ensureAdsAnalysisTooltipListener();
+
+  const host =
+    cell.querySelector<HTMLElement>('.cell-wrapper, .cellWrapper, [data-testid*="cell"], [class*="cell-wrapper"]') ??
+    cell;
 
   const badge =
     existing ??
@@ -1618,24 +1848,22 @@ function upsertShopeeAdsAnalysisBadge(
       element.dataset.role = 'ads-analysis-badge';
       element.dataset.levelupAdsManaged = 'true';
       element.className = 'levelup-ads-analysis-badge';
-      element.innerHTML =
-        '<span data-role="ads-analysis-badge-label"></span><span class="levelup-ads-analysis-tooltip" data-role="ads-analysis-badge-tooltip"></span>';
-      cell.appendChild(element);
+      element.innerHTML = '<span data-role="ads-analysis-badge-label"></span>';
+      host.prepend(element);
       return element;
     })();
+
+  cell.dataset.levelupAdsBadge = 'true';
 
   const labelNode = badge.querySelector<HTMLElement>('[data-role="ads-analysis-badge-label"]');
   if (labelNode) {
     labelNode.textContent = badgePayload.label;
   }
-  const tooltipNode = badge.querySelector<HTMLElement>('[data-role="ads-analysis-badge-tooltip"]');
-  if (tooltipNode) {
-    tooltipNode.replaceChildren();
-    for (const line of badgePayload.tooltip.split('\n')) {
-      const row = document.createElement('div');
-      row.textContent = line;
-      tooltipNode.appendChild(row);
-    }
+  badge.dataset.tooltip = badgePayload.tooltip;
+  if (badgePayload.tone) {
+    badge.dataset.tone = badgePayload.tone;
+  } else {
+    delete badge.dataset.tone;
   }
 }
 
@@ -1649,6 +1877,9 @@ async function refreshShopeeAdsPerformanceAnalysisBadges(snapshot?: PageSnapshot
     document
       .querySelectorAll<HTMLElement>('[data-role="ads-analysis-badge"]')
       .forEach((element) => element.remove());
+    document
+      .querySelectorAll<HTMLElement>('td[data-levelup-ads-badge="true"]')
+      .forEach((element) => element.removeAttribute('data-levelup-ads-badge'));
     return;
   }
 
@@ -1657,6 +1888,7 @@ async function refreshShopeeAdsPerformanceAnalysisBadges(snapshot?: PageSnapshot
     return;
   }
 
+  const isProductDetail = snapshot.pageType === 'shopee_ads_product_detail';
   const storedEntries =
     snapshot.pageType === 'shopee_ads_dashboard'
       ? await readStoredRoasCalculatorEntries().catch(() => ({}))
@@ -5490,7 +5722,7 @@ function ensureOverlayStyle() {
     .levelup-ads-analysis-badge {
       display: inline-flex;
       align-items: center;
-      margin-top: 6px;
+      margin-top: 2px;
       padding: 4px 9px;
       border-radius: 10px;
       border: 1px solid rgba(251, 106, 53, 0.16);
@@ -5502,6 +5734,72 @@ function ensureOverlayStyle() {
       white-space: nowrap;
       position: relative;
       cursor: help;
+    }
+
+    .levelup-ads-analysis-badge[data-tone="danger"] {
+      border-color: rgba(220, 38, 38, 0.22);
+      background: rgba(220, 38, 38, 0.1);
+      color: #b91c1c;
+    }
+
+    .levelup-ads-analysis-badge[data-tone="warning"] {
+      border-color: rgba(245, 158, 11, 0.24);
+      background: rgba(245, 158, 11, 0.12);
+      color: #b45309;
+    }
+
+    .levelup-ads-analysis-badge[data-tone="success"] {
+      border-color: rgba(22, 163, 74, 0.22);
+      background: rgba(22, 163, 74, 0.12);
+      color: #15803d;
+    }
+
+    .levelup-ads-analysis-badge[data-tone="premium"] {
+      border-color: rgba(99, 102, 241, 0.24);
+      background: rgba(99, 102, 241, 0.12);
+      color: #4338ca;
+    }
+
+    td[data-levelup-ads-badge="true"] {
+      vertical-align: top;
+    }
+
+    #${ADS_ANALYSIS_TOOLTIP_ROOT_ID} {
+      position: fixed;
+      z-index: 2147483647;
+      pointer-events: none;
+      max-width: 320px;
+    }
+
+    #${ADS_ANALYSIS_TOOLTIP_ROOT_ID} .levelup-ads-analysis-tooltip-panel {
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(15, 23, 42, 0.96);
+      color: #f8fafc;
+      font-size: 11px;
+      line-height: 1.5;
+      font-weight: 400;
+      box-shadow: 0 16px 32px rgba(15, 23, 42, 0.22);
+      white-space: normal;
+    }
+
+    #${ADS_ANALYSIS_TOOLTIP_ROOT_ID}[data-placement="top"] .levelup-ads-analysis-tooltip-panel::after,
+    #${ADS_ANALYSIS_TOOLTIP_ROOT_ID}[data-placement="bottom"] .levelup-ads-analysis-tooltip-panel::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      width: 10px;
+      height: 10px;
+      background: rgba(15, 23, 42, 0.96);
+      transform: translateX(-50%) rotate(45deg);
+    }
+
+    #${ADS_ANALYSIS_TOOLTIP_ROOT_ID}[data-placement="top"] .levelup-ads-analysis-tooltip-panel::after {
+      top: 100%;
+    }
+
+    #${ADS_ANALYSIS_TOOLTIP_ROOT_ID}[data-placement="bottom"] .levelup-ads-analysis-tooltip-panel::after {
+      bottom: 100%;
     }
 
     .levelup-ads-analysis-tooltip {
