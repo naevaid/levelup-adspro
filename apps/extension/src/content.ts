@@ -49,6 +49,10 @@ let shopSortInteractionTimeoutId: number | null = null;
 let isShopSortInteractionLocked = false;
 let activeRoasPersistenceKey: string | null = null;
 let hasPersistedRoasStateForCurrentKey = false;
+let shopeeAdsPerformanceContextCache:
+  | { cachedAt: number; tableCount: number; contexts: ShopeeAdsPerformanceTableContext[] }
+  | null = null;
+const shopeeAdsPerformanceRowSignatureCache = new WeakMap<HTMLTableRowElement, string>();
 
 const OVERLAY_ID = 'levelup-adspro-market-overlay';
 const OVERLAY_STYLE_ID = 'levelup-adspro-market-overlay-style';
@@ -304,6 +308,7 @@ type ShopeeAdsPerformanceTableContext = {
   headerCells: HTMLTableCellElement[];
   rowTable: HTMLTableElement;
   linkTable: HTMLTableElement | null;
+  signatureCellIndexes: number[];
 };
 
 type ShopeeAdsPerformanceRowMetrics = Partial<
@@ -1405,6 +1410,18 @@ function computeRoasTierTargetsFromCalculatorState(
 
 function findShopeeAdsPerformanceTableContexts() {
   const tables = Array.from(document.querySelectorAll<HTMLTableElement>('table'));
+  const now = Date.now();
+  if (
+    shopeeAdsPerformanceContextCache &&
+    now - shopeeAdsPerformanceContextCache.cachedAt < 1200 &&
+    shopeeAdsPerformanceContextCache.tableCount === tables.length &&
+    shopeeAdsPerformanceContextCache.contexts.every(
+      (context) => context.headerTable.isConnected && context.rowTable.isConnected,
+    )
+  ) {
+    return shopeeAdsPerformanceContextCache.contexts;
+  }
+
   const contexts: ShopeeAdsPerformanceTableContext[] = [];
   const usedRowTables = new Set<HTMLTableElement>();
 
@@ -1520,14 +1537,29 @@ function findShopeeAdsPerformanceTableContexts() {
       }
     }
 
+    const signatureCellIndexes = headerKeys
+      .map((key, idx) =>
+        key && key !== 'diagnosis' && key !== 'dailyBudget' && key !== 'targetRoas'
+          ? idx
+          : null,
+      )
+      .filter((value): value is number => typeof value === 'number');
+
     contexts.push({
       headerKeys,
       headerTable: tables[index],
       headerCells,
       rowTable,
       linkTable,
+      signatureCellIndexes,
     });
   }
+
+  shopeeAdsPerformanceContextCache = {
+    cachedAt: now,
+    tableCount: tables.length,
+    contexts,
+  };
 
   return contexts;
 }
@@ -1543,12 +1575,27 @@ function parseShopeeAdsPerformanceRowMetrics(
       return '';
     }
 
-    const clone = cell.cloneNode(true) as HTMLTableCellElement;
-    clone
-      .querySelectorAll<HTMLElement>('[data-levelup-ads-managed="true"]')
-      .forEach((element) => element.remove());
+    const extract = (node: Node): string => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        return node.nodeValue ?? '';
+      }
+      if (!(node instanceof Element)) {
+        return '';
+      }
+      if (node.getAttribute('data-levelup-ads-managed') === 'true') {
+        return '';
+      }
+      if (node.childNodes.length === 0) {
+        return node.textContent ?? '';
+      }
+      let text = '';
+      node.childNodes.forEach((child) => {
+        text += extract(child);
+      });
+      return text;
+    };
 
-    return normalizeText(clone.textContent);
+    return normalizeText(extract(cell));
   };
 
   headerKeys.forEach((key, index) => {
@@ -1936,13 +1983,40 @@ async function refreshShopeeAdsPerformanceAnalysisBadges(snapshot?: PageSnapshot
       ? Array.from(context.linkTable.querySelectorAll<HTMLTableRowElement>('tbody tr'))
       : [];
 
+    const getCellTextWithoutManagedElements = (cell?: HTMLTableCellElement | null) => {
+      if (!cell) {
+        return '';
+      }
+
+      const extract = (node: Node): string => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          return node.nodeValue ?? '';
+        }
+        if (!(node instanceof Element)) {
+          return '';
+        }
+        if (node.getAttribute('data-levelup-ads-managed') === 'true') {
+          return '';
+        }
+        if (node.childNodes.length === 0) {
+          return node.textContent ?? '';
+        }
+        let text = '';
+        node.childNodes.forEach((child) => {
+          text += extract(child);
+        });
+        return text;
+      };
+
+      return normalizeText(extract(cell));
+    };
+
     rows.forEach((row, rowIndex) => {
       const cells = Array.from(row.querySelectorAll<HTMLTableCellElement>('td'));
       if (cells.length !== context.headerKeys.length) {
         return;
       }
 
-      const metrics = parseShopeeAdsPerformanceRowMetrics(cells, context.headerKeys);
       let roasTargets: ReturnType<typeof computeRoasTierTargetsFromCalculatorState> | null =
         snapshot.pageType === 'shopee_ads_product_detail'
           ? computeRoasTierTargetsFromCalculatorState(roasCalculatorState)
@@ -1961,6 +2035,20 @@ async function refreshShopeeAdsPerformanceAnalysisBadges(snapshot?: PageSnapshot
         roasTargets = savedEntry ? computeRoasTierTargetsFromCalculatorState(savedEntry) : null;
       }
 
+      const roasTargetsSignature = roasTargets
+        ? `rt:${roasTargets.rugi.toFixed(2)}:${roasTargets.kompetitif.toFixed(2)}:${roasTargets.konservatif.toFixed(2)}:${roasTargets.prospektif.toFixed(2)}`
+        : 'rt:-';
+      const rowSignature =
+        context.signatureCellIndexes
+          .map((index) => getCellTextWithoutManagedElements(cells[index]))
+          .join('|') + `|${roasTargetsSignature}`;
+      const previousSignature = shopeeAdsPerformanceRowSignatureCache.get(row);
+      if (previousSignature === rowSignature) {
+        return;
+      }
+      shopeeAdsPerformanceRowSignatureCache.set(row, rowSignature);
+
+      const metrics = parseShopeeAdsPerformanceRowMetrics(cells, context.headerKeys);
       const badges = computeShopeeAdsAnalysisBadges(metrics, roasTargets);
       context.headerKeys.forEach((key, cellIndex) => {
         if (!key) {
