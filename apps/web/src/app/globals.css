@@ -1,13 +1,13 @@
 @import "tailwindcss";
 
 :root {
-  --background: #17304d;
-  --foreground: #f5f9ff;
-  --card: rgba(24, 42, 68, 0.72);
-  --card-border: rgba(191, 219, 254, 0.2);
-  --muted: #d0ddf0;
-  --accent: #bae6fd;
-  --accent-strong: #38bdf8;
+  --background: #fff7f3;
+  --foreground: #111827;
+  --card: rgba(255, 250, 248, 0.9);
+  --card-border: rgba(251, 106, 53, 0.16);
+  --muted: #6b7280;
+  --accent: #fed7c3;
+  --accent-strong: #fb6a35;
 }
 
 @theme inline {
@@ -23,21 +23,34 @@
 
 html {
   scroll-behavior: smooth;
+  min-height: 100%;
 }
 
 body {
-  background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), sans-serif;
+  background: var(--background);
+  min-height: 100%;
+  position: relative;
+  isolation: isolate;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
   background-image:
-    radial-gradient(circle at top left, rgba(125, 211, 252, 0.28), transparent 32%),
-    radial-gradient(circle at top right, rgba(167, 139, 250, 0.18), transparent 26%),
-    radial-gradient(circle at bottom right, rgba(96, 165, 250, 0.2), transparent 24%),
-    linear-gradient(180deg, #1a3556 0%, #234668 45%, #2c5379 100%);
+    radial-gradient(circle at top left, rgba(251, 106, 53, 0.16), transparent 32%),
+    radial-gradient(circle at top right, rgba(251, 191, 36, 0.12), transparent 24%),
+    radial-gradient(circle at bottom right, rgba(251, 106, 53, 0.1), transparent 26%),
+    linear-gradient(180deg, #fff7f3 0%, #fffaf8 42%, #fff4ee 100%);
+  background-repeat: no-repeat;
+  background-size: cover;
+  pointer-events: none;
 }
 
 a {
-  color: inherit;
   text-decoration: none;
 }
 
@@ -59,7 +72,7 @@ select::-ms-expand {
 .glass-card {
   background: var(--card);
   border: 1px solid var(--card-border);
-  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.2);
+  box-shadow: 0 18px 48px rgba(251, 106, 53, 0.08);
   backdrop-filter: blur(16px);
 }
 
@@ -72,5 +85,5 @@ select::-ms-expand {
   height: 0.7rem;
   border-radius: 9999px;
   background: var(--accent-strong);
-  box-shadow: 0 0 0 6px rgba(186, 230, 253, 0.18);
+  box-shadow: 0 0 0 6px rgba(251, 106, 53, 0.12);
 }

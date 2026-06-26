@@ -51,47 +51,48 @@ export default function LoginPage() {
 
   return (
     <AuthShell
-      eyebrow="Masuk ke Workspace"
-      title="Masuk untuk membuka workspace Anda."
-      description="Gunakan email dan password akun Anda untuk melanjutkan ke dashboard."
+      eyebrow="Masuk ke LevelUP adsPRO"
+      title="Masuk dan lanjutkan riset produk serta evaluasi iklan Anda."
+      description="Akses kembali dashboard, insight tersimpan, dan workflow harian Anda dari satu tempat yang lebih rapi."
       footer={
         <span>
           Belum punya akun?{" "}
-          <Link href="/signup" className="text-sky-200 hover:text-sky-100">
-            Buat organization baru
+          <Link href="/signup" className="text-[#c2410c] hover:text-[#9a3412]">
+            Daftar dan mulai sekarang
           </Link>
         </span>
       }
     >
       <div>
-        <p className="text-sm uppercase tracking-[0.28em] text-sky-200/65">
-          Login
+        <p className="text-sm uppercase tracking-[0.28em] text-[#9a3412]/70">
+          Masuk
         </p>
-        <h2 className="mt-3 text-3xl font-semibold tracking-tight text-white">
+        <h2 className="mt-3 text-2xl font-semibold tracking-tight text-[#111827] sm:text-3xl">
           Selamat datang kembali
         </h2>
         <p className="mt-3 text-sm leading-7 muted-text">
-          Masuk dengan akun yang sudah terhubung ke workspace aktif Anda.
+          Masuk untuk melihat shortlist produk, membaca performa iklan, dan
+          melanjutkan analisis tanpa mulai dari nol.
         </p>
       </div>
 
       <form onSubmit={handleSubmit} className="mt-8 space-y-5">
         <label className="block">
-          <span className="text-sm text-slate-200">Email</span>
+          <span className="text-sm text-[#374151]">Email</span>
           <input
             type="email"
             required
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
+            className="mt-2 w-full rounded-2xl border border-[#fb6a35]/12 bg-white px-4 py-3 text-sm text-[#111827] outline-none transition focus:border-[#fb6a35]/35"
             placeholder="owner@brandanda.com"
           />
         </label>
 
         <label className="block">
-          <span className="flex items-center justify-between gap-3 text-sm text-slate-200">
+          <span className="flex items-center justify-between gap-3 text-sm text-[#374151]">
             <span>Password</span>
-            <Link href="/forgot-password" className="text-sky-200 hover:text-sky-100">
+            <Link href="/forgot-password" className="text-[#c2410c] hover:text-[#9a3412]">
               Lupa Password?
             </Link>
           </span>
@@ -101,13 +102,13 @@ export default function LoginPage() {
             minLength={8}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
+            className="mt-2 w-full rounded-2xl border border-[#fb6a35]/12 bg-white px-4 py-3 text-sm text-[#111827] outline-none transition focus:border-[#fb6a35]/35"
             placeholder="Minimal 8 karakter"
           />
         </label>
 
         {error ? (
-          <p className="rounded-2xl border border-rose-300/15 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+          <p className="rounded-2xl border border-rose-300/18 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {error}
           </p>
         ) : null}
@@ -115,9 +116,9 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={isSubmitting}
-          className="w-full rounded-full bg-sky-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-sky-300 disabled:cursor-not-allowed disabled:opacity-70"
+          className="w-full rounded-full bg-[#fb6a35] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#f85a21] disabled:cursor-not-allowed disabled:opacity-70"
         >
-          {isSubmitting ? "Sedang masuk..." : "Masuk ke Dashboard"}
+          {isSubmitting ? "Sedang masuk..." : "Masuk ke Workspace"}
         </button>
       </form>
     </AuthShell>

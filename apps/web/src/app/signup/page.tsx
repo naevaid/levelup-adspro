@@ -55,82 +55,83 @@ export default function SignupPage() {
 
   return (
     <AuthShell
-      eyebrow="Buat Workspace Baru"
-      title="Signup sekaligus membuat organization pertama."
-      description="Flow ini mengikuti dokumen fase 1: sistem membuat user, organization pertama, membership role owner, lalu mengembalikan session aktif."
+      eyebrow="Mulai dengan workspace baru"
+      title="Buat akun dan mulai rapikan riset produk serta insight iklan Anda."
+      description="Daftar sekali, lalu masuk ke workspace yang siap dipakai untuk menyimpan insight penting dan melanjutkan analisis harian."
       footer={
         <span>
           Sudah punya akun?{" "}
-          <Link href="/login" className="text-sky-200 hover:text-sky-100">
-            Login di sini
+          <Link href="/login" className="text-[#c2410c] hover:text-[#9a3412]">
+            Masuk di sini
           </Link>
         </span>
       }
     >
       <div>
-        <p className="text-sm uppercase tracking-[0.28em] text-sky-200/65">
-          Signup
+        <p className="text-sm uppercase tracking-[0.28em] text-[#9a3412]/70">
+          Daftar
         </p>
-        <h2 className="mt-3 text-3xl font-semibold tracking-tight text-white">
-          Buat tenant pertama
+        <h2 className="mt-3 text-2xl font-semibold tracking-tight text-[#111827] sm:text-3xl">
+          Siapkan workspace Anda
         </h2>
         <p className="mt-3 text-sm leading-7 muted-text">
-          Setelah selesai, Anda langsung masuk sebagai owner di organization aktif.
+          Setelah selesai, Anda bisa langsung masuk dan mulai bekerja dari
+          dashboard yang lebih rapi dan mudah dibaca.
         </p>
       </div>
 
       <form onSubmit={handleSubmit} className="mt-8 space-y-5">
         <label className="block">
-          <span className="text-sm text-slate-200">Nama</span>
+          <span className="text-sm text-[#374151]">Nama</span>
           <input
             type="text"
             required
             value={name}
             onChange={(event) => setName(event.target.value)}
-            className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
+            className="mt-2 w-full rounded-2xl border border-[#fb6a35]/12 bg-white px-4 py-3 text-sm text-[#111827] outline-none transition focus:border-[#fb6a35]/35"
             placeholder="Amin M"
           />
         </label>
 
         <label className="block">
-          <span className="text-sm text-slate-200">Email</span>
+          <span className="text-sm text-[#374151]">Email</span>
           <input
             type="email"
             required
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
+            className="mt-2 w-full rounded-2xl border border-[#fb6a35]/12 bg-white px-4 py-3 text-sm text-[#111827] outline-none transition focus:border-[#fb6a35]/35"
             placeholder="owner@brandanda.com"
           />
         </label>
 
         <label className="block">
-          <span className="text-sm text-slate-200">Password</span>
+          <span className="text-sm text-[#374151]">Password</span>
           <input
             type="password"
             required
             minLength={8}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
+            className="mt-2 w-full rounded-2xl border border-[#fb6a35]/12 bg-white px-4 py-3 text-sm text-[#111827] outline-none transition focus:border-[#fb6a35]/35"
             placeholder="Minimal 8 karakter"
           />
         </label>
 
         <label className="block">
-          <span className="text-sm text-slate-200">Nama Organization</span>
+          <span className="text-sm text-[#374151]">Nama Bisnis / Tim</span>
           <input
             type="text"
             required
             value={organizationName}
             onChange={(event) => setOrganizationName(event.target.value)}
-            className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
-            placeholder="Naeva Performance Lab"
+            className="mt-2 w-full rounded-2xl border border-[#fb6a35]/12 bg-white px-4 py-3 text-sm text-[#111827] outline-none transition focus:border-[#fb6a35]/35"
+            placeholder="Nama brand atau tim Anda"
           />
         </label>
 
         {error ? (
-          <p className="rounded-2xl border border-rose-300/15 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+          <p className="rounded-2xl border border-rose-300/18 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {error}
           </p>
         ) : null}
@@ -138,9 +139,9 @@ export default function SignupPage() {
         <button
           type="submit"
           disabled={isSubmitting}
-          className="w-full rounded-full bg-sky-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-sky-300 disabled:cursor-not-allowed disabled:opacity-70"
+          className="w-full rounded-full bg-[#fb6a35] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#f85a21] disabled:cursor-not-allowed disabled:opacity-70"
         >
-          {isSubmitting ? "Sedang membuat workspace..." : "Buat Account & Workspace"}
+          {isSubmitting ? "Sedang membuat workspace..." : "Buat Akun & Workspace"}
         </button>
       </form>
     </AuthShell>

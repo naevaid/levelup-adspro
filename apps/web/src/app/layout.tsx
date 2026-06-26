@@ -15,7 +15,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "LevelUP adsPRO",
-  description: "Tenant workspace for LevelUP adsPRO",
+  description:
+    "Platform untuk merapikan riset produk, membaca performa iklan, dan melanjutkan keputusan dari satu workspace.",
 };
 
 export default function RootLayout({

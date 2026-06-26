@@ -31,14 +31,14 @@ export function ModulePlaceholder({
         }
       />
       <EmptyStatePanel
-        title={`${title} masuk wave berikutnya`}
-        description="Struktur navigasi dan app shell sudah aktif. Halaman ini sengaja dibuat sebagai placeholder terhubung agar fase implementasi berikutnya tinggal mengisi komponen domain sesuai dokumen."
+        title={`${eyebrow} segera hadir`}
+        description="Kami sedang menyiapkan pengalaman yang lebih matang untuk fitur ini agar benar-benar nyaman dipakai. Nantikan insight, ringkasan, dan alur kerja yang lebih praktis di update berikutnya."
         primaryAction={{
           label: primaryCtaLabel,
           href: "/app/dashboard",
         }}
         secondaryAction={{
-          label: "Lihat Landing",
+          label: "Lihat Beranda",
           href: "/",
         }}
       />
