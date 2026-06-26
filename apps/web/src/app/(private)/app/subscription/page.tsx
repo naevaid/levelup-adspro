@@ -187,7 +187,7 @@ function getStatusClass(status: string | null | undefined) {
     case "CANCELED":
       return "border-rose-300/25 bg-rose-300/15 text-rose-50";
     default:
-      return "border-white/10 bg-white/5 text-slate-100";
+      return "border-[#fb6a35]/10 bg-[#fff8f5] text-[#9a3412]";
   }
 }
 
@@ -464,7 +464,7 @@ export default function SubscriptionPage() {
             type="button"
             onClick={() => void refreshBillingData()}
             disabled={!authorization || isLoading}
-            className="rounded-full border border-white/12 px-4 py-2.5 text-sm font-medium text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100 disabled:cursor-not-allowed disabled:opacity-70"
+            className="rounded-full border border-[#fb6a35]/12 bg-white px-4 py-2.5 text-sm font-medium text-[#9a3412] transition hover:border-[#fb6a35]/24 hover:bg-[#fff5ef] disabled:cursor-not-allowed disabled:opacity-70"
           >
             {isLoading ? "Memuat..." : "Muat ulang"}
           </button>
@@ -501,13 +501,13 @@ export default function SubscriptionPage() {
       ) : null}
 
       <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <div className="glass-card rounded-[1.75rem] border border-white/10 p-6 sm:p-7">
+        <div className="glass-card rounded-[1.75rem] border border-[#fb6a35]/8 p-6 sm:p-7">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-xs uppercase tracking-[0.28em] text-sky-200/65">
+              <p className="text-xs uppercase tracking-[0.28em] text-[#9a3412]/70">
                 Subscription Saat Ini
               </p>
-              <h2 className="mt-3 text-2xl font-semibold tracking-tight text-white">
+              <h2 className="mt-3 text-2xl font-semibold tracking-tight text-[#111827]">
                 {currentSubscription?.plan_code ?? "Belum ada plan aktif"}
               </h2>
               <p className="mt-2 text-sm leading-7 muted-text">
@@ -523,43 +523,43 @@ export default function SubscriptionPage() {
           </div>
 
           <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-3xl border border-white/10 bg-slate-950/35 p-4">
+            <div className="rounded-3xl border border-[#fb6a35]/8 bg-[#fff8f5] p-4">
               <p className="text-xs uppercase tracking-[0.24em] text-slate-400">
                 Interval
               </p>
-              <p className="mt-2 text-lg font-semibold text-white">
+              <p className="mt-2 text-lg font-semibold text-[#111827]">
                 {formatInterval(currentSubscription?.billing_interval ?? "-")}
               </p>
             </div>
-            <div className="rounded-3xl border border-white/10 bg-slate-950/35 p-4">
+            <div className="rounded-3xl border border-[#fb6a35]/8 bg-[#fff8f5] p-4">
               <p className="text-xs uppercase tracking-[0.24em] text-slate-400">
                 Periode Mulai
               </p>
-              <p className="mt-2 text-sm font-medium text-white">
+              <p className="mt-2 text-sm font-medium text-[#111827]">
                 {formatDateTime(currentSubscription?.current_period_start ?? null)}
               </p>
             </div>
-            <div className="rounded-3xl border border-white/10 bg-slate-950/35 p-4">
+            <div className="rounded-3xl border border-[#fb6a35]/8 bg-[#fff8f5] p-4">
               <p className="text-xs uppercase tracking-[0.24em] text-slate-400">
                 Periode Berakhir
               </p>
-              <p className="mt-2 text-sm font-medium text-white">
+              <p className="mt-2 text-sm font-medium text-[#111827]">
                 {formatDateTime(currentSubscription?.current_period_end ?? null)}
               </p>
             </div>
-            <div className="rounded-3xl border border-white/10 bg-slate-950/35 p-4">
+            <div className="rounded-3xl border border-[#fb6a35]/8 bg-[#fff8f5] p-4">
               <p className="text-xs uppercase tracking-[0.24em] text-slate-400">
                 Grace Period
               </p>
-              <p className="mt-2 text-sm font-medium text-white">
+              <p className="mt-2 text-sm font-medium text-[#111827]">
                 {formatDateTime(currentSubscription?.grace_period_end ?? null)}
               </p>
             </div>
           </div>
 
           <div className="mt-6 grid gap-4 md:grid-cols-2">
-            <div className="rounded-3xl border border-white/10 bg-slate-950/35 p-5">
-              <h3 className="text-sm font-semibold text-white">Feature Entitlements</h3>
+            <div className="rounded-3xl border border-[#fb6a35]/8 bg-[#fff8f5] p-5">
+              <h3 className="text-sm font-semibold text-[#111827]">Feature Entitlements</h3>
               <div className="mt-4 space-y-3">
                 {featureEntries.length === 0 ? (
                   <p className="text-sm muted-text">Belum ada data feature entitlement.</p>
@@ -567,10 +567,10 @@ export default function SubscriptionPage() {
                   featureEntries.map(([key, value]) => (
                     <div
                       key={key}
-                      className="flex items-start justify-between gap-4 border-b border-white/6 pb-3 text-sm last:border-b-0 last:pb-0"
+                      className="flex items-start justify-between gap-4 border-b border-[#fb6a35]/8 pb-3 text-sm last:border-b-0 last:pb-0"
                     >
                       <span className="muted-text">{formatEntryLabel(key)}</span>
-                      <span className="max-w-[55%] text-right font-medium text-white">
+                      <span className="max-w-[55%] text-right font-medium text-[#111827]">
                         {formatEntryValue(value)}
                       </span>
                     </div>
@@ -579,29 +579,29 @@ export default function SubscriptionPage() {
               </div>
             </div>
 
-            <div className="rounded-3xl border border-white/10 bg-slate-950/35 p-5">
-              <h3 className="text-sm font-semibold text-white">Quota & Usage</h3>
+            <div className="rounded-3xl border border-[#fb6a35]/8 bg-[#fff8f5] p-5">
+              <h3 className="text-sm font-semibold text-[#111827]">Quota & Usage</h3>
               <div className="mt-4 space-y-3">
                 {quotaEntries.map(([key, value]) => (
                   <div
                     key={key}
-                    className="flex items-start justify-between gap-4 border-b border-white/6 pb-3 text-sm last:border-b-0 last:pb-0"
+                    className="flex items-start justify-between gap-4 border-b border-[#fb6a35]/8 pb-3 text-sm last:border-b-0 last:pb-0"
                   >
                     <span className="muted-text">{formatEntryLabel(key)}</span>
-                    <span className="max-w-[55%] text-right font-medium text-white">
+                    <span className="max-w-[55%] text-right font-medium text-[#111827]">
                       {formatEntryValue(value)}
                     </span>
                   </div>
                 ))}
-                <div className="flex items-start justify-between gap-4 border-b border-white/6 pb-3 text-sm">
+                <div className="flex items-start justify-between gap-4 border-b border-[#fb6a35]/8 pb-3 text-sm">
                   <span className="muted-text">Active Shops</span>
-                  <span className="font-medium text-white">
+                  <span className="font-medium text-[#111827]">
                     {subscription?.usage.active_shops.toLocaleString("id-ID") ?? "0"}
                   </span>
                 </div>
                 <div className="flex items-start justify-between gap-4 text-sm">
                   <span className="muted-text">Active Members</span>
-                  <span className="font-medium text-white">
+                  <span className="font-medium text-[#111827]">
                     {subscription?.usage.active_members.toLocaleString("id-ID") ?? "0"}
                   </span>
                 </div>
@@ -610,13 +610,13 @@ export default function SubscriptionPage() {
           </div>
         </div>
 
-        <div className="glass-card rounded-[1.75rem] border border-white/10 p-6 sm:p-7">
+        <div className="glass-card rounded-[1.75rem] border border-[#fb6a35]/8 p-6 sm:p-7">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-xs uppercase tracking-[0.28em] text-sky-200/65">
+              <p className="text-xs uppercase tracking-[0.28em] text-[#9a3412]/70">
                 Invoice Terpilih
               </p>
-              <h2 className="mt-3 text-2xl font-semibold tracking-tight text-white">
+              <h2 className="mt-3 text-2xl font-semibold tracking-tight text-[#111827]">
                 {selectedInvoiceDetail?.invoice.invoice_number ?? "Belum ada invoice"}
               </h2>
             </div>
@@ -631,28 +631,28 @@ export default function SubscriptionPage() {
           </div>
 
           {isLoadingInvoiceDetail ? (
-            <div className="mt-6 rounded-3xl border border-white/10 bg-slate-950/35 p-5 text-sm muted-text">
+            <div className="mt-6 rounded-3xl border border-[#fb6a35]/8 bg-[#fff8f5] p-5 text-sm muted-text">
               Memuat detail invoice...
             </div>
           ) : selectedInvoiceDetail ? (
             <div className="mt-6 space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-3xl border border-white/10 bg-slate-950/35 p-4">
+                <div className="rounded-3xl border border-[#fb6a35]/8 bg-[#fff8f5] p-4">
                   <p className="text-xs uppercase tracking-[0.24em] text-slate-400">
                     Amount
                   </p>
-                  <p className="mt-2 text-lg font-semibold text-white">
+                  <p className="mt-2 text-lg font-semibold text-[#111827]">
                     {formatCurrency(
                       selectedInvoiceDetail.invoice.amount,
                       selectedInvoiceDetail.invoice.currency,
                     )}
                   </p>
                 </div>
-                <div className="rounded-3xl border border-white/10 bg-slate-950/35 p-4">
+                <div className="rounded-3xl border border-[#fb6a35]/8 bg-[#fff8f5] p-4">
                   <p className="text-xs uppercase tracking-[0.24em] text-slate-400">
                     Payment Status
                   </p>
-                  <p className="mt-2 text-sm font-medium text-white">
+                  <p className="mt-2 text-sm font-medium text-[#111827]">
                     {formatStatusLabel(
                       selectedInvoiceDetail.payment?.transaction_status ??
                         selectedInvoiceDetail.invoice.status,
@@ -661,64 +661,64 @@ export default function SubscriptionPage() {
                 </div>
               </div>
 
-              <div className="space-y-3 rounded-3xl border border-white/10 bg-slate-950/35 p-5 text-sm">
+              <div className="space-y-3 rounded-3xl border border-[#fb6a35]/8 bg-[#fff8f5] p-5 text-sm">
                 <div className="flex items-start justify-between gap-4">
                   <span className="muted-text">Order ID</span>
-                  <span className="max-w-[55%] text-right text-white">
+                  <span className="max-w-[55%] text-right text-[#111827]">
                     {selectedInvoiceDetail.invoice.order_id ?? "-"}
                   </span>
                 </div>
                 <div className="flex items-start justify-between gap-4">
                   <span className="muted-text">Gateway Order ID</span>
-                  <span className="max-w-[55%] text-right text-white">
+                  <span className="max-w-[55%] text-right text-[#111827]">
                     {selectedInvoiceDetail.invoice.gateway_order_id ?? "-"}
                   </span>
                 </div>
                 <div className="flex items-start justify-between gap-4">
                   <span className="muted-text">Redirect URL</span>
-                  <span className="max-w-[55%] break-all text-right text-white">
+                  <span className="max-w-[55%] break-all text-right text-[#111827]">
                     {selectedInvoiceDetail.payment?.redirect_url ?? "-"}
                   </span>
                 </div>
                 <div className="flex items-start justify-between gap-4">
                   <span className="muted-text">Callback Status</span>
-                  <span className="text-right text-white">
+                  <span className="text-right text-[#111827]">
                     {formatStatusLabel(selectedInvoiceDetail.payment?.callback_status)}
                   </span>
                 </div>
                 <div className="flex items-start justify-between gap-4">
                   <span className="muted-text">Issued At</span>
-                  <span className="text-right text-white">
+                  <span className="text-right text-[#111827]">
                     {formatDateTime(selectedInvoiceDetail.invoice.issued_at)}
                   </span>
                 </div>
                 <div className="flex items-start justify-between gap-4">
                   <span className="muted-text">Paid At</span>
-                  <span className="text-right text-white">
+                  <span className="text-right text-[#111827]">
                     {formatDateTime(selectedInvoiceDetail.invoice.paid_at)}
                   </span>
                 </div>
               </div>
 
               {selectedInvoiceDetail.latest_callback ? (
-                <div className="rounded-3xl border border-white/10 bg-slate-950/35 p-5 text-sm">
-                  <h3 className="font-semibold text-white">Callback Terakhir</h3>
+                <div className="rounded-3xl border border-[#fb6a35]/8 bg-[#fff8f5] p-5 text-sm">
+                  <h3 className="font-semibold text-[#111827]">Callback Terakhir</h3>
                   <div className="mt-4 space-y-3">
                     <div className="flex items-start justify-between gap-4">
                       <span className="muted-text">Event</span>
-                      <span className="text-right text-white">
+                      <span className="text-right text-[#111827]">
                         {selectedInvoiceDetail.latest_callback.event_type ?? "-"}
                       </span>
                     </div>
                     <div className="flex items-start justify-between gap-4">
                       <span className="muted-text">Signature Valid</span>
-                      <span className="text-right text-white">
+                      <span className="text-right text-[#111827]">
                         {selectedInvoiceDetail.latest_callback.signature_valid ? "Ya" : "Tidak"}
                       </span>
                     </div>
                     <div className="flex items-start justify-between gap-4">
                       <span className="muted-text">HTTP Response</span>
-                      <span className="text-right text-white">
+                      <span className="text-right text-[#111827]">
                         {selectedInvoiceDetail.latest_callback.http_response_code ?? "-"}
                       </span>
                     </div>
@@ -731,7 +731,7 @@ export default function SubscriptionPage() {
                   type="button"
                   onClick={() => void handleRefreshPaymentStatus(selectedInvoiceDetail.invoice.id)}
                   disabled={!canCheckout || isRefreshingInvoiceId === selectedInvoiceDetail.invoice.id}
-                  className="rounded-full bg-sky-400 px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-sky-300 disabled:cursor-not-allowed disabled:opacity-70"
+                  className="rounded-full border border-[#fb6a35]/35 bg-[#fb6a35] px-5 py-3 text-sm font-medium text-white transition hover:bg-[#f85a21] disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {isRefreshingInvoiceId === selectedInvoiceDetail.invoice.id
                     ? "Memeriksa..."
@@ -742,7 +742,7 @@ export default function SubscriptionPage() {
                     href={activeRedirectUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="rounded-full border border-white/12 px-5 py-3 text-sm font-medium text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100"
+                    className="rounded-full border border-[#fb6a35]/12 bg-white px-5 py-3 text-sm font-medium text-[#9a3412] transition hover:border-[#fb6a35]/24 hover:bg-[#fff5ef]"
                   >
                     Buka halaman pembayaran
                   </a>
@@ -750,7 +750,7 @@ export default function SubscriptionPage() {
               </div>
             </div>
           ) : (
-            <div className="mt-6 rounded-3xl border border-white/10 bg-slate-950/35 p-5 text-sm muted-text">
+            <div className="mt-6 rounded-3xl border border-[#fb6a35]/8 bg-[#fff8f5] p-5 text-sm muted-text">
               Pilih invoice dari daftar di bawah atau buat checkout baru untuk melihat detail
               payment.
             </div>
@@ -758,13 +758,13 @@ export default function SubscriptionPage() {
         </div>
       </section>
 
-      <section className="glass-card rounded-[1.75rem] border border-white/10 p-6 sm:p-7">
+      <section className="glass-card rounded-[1.75rem] border border-[#fb6a35]/8 p-6 sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.28em] text-sky-200/65">
+            <p className="text-xs uppercase tracking-[0.28em] text-[#9a3412]/70">
               Pilih Plan
             </p>
-            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-white">
+            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-[#111827]">
               Checkout subscription dari UI
             </h2>
             <p className="mt-2 text-sm leading-7 muted-text">
@@ -793,30 +793,30 @@ export default function SubscriptionPage() {
                   key={`${plan.code}-${plan.billing_interval}`}
                   className={`rounded-[1.5rem] border p-5 ${
                     isCurrentPlan
-                      ? "border-sky-300/40 bg-sky-300/10"
-                      : "border-white/10 bg-slate-950/35"
+                      ? "border-[#fb6a35]/16 bg-[#fb6a35]/8"
+                      : "border-[#fb6a35]/8 bg-[#fff8f5]"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <h3 className="text-xl font-semibold text-white">{plan.name}</h3>
+                      <h3 className="text-xl font-semibold text-[#111827]">{plan.name}</h3>
                       <p className="mt-2 text-sm muted-text">
                         {plan.code} · {formatInterval(plan.billing_interval)}
                       </p>
                     </div>
                     {isCurrentPlan ? (
-                      <span className="rounded-full border border-sky-300/25 bg-sky-300/15 px-3 py-1 text-xs font-medium text-sky-100">
+                      <span className="rounded-full border border-[#fb6a35]/14 bg-[#fb6a35]/10 px-3 py-1 text-xs font-medium text-[#9a3412]">
                         Plan saat ini
                       </span>
                     ) : null}
                   </div>
 
-                  <p className="mt-5 text-3xl font-semibold text-white">
+                  <p className="mt-5 text-3xl font-semibold text-[#111827]">
                     {formatCurrency(plan.price_amount, plan.currency)}
                   </p>
 
                   <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-1">
-                    <div className="rounded-3xl border border-white/8 bg-black/10 p-4">
+                    <div className="rounded-3xl border border-[#fb6a35]/8 bg-white p-4">
                       <p className="text-xs uppercase tracking-[0.24em] text-slate-400">
                         Features
                       </p>
@@ -824,7 +824,7 @@ export default function SubscriptionPage() {
                         {Object.entries(plan.features ?? {}).map(([key, value]) => (
                           <div
                             key={key}
-                            className="flex items-start justify-between gap-4 text-slate-100"
+                            className="flex items-start justify-between gap-4 text-[#374151]"
                           >
                             <span className="muted-text">{formatEntryLabel(key)}</span>
                             <span className="max-w-[55%] text-right">
@@ -835,7 +835,7 @@ export default function SubscriptionPage() {
                       </div>
                     </div>
 
-                    <div className="rounded-3xl border border-white/8 bg-black/10 p-4">
+                    <div className="rounded-3xl border border-[#fb6a35]/8 bg-white p-4">
                       <p className="text-xs uppercase tracking-[0.24em] text-slate-400">
                         Quotas
                       </p>
@@ -843,7 +843,7 @@ export default function SubscriptionPage() {
                         {Object.entries(plan.quotas ?? {}).map(([key, value]) => (
                           <div
                             key={key}
-                            className="flex items-start justify-between gap-4 text-slate-100"
+                            className="flex items-start justify-between gap-4 text-[#374151]"
                           >
                             <span className="muted-text">{formatEntryLabel(key)}</span>
                             <span className="max-w-[55%] text-right">
@@ -859,7 +859,7 @@ export default function SubscriptionPage() {
                     type="button"
                     onClick={() => void handleCheckout(plan)}
                     disabled={!canCheckout || checkoutPlanCode === plan.code}
-                    className="mt-5 w-full rounded-full bg-sky-400 px-5 py-3 text-sm font-medium text-slate-950 transition hover:bg-sky-300 disabled:cursor-not-allowed disabled:opacity-70"
+                  className="mt-5 w-full rounded-full border border-[#fb6a35]/35 bg-[#fb6a35] px-5 py-3 text-sm font-medium text-white transition hover:bg-[#f85a21] disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     {checkoutPlanCode === plan.code ? "Memproses..." : "Checkout plan ini"}
                   </button>
@@ -870,13 +870,13 @@ export default function SubscriptionPage() {
         )}
       </section>
 
-      <section className="glass-card rounded-[1.75rem] border border-white/10 p-6 sm:p-7">
+      <section className="glass-card rounded-[1.75rem] border border-[#fb6a35]/8 p-6 sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.28em] text-sky-200/65">
+            <p className="text-xs uppercase tracking-[0.28em] text-[#9a3412]/70">
               Riwayat Invoice
             </p>
-            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-white">
+            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-[#111827]">
               Invoice billing terbaru
             </h2>
             <p className="mt-2 text-sm leading-7 muted-text">
@@ -904,13 +904,13 @@ export default function SubscriptionPage() {
                   onClick={() => setSelectedInvoiceId(invoice.invoice_id)}
                   className={`w-full rounded-[1.5rem] border p-5 text-left transition ${
                     isSelected
-                      ? "border-sky-300/40 bg-sky-300/10"
-                      : "border-white/10 bg-slate-950/35 hover:border-sky-300/20"
+                      ? "border-[#fb6a35]/16 bg-[#fb6a35]/8"
+                      : "border-[#fb6a35]/8 bg-[#fff8f5] hover:border-[#fb6a35]/14"
                   }`}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
-                      <h3 className="text-lg font-semibold text-white">
+                      <h3 className="text-lg font-semibold text-[#111827]">
                         {invoice.invoice_number}
                       </h3>
                       <p className="mt-2 text-sm muted-text">
@@ -930,7 +930,7 @@ export default function SubscriptionPage() {
                       <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
                         Amount
                       </p>
-                      <p className="mt-2 text-white">
+                      <p className="mt-2 text-[#111827]">
                         {formatCurrency(invoice.amount, invoice.currency)}
                       </p>
                     </div>
@@ -938,13 +938,13 @@ export default function SubscriptionPage() {
                       <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
                         Issued At
                       </p>
-                      <p className="mt-2 text-white">{formatDateTime(invoice.issued_at)}</p>
+                      <p className="mt-2 text-[#111827]">{formatDateTime(invoice.issued_at)}</p>
                     </div>
                     <div>
                       <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
                         Paid At
                       </p>
-                      <p className="mt-2 text-white">{formatDateTime(invoice.paid_at)}</p>
+                      <p className="mt-2 text-[#111827]">{formatDateTime(invoice.paid_at)}</p>
                     </div>
                   </div>
                 </button>

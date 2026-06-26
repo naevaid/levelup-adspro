@@ -20,12 +20,12 @@ export function EmptyStatePanel({
   secondaryAction,
 }: EmptyStatePanelProps) {
   return (
-    <section className="glass-card rounded-[1.75rem] border border-white/14 p-5 sm:p-6">
+    <section className="glass-card rounded-[1.75rem] border border-[#fb6a35]/8 p-5 sm:p-6">
       <div className="max-w-2xl">
-        <p className="text-[11px] uppercase tracking-[0.24em] text-sky-100/70">
-          Empty State
+        <p className="text-[11px] uppercase tracking-[0.24em] text-[#9a3412]/70">
+          Belum Ada Data
         </p>
-        <h2 className="mt-2.5 text-xl font-semibold tracking-tight text-white sm:text-2xl">
+        <h2 className="mt-2.5 text-xl font-semibold tracking-tight text-[#111827] sm:text-2xl">
           {title}
         </h2>
         <p className="mt-2.5 text-sm leading-6 muted-text">
@@ -38,7 +38,7 @@ export function EmptyStatePanel({
           {primaryAction ? (
             <Link
               href={primaryAction.href}
-              className="rounded-full bg-sky-300 px-5 py-2.5 text-sm font-medium text-slate-950 transition hover:bg-sky-200"
+              className="rounded-full border border-[#fb6a35]/35 bg-[#fb6a35] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#f85a21]"
             >
               {primaryAction.label}
             </Link>
@@ -46,7 +46,7 @@ export function EmptyStatePanel({
           {secondaryAction ? (
             <Link
               href={secondaryAction.href}
-              className="rounded-full border border-white/16 bg-white/6 px-5 py-2.5 text-sm font-medium text-slate-50 transition hover:border-sky-200/55 hover:bg-white/10 hover:text-white"
+              className="rounded-full border border-[#fb6a35]/12 bg-white px-5 py-2.5 text-sm font-medium text-[#9a3412] transition hover:border-[#fb6a35]/24 hover:bg-[#fff5ef]"
             >
               {secondaryAction.label}
             </Link>

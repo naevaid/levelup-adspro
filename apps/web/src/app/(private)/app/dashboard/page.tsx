@@ -46,13 +46,13 @@ export default function DashboardPage() {
           <>
             <Link
               href="/app/shops"
-              className="rounded-full border border-white/12 px-4 py-2.5 text-sm font-medium text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100"
+              className="rounded-full border border-[#fb6a35]/12 bg-white px-4 py-2.5 text-sm font-medium text-[#9a3412] transition hover:border-[#fb6a35]/24 hover:bg-[#fff5ef]"
             >
               Kelola Toko
             </Link>
             <Link
               href="/app/team"
-              className="rounded-full bg-sky-400 px-4 py-2.5 text-sm font-medium text-slate-950 transition hover:bg-sky-300"
+              className="rounded-full border border-[#fb6a35]/35 bg-[#fb6a35] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#f85a21]"
             >
               Kelola Tim
             </Link>
@@ -67,55 +67,55 @@ export default function DashboardPage() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <article className="glass-card rounded-[1.75rem] border border-white/10 p-6">
-          <p className="text-xs uppercase tracking-[0.28em] text-sky-200/65">
+        <article className="glass-card rounded-[1.75rem] border border-[#fb6a35]/8 p-6">
+          <p className="text-xs uppercase tracking-[0.28em] text-[#9a3412]/70">
             Workspace Aktif
           </p>
-          <h2 className="mt-4 text-2xl font-semibold text-white">
+          <h2 className="mt-4 text-2xl font-semibold text-[#111827]">
             {currentOrganization?.name ?? session?.activeOrganization.name}
           </h2>
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4">
-              <p className="text-sm text-sky-200/70">Alamat Workspace</p>
-              <p className="mt-2 text-lg font-semibold text-white">
+            <div className="rounded-[1.5rem] border border-[#fb6a35]/8 bg-[#fff8f5] p-4">
+              <p className="text-sm text-[#9a3412]/75">Alamat Workspace</p>
+              <p className="mt-2 text-lg font-semibold text-[#111827]">
                 {currentOrganization?.slug ?? session?.activeOrganization.slug}
               </p>
             </div>
-            <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4">
-              <p className="text-sm text-sky-200/70">Peran Anda</p>
-              <p className="mt-2 text-lg font-semibold text-white">
+            <div className="rounded-[1.5rem] border border-[#fb6a35]/8 bg-[#fff8f5] p-4">
+              <p className="text-sm text-[#9a3412]/75">Peran Anda</p>
+              <p className="mt-2 text-lg font-semibold text-[#111827]">
                 {profile?.membership.role ?? session?.membership.role}
               </p>
             </div>
-            <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4">
-              <p className="text-sm text-sky-200/70">Status Workspace</p>
-              <p className="mt-2 text-lg font-semibold text-white">
+            <div className="rounded-[1.5rem] border border-[#fb6a35]/8 bg-[#fff8f5] p-4">
+              <p className="text-sm text-[#9a3412]/75">Status Workspace</p>
+              <p className="mt-2 text-lg font-semibold text-[#111827]">
                 {currentOrganization?.status ?? session?.activeOrganization.status}
               </p>
             </div>
-            <div className="rounded-[1.5rem] border border-white/10 bg-white/5 p-4">
-              <p className="text-sm text-sky-200/70">Status Login</p>
-              <p className="mt-2 text-lg font-semibold text-white">
+            <div className="rounded-[1.5rem] border border-[#fb6a35]/8 bg-[#fff8f5] p-4">
+              <p className="text-sm text-[#9a3412]/75">Status Login</p>
+              <p className="mt-2 text-lg font-semibold text-[#111827]">
                 {session ? "Masih aktif" : "Belum tersedia"}
               </p>
             </div>
           </div>
         </article>
 
-        <article className="glass-card rounded-[1.75rem] border border-white/10 p-6">
-          <p className="text-xs uppercase tracking-[0.28em] text-sky-200/65">
+        <article className="glass-card rounded-[1.75rem] border border-[#fb6a35]/8 p-6">
+          <p className="text-xs uppercase tracking-[0.28em] text-[#9a3412]/70">
             Langkah Berikutnya
           </p>
           <div className="mt-5 space-y-3">
             {nextActions.map((item, index) => (
               <div
                 key={item}
-                className="rounded-[1.5rem] border border-white/10 bg-white/5 px-4 py-4"
+                className="rounded-[1.5rem] border border-[#fb6a35]/8 bg-[#fff8f5] px-4 py-4"
               >
-                <p className="text-xs uppercase tracking-[0.22em] text-sky-200/60">
+                <p className="text-xs uppercase tracking-[0.22em] text-[#9a3412]/65">
                   Saran 0{index + 1}
                 </p>
-                <p className="mt-2 text-sm leading-7 text-slate-100">{item}</p>
+                <p className="mt-2 text-sm leading-7 text-[#374151]">{item}</p>
               </div>
             ))}
           </div>

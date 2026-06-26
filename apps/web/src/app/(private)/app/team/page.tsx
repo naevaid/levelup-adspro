@@ -295,7 +295,7 @@ export default function TeamPage() {
               type="button"
               onClick={() => void refresh()}
               disabled={!authorization || isLoading}
-              className="rounded-full border border-white/12 px-4 py-2.5 text-sm font-medium text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100 disabled:cursor-not-allowed disabled:opacity-70"
+              className="rounded-full border border-[#fb6a35]/12 bg-white px-4 py-2.5 text-sm font-medium text-[#9a3412] transition hover:border-[#fb6a35]/24 hover:bg-[#fff5ef] disabled:cursor-not-allowed disabled:opacity-70"
             >
               {isLoading ? "Memuat..." : "Refresh"}
             </button>
@@ -306,7 +306,7 @@ export default function TeamPage() {
                 setIsInviteOpen(true);
               }}
               disabled={!authorization || limitReached}
-              className="rounded-full bg-sky-300 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-sky-200 disabled:cursor-not-allowed disabled:opacity-70"
+              className="rounded-full border border-[#fb6a35]/35 bg-[#fb6a35] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#f85a21] disabled:cursor-not-allowed disabled:opacity-70"
             >
               Tambah Anggota
             </button>
@@ -315,11 +315,11 @@ export default function TeamPage() {
       />
 
       <section className="grid gap-4 lg:grid-cols-3">
-        <div className="glass-card rounded-[1.75rem] border border-white/10 p-6 sm:p-7">
-          <p className="text-xs uppercase tracking-[0.24em] text-sky-100/70">
+        <div className="glass-card rounded-[1.75rem] border border-[#fb6a35]/8 p-6 sm:p-7">
+          <p className="text-xs uppercase tracking-[0.24em] text-[#9a3412]/70">
             Plan Aktif
           </p>
-          <h2 className="mt-3 text-xl font-semibold text-white">
+          <h2 className="mt-3 text-xl font-semibold text-[#111827]">
             {subscription?.subscription.plan_code ?? "-"}
           </h2>
           <p className="mt-2 text-sm muted-text">
@@ -327,11 +327,11 @@ export default function TeamPage() {
           </p>
         </div>
 
-        <div className="glass-card rounded-[1.75rem] border border-white/10 p-6 sm:p-7">
-          <p className="text-xs uppercase tracking-[0.24em] text-sky-100/70">
+        <div className="glass-card rounded-[1.75rem] border border-[#fb6a35]/8 p-6 sm:p-7">
+          <p className="text-xs uppercase tracking-[0.24em] text-[#9a3412]/70">
             Seat Anggota
           </p>
-          <h2 className="mt-3 text-xl font-semibold text-white">
+          <h2 className="mt-3 text-xl font-semibold text-[#111827]">
             {activeMembers}
             {typeof memberLimit === "number" ? ` / ${memberLimit}` : ""}
           </h2>
@@ -342,11 +342,11 @@ export default function TeamPage() {
           </p>
         </div>
 
-        <div className="glass-card rounded-[1.75rem] border border-white/10 p-6 sm:p-7">
-          <p className="text-xs uppercase tracking-[0.24em] text-sky-100/70">
+        <div className="glass-card rounded-[1.75rem] border border-[#fb6a35]/8 p-6 sm:p-7">
+          <p className="text-xs uppercase tracking-[0.24em] text-[#9a3412]/70">
             Aksi
           </p>
-          <h2 className="mt-3 text-xl font-semibold text-white">
+          <h2 className="mt-3 text-xl font-semibold text-[#111827]">
             {limitReached ? "Seat Penuh" : "Siap Menambah"}
           </h2>
           <p className="mt-2 text-sm muted-text">
@@ -358,21 +358,21 @@ export default function TeamPage() {
       </section>
 
       {error ? (
-        <p className="rounded-[1.75rem] border border-rose-300/15 bg-rose-400/10 px-6 py-4 text-sm text-rose-100">
+        <p className="rounded-[1.75rem] border border-rose-300/18 bg-rose-50 px-6 py-4 text-sm text-rose-700">
           {error}
         </p>
       ) : null}
 
-      <section className="glass-card rounded-[1.75rem] border border-white/10 p-6 sm:p-7">
+      <section className="glass-card rounded-[1.75rem] border border-[#fb6a35]/8 p-6 sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold text-white">Daftar Anggota</h2>
+            <h2 className="text-lg font-semibold text-[#111827]">Daftar Anggota</h2>
             <p className="mt-2 text-sm leading-7 muted-text">
               Role owner tidak bisa diubah dari halaman ini. Role anggota lain bisa
               diperbarui tanpa melewati batas subscription aktif.
             </p>
           </div>
-          <div className="rounded-full border border-white/12 px-4 py-2 text-xs font-semibold tracking-wide text-slate-100">
+          <div className="rounded-full border border-[#fb6a35]/12 bg-[#fff8f5] px-4 py-2 text-xs font-semibold tracking-wide text-[#9a3412]">
             {members.length} anggota tercatat
           </div>
         </div>
@@ -394,24 +394,24 @@ export default function TeamPage() {
               return (
                 <div
                   key={member.id}
-                  className="rounded-[1.5rem] border border-white/10 bg-slate-950/30 p-5"
+                  className="rounded-[1.5rem] border border-[#fb6a35]/8 bg-[#fff8f5] p-5"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-base font-semibold text-white">
+                        <h3 className="text-base font-semibold text-[#111827]">
                           {member.user.name}
                         </h3>
-                        <span className="rounded-full border border-white/12 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-sky-100/75">
+                        <span className="rounded-full border border-[#fb6a35]/12 bg-white px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-[#9a3412]">
                           {formatRole(member.role)}
                         </span>
                         {isCurrentUser ? (
-                          <span className="rounded-full border border-sky-300/25 bg-sky-400/10 px-3 py-1 text-[11px] font-medium text-sky-100">
+                          <span className="rounded-full border border-[#fb6a35]/14 bg-[#fb6a35]/10 px-3 py-1 text-[11px] font-medium text-[#9a3412]">
                             Anda
                           </span>
                         ) : null}
                       </div>
-                      <p className="mt-2 text-sm text-slate-200">{member.user.email}</p>
+                      <p className="mt-2 text-sm text-[#4b5563]">{member.user.email}</p>
                       <p className="mt-2 text-xs muted-text">
                         Bergabung: {formatDate(member.joinedAt || member.createdAt)}
                       </p>
@@ -427,7 +427,7 @@ export default function TeamPage() {
                           void updateRole(member.id, event.target.value as MembershipRole)
                         }
                         disabled={!authorization || isOwner || isCurrentUser || isBusy}
-                        className="rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-2.5 text-sm text-white outline-none transition focus:border-sky-300/40 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="rounded-2xl border border-[#fb6a35]/12 bg-white px-4 py-2.5 text-sm text-[#111827] outline-none transition focus:border-[#fb6a35]/24 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {member.role === "OWNER" ? (
                           <option value="OWNER">OWNER</option>
@@ -457,14 +457,14 @@ export default function TeamPage() {
       </section>
 
       {isInviteOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-8 backdrop-blur-sm">
-          <div className="glass-card w-full max-w-2xl rounded-[1.9rem] border border-white/14 p-6 sm:p-7">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(17,24,39,0.34)] px-4 py-8 backdrop-blur-sm">
+          <div className="glass-card w-full max-w-2xl rounded-[1.9rem] border border-[#fb6a35]/8 p-6 sm:p-7">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-[11px] uppercase tracking-[0.24em] text-sky-100/70">
+                <p className="text-[11px] uppercase tracking-[0.24em] text-[#9a3412]/70">
                   Team
                 </p>
-                <h2 className="mt-2 text-xl font-semibold text-white">
+                <h2 className="mt-2 text-xl font-semibold text-[#111827]">
                   Tambah Anggota Baru
                 </h2>
                 <p className="mt-2 text-sm leading-6 muted-text">
@@ -478,7 +478,7 @@ export default function TeamPage() {
                   setIsInviteOpen(false);
                   resetInviteForm();
                 }}
-                className="rounded-full border border-white/12 px-4 py-2 text-sm text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100"
+                className="rounded-full border border-[#fb6a35]/12 bg-white px-4 py-2 text-sm text-[#9a3412] transition hover:border-[#fb6a35]/24 hover:bg-[#fff5ef]"
               >
                 Tutup
               </button>
@@ -486,36 +486,36 @@ export default function TeamPage() {
 
             <form onSubmit={handleInvite} className="mt-6 grid gap-4 sm:grid-cols-2">
               <label className="block">
-                <span className="text-sm text-slate-200">Nama</span>
+                <span className="text-sm text-[#374151]">Nama</span>
                 <input
                   type="text"
                   value={inviteName}
                   onChange={(event) => setInviteName(event.target.value)}
-                  className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
+                  className="mt-2 w-full rounded-2xl border border-[#fb6a35]/12 bg-white px-4 py-3 text-sm text-[#111827] outline-none transition focus:border-[#fb6a35]/24"
                   placeholder="Nama anggota"
                 />
               </label>
 
               <label className="block">
-                <span className="text-sm text-slate-200">Email</span>
+                <span className="text-sm text-[#374151]">Email</span>
                 <input
                   type="email"
                   required
                   value={inviteEmail}
                   onChange={(event) => setInviteEmail(event.target.value)}
-                  className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
+                  className="mt-2 w-full rounded-2xl border border-[#fb6a35]/12 bg-white px-4 py-3 text-sm text-[#111827] outline-none transition focus:border-[#fb6a35]/24"
                   placeholder="nama@contoh.com"
                 />
               </label>
 
               <label className="block">
-                <span className="text-sm text-slate-200">Role</span>
+                <span className="text-sm text-[#374151]">Role</span>
                 <select
                   value={inviteRole}
                   onChange={(event) =>
                     setInviteRole(event.target.value as MembershipRole)
                   }
-                  className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
+                  className="mt-2 w-full rounded-2xl border border-[#fb6a35]/12 bg-white px-4 py-3 text-sm text-[#111827] outline-none transition focus:border-[#fb6a35]/24"
                 >
                   {roleOptions.map((role) => (
                     <option key={role} value={role}>
@@ -526,26 +526,26 @@ export default function TeamPage() {
               </label>
 
               <label className="block">
-                <span className="text-sm text-slate-200">
+                <span className="text-sm text-[#374151]">
                   Password awal (opsional jika user sudah ada)
                 </span>
                 <input
                   type="password"
                   value={invitePassword}
                   onChange={(event) => setInvitePassword(event.target.value)}
-                  className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
+                  className="mt-2 w-full rounded-2xl border border-[#fb6a35]/12 bg-white px-4 py-3 text-sm text-[#111827] outline-none transition focus:border-[#fb6a35]/24"
                   placeholder="Minimal 8 karakter"
                 />
               </label>
 
               {submitError ? (
-                <p className="rounded-2xl border border-rose-300/15 bg-rose-400/10 px-4 py-3 text-sm text-rose-100 sm:col-span-2">
+                <p className="rounded-2xl border border-rose-300/18 bg-rose-50 px-4 py-3 text-sm text-rose-700 sm:col-span-2">
                   {submitError}
                 </p>
               ) : null}
 
               <div className="sm:col-span-2">
-                <div className="rounded-2xl border border-white/10 bg-slate-950/30 px-4 py-3 text-sm muted-text">
+                <div className="rounded-2xl border border-[#fb6a35]/8 bg-[#fff8f5] px-4 py-3 text-sm muted-text">
                   Seat aktif: {activeMembers}
                   {typeof memberLimit === "number" ? ` / ${memberLimit}` : ""}
                 </div>
@@ -555,7 +555,7 @@ export default function TeamPage() {
                 <button
                   type="submit"
                   disabled={isSubmitting || limitReached}
-                  className="rounded-full bg-sky-300 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-sky-200 disabled:cursor-not-allowed disabled:opacity-70"
+                  className="rounded-full border border-[#fb6a35]/35 bg-[#fb6a35] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#f85a21] disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {isSubmitting ? "Menyimpan..." : "Simpan Anggota"}
                 </button>
@@ -565,7 +565,7 @@ export default function TeamPage() {
                     setIsInviteOpen(false);
                     resetInviteForm();
                   }}
-                  className="rounded-full border border-white/12 px-6 py-3 text-sm font-medium text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100"
+                  className="rounded-full border border-[#fb6a35]/12 bg-white px-6 py-3 text-sm font-medium text-[#9a3412] transition hover:border-[#fb6a35]/24 hover:bg-[#fff5ef]"
                 >
                   Batal
                 </button>

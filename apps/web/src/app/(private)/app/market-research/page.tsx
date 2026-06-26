@@ -382,7 +382,7 @@ export default function MarketResearchPage() {
             type="button"
             onClick={() => void refresh()}
             disabled={!authorization || isLoading}
-            className="rounded-full border border-white/12 px-4 py-2.5 text-sm font-medium text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100 disabled:cursor-not-allowed disabled:opacity-70"
+            className="rounded-full border border-[#fb6a35]/12 bg-white px-4 py-2.5 text-sm font-medium text-[#9a3412] transition hover:border-[#fb6a35]/24 hover:bg-[#fff5ef] disabled:cursor-not-allowed disabled:opacity-70"
           >
             {isLoading ? "Memuat..." : "Refresh"}
           </button>
@@ -390,9 +390,9 @@ export default function MarketResearchPage() {
       />
 
       <section className="grid gap-4 lg:grid-cols-3">
-        <div className="glass-card rounded-[1.75rem] border border-white/10 p-6 sm:p-7">
-          <p className="text-sm text-sky-200/75">Total batch terlihat</p>
-          <p className="mt-3 text-3xl font-semibold text-white">
+        <div className="glass-card rounded-[1.75rem] border border-[#fb6a35]/8 p-6 sm:p-7">
+          <p className="text-sm text-[#9a3412]/75">Total batch terlihat</p>
+          <p className="mt-3 text-3xl font-semibold text-[#111827]">
             {batches.length}
           </p>
           <p className="mt-2 text-sm muted-text">
@@ -400,18 +400,18 @@ export default function MarketResearchPage() {
             dengan pagination per {PAGE_SIZE} batch.
           </p>
         </div>
-        <div className="glass-card rounded-[1.75rem] border border-white/10 p-6 sm:p-7">
-          <p className="text-sm text-sky-200/75">Batch sukses</p>
-          <p className="mt-3 text-3xl font-semibold text-white">
+        <div className="glass-card rounded-[1.75rem] border border-[#fb6a35]/8 p-6 sm:p-7">
+          <p className="text-sm text-[#9a3412]/75">Batch sukses</p>
+          <p className="mt-3 text-3xl font-semibold text-[#111827]">
             {batches.filter((batch) => batch.status === "ACCEPTED").length}
           </p>
           <p className="mt-2 text-sm muted-text">
             Batch yang diterima backend dan berhasil menyimpan raw payload awal.
           </p>
         </div>
-        <div className="glass-card rounded-[1.75rem] border border-white/10 p-6 sm:p-7">
-          <p className="text-sm text-sky-200/75">Batch gagal</p>
-          <p className="mt-3 text-3xl font-semibold text-white">
+        <div className="glass-card rounded-[1.75rem] border border-[#fb6a35]/8 p-6 sm:p-7">
+          <p className="text-sm text-[#9a3412]/75">Batch gagal</p>
+          <p className="mt-3 text-3xl font-semibold text-[#111827]">
             {batches.filter((batch) => batch.status === "FAILED").length}
           </p>
           <p className="mt-2 text-sm muted-text">
@@ -421,7 +421,7 @@ export default function MarketResearchPage() {
       </section>
 
       {error ? (
-        <p className="rounded-[1.75rem] border border-rose-300/15 bg-rose-400/10 px-6 py-4 text-sm text-rose-100">
+        <p className="rounded-[1.75rem] border border-rose-300/18 bg-rose-50 px-6 py-4 text-sm text-rose-700">
           {error}
         </p>
       ) : null}
@@ -434,10 +434,10 @@ export default function MarketResearchPage() {
         />
       ) : (
         <section className="space-y-4">
-          <div className="glass-card rounded-[1.75rem] border border-white/10 p-4 sm:p-5">
+          <div className="glass-card rounded-[1.75rem] border border-[#fb6a35]/8 p-4 sm:p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-sm text-sky-200/75">Navigasi batch</p>
+                <p className="text-sm text-[#9a3412]/75">Navigasi batch</p>
                 <p className="mt-2 text-sm muted-text">
                   Buka satu batch untuk melihat detail. Saat batch lain dibuka, batch
                   sebelumnya otomatis ditutup.
@@ -448,11 +448,11 @@ export default function MarketResearchPage() {
                   type="button"
                   onClick={() => setCurrentPage((previous) => Math.max(1, previous - 1))}
                   disabled={currentPage === 1}
-                  className="rounded-full border border-white/12 px-4 py-2 text-sm font-medium text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-full border border-[#fb6a35]/12 bg-white px-4 py-2 text-sm font-medium text-[#9a3412] transition hover:border-[#fb6a35]/24 hover:bg-[#fff5ef] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Sebelumnya
                 </button>
-                <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-100">
+                <span className="rounded-full border border-[#fb6a35]/10 bg-[#fff8f5] px-4 py-2 text-sm text-[#9a3412]">
                   Halaman {currentPage} / {totalPages}
                 </span>
                 <button
@@ -461,7 +461,7 @@ export default function MarketResearchPage() {
                     setCurrentPage((previous) => Math.min(totalPages, previous + 1))
                   }
                   disabled={currentPage === totalPages}
-                  className="rounded-full border border-white/12 px-4 py-2 text-sm font-medium text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-full border border-[#fb6a35]/12 bg-white px-4 py-2 text-sm font-medium text-[#9a3412] transition hover:border-[#fb6a35]/24 hover:bg-[#fff5ef] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Berikutnya
                 </button>
@@ -475,30 +475,30 @@ export default function MarketResearchPage() {
             return (
             <article
               key={batch.id}
-              className="glass-card rounded-[1.75rem] border border-white/10 p-6 sm:p-7"
+              className="glass-card rounded-[1.75rem] border border-[#fb6a35]/8 p-6 sm:p-7"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.28em] text-sky-200/65">
+                  <p className="text-xs uppercase tracking-[0.28em] text-[#9a3412]/70">
                     {batch.marketplace} • {formatCaptureMode(batch.captureMode)}
                   </p>
-                  <h2 className="mt-2 text-xl font-semibold text-white">
+                  <h2 className="mt-2 text-xl font-semibold text-[#111827]">
                     {formatPageType(batch.pageType)}
                   </h2>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <span className="rounded-full border border-white/12 px-3 py-1.5 text-xs text-slate-200">
+                    <span className="rounded-full border border-[#fb6a35]/12 bg-white px-3 py-1.5 text-xs text-[#9a3412]">
                       Batch ID: {batch.id}
                     </span>
-                    <span className="rounded-full border border-white/12 px-3 py-1.5 text-xs text-slate-200">
+                    <span className="rounded-full border border-[#fb6a35]/12 bg-white px-3 py-1.5 text-xs text-[#9a3412]">
                       Captured: {formatDateTime(batch.capturedAt)}
                     </span>
-                    <span className="rounded-full border border-white/12 px-3 py-1.5 text-xs text-slate-200">
+                    <span className="rounded-full border border-[#fb6a35]/12 bg-white px-3 py-1.5 text-xs text-[#9a3412]">
                       Session: {batch.extensionSession.deviceLabel}
                     </span>
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full border border-white/12 px-4 py-2 text-xs font-semibold tracking-wide text-slate-100">
+                  <span className="rounded-full border border-[#fb6a35]/12 bg-[#fff8f5] px-4 py-2 text-xs font-semibold tracking-wide text-[#9a3412]">
                     {formatBatchStatus(batch.status)}
                   </span>
                   <button
@@ -508,7 +508,7 @@ export default function MarketResearchPage() {
                         previous === batch.id ? null : batch.id,
                       )
                     }
-                    className="rounded-full border border-sky-300/20 bg-sky-400/10 px-4 py-2 text-sm font-medium text-sky-100 transition hover:border-sky-300/35 hover:bg-sky-400/15"
+                    className="rounded-full border border-[#fb6a35]/14 bg-[#fb6a35]/10 px-4 py-2 text-sm font-medium text-[#9a3412] transition hover:border-[#fb6a35]/24 hover:bg-[#fb6a35]/14"
                   >
                     {isExpanded ? "Tutup" : "Buka"}
                   </button>
@@ -523,9 +523,9 @@ export default function MarketResearchPage() {
               </div>
 
               <div className="mt-5 grid gap-3 md:grid-cols-4">
-                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
+                <div className="rounded-2xl border border-[#fb6a35]/8 bg-[#fff8f5] px-4 py-3 text-sm text-[#374151]">
                   Preview
-                  <div className="mt-2 text-base font-semibold text-white">
+                  <div className="mt-2 text-base font-semibold text-[#111827]">
                     {batch.preview?.type === "public_search"
                       ? "Riset Pencarian"
                       : batch.preview?.type === "public_product"
@@ -533,23 +533,23 @@ export default function MarketResearchPage() {
                         : "Belum ada preview"}
                   </div>
                 </div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
+                <div className="rounded-2xl border border-[#fb6a35]/8 bg-[#fff8f5] px-4 py-3 text-sm text-[#374151]">
                   Shop Context
-                  <div className="mt-2 text-base font-semibold text-white">
+                  <div className="mt-2 text-base font-semibold text-[#111827]">
                     {batch.captureMode === "public"
                       ? "Public Capture"
                       : batch.shop?.name || batch.shop?.externalId || "-"}
                   </div>
                 </div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
+                <div className="rounded-2xl border border-[#fb6a35]/8 bg-[#fff8f5] px-4 py-3 text-sm text-[#374151]">
                   Raw Payload
-                  <div className="mt-2 text-base font-semibold text-white">
+                  <div className="mt-2 text-base font-semibold text-[#111827]">
                     {formatSize(batch.rawPayloadObject?.sizeBytes)}
                   </div>
                 </div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
+                <div className="rounded-2xl border border-[#fb6a35]/8 bg-[#fff8f5] px-4 py-3 text-sm text-[#374151]">
                   Storage
-                  <div className="mt-2 line-clamp-1 text-sm font-semibold text-white">
+                  <div className="mt-2 line-clamp-1 text-sm font-semibold text-[#111827]">
                     {batch.rawPayloadObject?.storageKey ?? "-"}
                   </div>
                 </div>
@@ -558,27 +558,27 @@ export default function MarketResearchPage() {
               {isExpanded ? (
                 <>
               <div className="mt-6 grid gap-4 lg:grid-cols-2">
-                <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-sm text-sky-200/75">Waktu</p>
-                  <div className="mt-3 space-y-2 text-sm text-slate-100">
+                <div className="rounded-3xl border border-[#fb6a35]/8 bg-[#fff8f5] p-4">
+                  <p className="text-sm text-[#9a3412]/75">Waktu</p>
+                  <div className="mt-3 space-y-2 text-sm text-[#374151]">
                     <p>Captured: {formatDateTime(batch.capturedAt)}</p>
                     <p>Created: {formatDateTime(batch.createdAt)}</p>
                     <p>Processed: {formatDateTime(batch.processedAt)}</p>
                   </div>
                 </div>
 
-                <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-sm text-sky-200/75">Extension Session</p>
-                  <div className="mt-3 space-y-2 text-sm text-slate-100">
+                <div className="rounded-3xl border border-[#fb6a35]/8 bg-[#fff8f5] p-4">
+                  <p className="text-sm text-[#9a3412]/75">Extension Session</p>
+                  <div className="mt-3 space-y-2 text-sm text-[#374151]">
                     <p>Device: {batch.extensionSession.deviceLabel}</p>
                     <p>Version: {batch.extensionSession.extensionVersion}</p>
                     <p>Status: {batch.extensionSession.status}</p>
                   </div>
                 </div>
 
-                <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-sm text-sky-200/75">Shop Context</p>
-                  <div className="mt-3 space-y-2 text-sm text-slate-100">
+                <div className="rounded-3xl border border-[#fb6a35]/8 bg-[#fff8f5] p-4">
+                  <p className="text-sm text-[#9a3412]/75">Shop Context</p>
+                  <div className="mt-3 space-y-2 text-sm text-[#374151]">
                     <p>
                       Shop:{" "}
                       {batch.captureMode === "public"
@@ -600,9 +600,9 @@ export default function MarketResearchPage() {
                   </div>
                 </div>
 
-                <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-sm text-sky-200/75">Raw Payload</p>
-                  <div className="mt-3 space-y-2 text-sm text-slate-100">
+                <div className="rounded-3xl border border-[#fb6a35]/8 bg-[#fff8f5] p-4">
+                  <p className="text-sm text-[#9a3412]/75">Raw Payload</p>
+                  <div className="mt-3 space-y-2 text-sm text-[#374151]">
                     <p>Status: {batch.rawPayloadObject?.status ?? "-"}</p>
                     <p>Size: {formatSize(batch.rawPayloadObject?.sizeBytes)}</p>
                     <p>
@@ -614,20 +614,20 @@ export default function MarketResearchPage() {
               </div>
 
               {batch.preview?.type === "public_search" ? (
-                <div className="mt-4 rounded-[1.5rem] border border-sky-300/12 bg-slate-950/40 p-4 sm:p-5">
+                <div className="mt-4 rounded-[1.5rem] border border-[#fb6a35]/10 bg-[#fff8f5] p-4 sm:p-5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm text-sky-200/75">
+                      <p className="text-sm text-[#9a3412]/75">
                         Preview Riset Pencarian
                       </p>
-                      <h3 className="mt-2 text-lg font-semibold text-white">
+                      <h3 className="mt-2 text-lg font-semibold text-[#111827]">
                         {batch.preview.keyword || "Keyword belum terbaca"}
                       </h3>
                       <p className="mt-2 text-sm muted-text">
                         {batch.preview.pageTitle || "Judul halaman tidak tersedia"}
                       </p>
                     </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
+                    <div className="rounded-2xl border border-[#fb6a35]/8 bg-white px-4 py-3 text-sm text-[#374151]">
                       Top preview: {batch.preview.topResults.length} item
                       <br />
                       Result count: {batch.preview.resultCount}
@@ -635,21 +635,21 @@ export default function MarketResearchPage() {
                   </div>
 
                   <div className="mt-4 grid gap-3 md:grid-cols-3">
-                    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
+                    <div className="rounded-2xl border border-[#fb6a35]/8 bg-white px-4 py-3 text-sm text-[#374151]">
                       Produk dengan harga:
-                      <div className="mt-2 text-xl font-semibold text-white">
+                      <div className="mt-2 text-xl font-semibold text-[#111827]">
                         {countPreviewItemsWithPrice(batch.preview.topResults)}
                       </div>
                     </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
+                    <div className="rounded-2xl border border-[#fb6a35]/8 bg-white px-4 py-3 text-sm text-[#374151]">
                       Ada sinyal terjual:
-                      <div className="mt-2 text-xl font-semibold text-white">
+                      <div className="mt-2 text-xl font-semibold text-[#111827]">
                         {countPreviewItemsWithSales(batch.preview.topResults)}
                       </div>
                     </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
+                    <div className="rounded-2xl border border-[#fb6a35]/8 bg-white px-4 py-3 text-sm text-[#374151]">
                       Keyword:
-                      <div className="mt-2 text-base font-semibold text-white">
+                      <div className="mt-2 text-base font-semibold text-[#111827]">
                         {batch.preview.keyword || "-"}
                       </div>
                     </div>
@@ -659,7 +659,7 @@ export default function MarketResearchPage() {
                     {batch.preview.topResults.map((result, index) => (
                       <article
                         key={`${batch.id}-${result.productUrl ?? index}`}
-                        className="rounded-[1.25rem] border border-white/10 bg-white/5 p-3"
+                        className="rounded-[1.25rem] border border-[#fb6a35]/8 bg-white p-3"
                       >
                         {result.imageUrl ? (
                           <img
@@ -668,35 +668,35 @@ export default function MarketResearchPage() {
                             className="h-40 w-full rounded-2xl object-cover"
                           />
                         ) : (
-                          <div className="flex h-40 w-full items-center justify-center rounded-2xl border border-dashed border-white/10 bg-slate-900/50 text-xs text-slate-400">
+                          <div className="flex h-40 w-full items-center justify-center rounded-2xl border border-dashed border-[#fb6a35]/10 bg-[#fff5ef] text-xs text-[#9ca3af]">
                             Gambar belum tersedia
                           </div>
                         )}
-                        <p className="mt-3 text-xs uppercase tracking-[0.22em] text-sky-200/65">
+                        <p className="mt-3 text-xs uppercase tracking-[0.22em] text-[#9a3412]/65">
                           Urutan {result.position ?? index + 1}
                         </p>
-                        <h4 className="mt-2 line-clamp-2 text-sm font-medium text-white">
+                        <h4 className="mt-2 line-clamp-2 text-sm font-medium text-[#111827]">
                           {result.productTitle || "Judul produk belum terbaca"}
                         </h4>
-                        <p className="mt-2 text-sm text-slate-200">
+                        <p className="mt-2 text-sm text-[#374151]">
                           {formatPriceRange(result.priceMin, result.priceMax)}
                         </p>
                         <p className="mt-1 text-sm muted-text">
                           {result.shopName || "Toko belum terbaca"}
                         </p>
-                        <p className="mt-1 text-xs text-slate-400">
+                        <p className="mt-1 text-xs text-[#9ca3af]">
                           {result.salesHint || "Belum ada sinyal terjual"}
                         </p>
-                        <div className="mt-3 grid gap-2 text-xs text-slate-300">
+                        <div className="mt-3 grid gap-2 text-xs text-[#6b7280]">
                           <div className="flex items-center justify-between gap-3">
-                            <span className="text-slate-400">Terjual 30 Hari</span>
-                            <span className="font-medium text-slate-100">
+                            <span className="text-[#9ca3af]">Terjual 30 Hari</span>
+                            <span className="font-medium text-[#111827]">
                               {formatPcs(result.sold30d)}
                             </span>
                           </div>
                           <div className="flex items-center justify-between gap-3">
-                            <span className="text-slate-400">Rating / Ulasan</span>
-                            <span className="font-medium text-slate-100">
+                            <span className="text-[#9ca3af]">Rating / Ulasan</span>
+                            <span className="font-medium text-[#111827]">
                               {typeof result.ratingStar === "number" &&
                               Number.isFinite(result.ratingStar) &&
                               typeof result.reviewCount === "number" &&
@@ -708,14 +708,14 @@ export default function MarketResearchPage() {
                             </span>
                           </div>
                           <div className="flex items-center justify-between gap-3">
-                            <span className="text-slate-400">Umur Listing</span>
-                            <span className="font-medium text-slate-100">
+                            <span className="text-[#9ca3af]">Umur Listing</span>
+                            <span className="font-medium text-[#111827]">
                               {formatListingAgeFromCtime(result.listingCtime)}
                             </span>
                           </div>
                           <div className="flex items-center justify-between gap-3">
-                            <span className="text-slate-400">Omset Kotor</span>
-                            <span className="font-medium text-slate-100">
+                            <span className="text-[#9ca3af]">Omset Kotor</span>
+                            <span className="font-medium text-[#111827]">
                               {formatCurrency(result.revenue30dEstimate)}
                             </span>
                           </div>
@@ -725,7 +725,7 @@ export default function MarketResearchPage() {
                             href={result.productUrl}
                             target="_blank"
                             rel="noreferrer"
-                            className="mt-3 inline-flex rounded-full border border-sky-300/15 bg-sky-400/10 px-3 py-1.5 text-xs font-medium text-sky-100 transition hover:border-sky-300/35 hover:bg-sky-400/15"
+                            className="mt-3 inline-flex rounded-full border border-[#fb6a35]/14 bg-[#fb6a35]/10 px-3 py-1.5 text-xs font-medium text-[#9a3412] transition hover:border-[#fb6a35]/24 hover:bg-[#fb6a35]/14"
                           >
                             Buka Produk
                           </a>
@@ -737,10 +737,10 @@ export default function MarketResearchPage() {
               ) : null}
 
               {batch.preview?.type === "public_product" ? (
-                <div className="mt-4 rounded-[1.5rem] border border-sky-300/12 bg-slate-950/40 p-4 sm:p-5">
+                <div className="mt-4 rounded-[1.5rem] border border-[#fb6a35]/10 bg-[#fff8f5] p-4 sm:p-5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm text-sky-200/75">
+                      <p className="text-sm text-[#9a3412]/75">
                         Preview Detail Produk
                       </p>
                       <p className="mt-2 text-sm muted-text">
@@ -752,7 +752,7 @@ export default function MarketResearchPage() {
                         href={batch.preview.product.productUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex rounded-full border border-sky-300/15 bg-sky-400/10 px-4 py-2 text-sm font-medium text-sky-100 transition hover:border-sky-300/35 hover:bg-sky-400/15"
+                        className="inline-flex rounded-full border border-[#fb6a35]/14 bg-[#fb6a35]/10 px-4 py-2 text-sm font-medium text-[#9a3412] transition hover:border-[#fb6a35]/24 hover:bg-[#fb6a35]/14"
                       >
                         Buka Produk Asli
                       </a>
@@ -767,13 +767,13 @@ export default function MarketResearchPage() {
                           className="h-56 w-full rounded-[1.25rem] object-cover"
                         />
                       ) : (
-                        <div className="flex h-56 w-full items-center justify-center rounded-[1.25rem] border border-dashed border-white/10 bg-slate-900/50 text-xs text-slate-400">
+                        <div className="flex h-56 w-full items-center justify-center rounded-[1.25rem] border border-dashed border-[#fb6a35]/10 bg-[#fff5ef] text-xs text-[#9ca3af]">
                           Gambar produk belum tersedia
                         </div>
                       )}
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold text-white">
+                      <h3 className="text-lg font-semibold text-[#111827]">
                         {batch.preview.product?.productTitle ||
                           batch.preview.pageTitle ||
                           "Detail produk belum terbaca"}
@@ -782,27 +782,27 @@ export default function MarketResearchPage() {
                         {batch.preview.product?.shopName || "Toko belum terbaca"}
                       </p>
                       <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                        <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
+                        <div className="rounded-2xl border border-[#fb6a35]/8 bg-white px-4 py-3 text-sm text-[#374151]">
                           Harga
-                          <div className="mt-2 text-base font-semibold text-white">
+                          <div className="mt-2 text-base font-semibold text-[#111827]">
                             {formatPriceRange(
                               batch.preview.product?.priceMin,
                               batch.preview.product?.priceMax,
                             )}
                           </div>
                         </div>
-                        <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
+                        <div className="rounded-2xl border border-[#fb6a35]/8 bg-white px-4 py-3 text-sm text-[#374151]">
                           Terjual 30 Hari
-                          <div className="mt-2 text-base font-semibold text-white">
+                          <div className="mt-2 text-base font-semibold text-[#111827]">
                             {formatPcs(batch.preview.product?.sold30d)}
                           </div>
-                          <div className="mt-1 text-xs text-slate-400">
+                          <div className="mt-1 text-xs text-[#9ca3af]">
                             {batch.preview.product?.salesHint || "-"}
                           </div>
                         </div>
-                        <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
+                        <div className="rounded-2xl border border-[#fb6a35]/8 bg-white px-4 py-3 text-sm text-[#374151]">
                           Rating / Ulasan
-                          <div className="mt-2 text-base font-semibold text-white">
+                          <div className="mt-2 text-base font-semibold text-[#111827]">
                             {typeof batch.preview.product?.ratingStar === "number" &&
                             Number.isFinite(batch.preview.product.ratingStar) &&
                             typeof batch.preview.product?.reviewCount === "number" &&
@@ -812,13 +812,13 @@ export default function MarketResearchPage() {
                                 )}`
                               : batch.preview.product?.ratingHint || "-"}
                           </div>
-                          <div className="mt-1 text-xs text-slate-400">
+                          <div className="mt-1 text-xs text-[#9ca3af]">
                             {batch.preview.product?.reviewCountHint || "-"}
                           </div>
                         </div>
-                        <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
+                        <div className="rounded-2xl border border-[#fb6a35]/8 bg-white px-4 py-3 text-sm text-[#374151]">
                           Umur Listing
-                          <div className="mt-2 text-base font-semibold text-white">
+                          <div className="mt-2 text-base font-semibold text-[#111827]">
                             {formatListingAgeFromCtime(
                               batch.preview.product?.listingCtime,
                             ) !== "-"
@@ -828,36 +828,36 @@ export default function MarketResearchPage() {
                               : batch.preview.product?.listingAgeHint || "-"}
                           </div>
                         </div>
-                        <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100">
+                        <div className="rounded-2xl border border-[#fb6a35]/8 bg-white px-4 py-3 text-sm text-[#374151]">
                           Omset Kotor (30 Hari)
-                          <div className="mt-2 text-base font-semibold text-white">
+                          <div className="mt-2 text-base font-semibold text-[#111827]">
                             {formatCurrency(batch.preview.product?.revenue30dEstimate)}
                           </div>
-                          <div className="mt-1 text-xs text-slate-400">
+                          <div className="mt-1 text-xs text-[#9ca3af]">
                             {batch.preview.product?.monthlyRevenueHint || "-"}
                           </div>
                         </div>
                       </div>
                       <div className="mt-4 grid gap-3 md:grid-cols-3">
-                        <div className="rounded-2xl border border-emerald-300/12 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-50">
+                        <div className="rounded-2xl border border-emerald-300/18 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
                           Estimasi 7 hari
-                          <div className="mt-2 text-base font-semibold text-white">
+                          <div className="mt-2 text-base font-semibold text-emerald-900">
                             {formatUnits(
                               batch.preview.salesHistory?.estimatedSold7d,
                             )}
                           </div>
                         </div>
-                        <div className="rounded-2xl border border-emerald-300/12 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-50">
+                        <div className="rounded-2xl border border-emerald-300/18 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
                           Estimasi 15 hari
-                          <div className="mt-2 text-base font-semibold text-white">
+                          <div className="mt-2 text-base font-semibold text-emerald-900">
                             {formatUnits(
                               batch.preview.salesHistory?.estimatedSold15d,
                             )}
                           </div>
                         </div>
-                        <div className="rounded-2xl border border-emerald-300/12 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-50">
+                        <div className="rounded-2xl border border-emerald-300/18 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
                           Estimasi 30 hari
-                          <div className="mt-2 text-base font-semibold text-white">
+                          <div className="mt-2 text-base font-semibold text-emerald-900">
                             {formatUnits(
                               batch.preview.salesHistory?.estimatedSold30d,
                             )}
@@ -869,7 +869,7 @@ export default function MarketResearchPage() {
                           {batch.preview.highlights.map((highlight) => (
                             <span
                               key={`${batch.id}-${highlight}`}
-                              className="rounded-full border border-sky-300/12 bg-white/5 px-3 py-1.5 text-xs text-sky-100"
+                              className="rounded-full border border-[#fb6a35]/12 bg-white px-3 py-1.5 text-xs text-[#9a3412]"
                             >
                               {highlight}
                             </span>
@@ -882,13 +882,13 @@ export default function MarketResearchPage() {
               ) : null}
 
               {batch.errorCode || batch.errorMessage ? (
-                <p className="mt-4 rounded-2xl border border-rose-300/15 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+                <p className="mt-4 rounded-2xl border border-rose-300/18 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                   {batch.errorCode ? `${batch.errorCode}: ` : ""}
                   {batch.errorMessage ?? "Batch gagal diproses."}
                 </p>
               ) : null}
 
-              <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-slate-100">
+              <div className="mt-4 rounded-2xl border border-[#fb6a35]/8 bg-[#fff8f5] px-4 py-3 text-sm text-[#374151]">
                 <p>Payload schema: {batch.payloadSchemaVersion}</p>
                 <p className="mt-2 break-all muted-text">
                   Storage key: {batch.rawPayloadObject?.storageKey ?? "-"}
@@ -897,7 +897,7 @@ export default function MarketResearchPage() {
                 </>
               ) : (
                 <p className="mt-4 text-sm muted-text">
-                  Klik <span className="text-slate-100">Buka</span> untuk melihat waktu
+                  Klik <span className="text-[#111827]">Buka</span> untuk melihat waktu
                   capture, extension session, shop context, raw payload, preview hasil,
                   dan detail error batch ini.
                 </p>
@@ -915,8 +915,8 @@ export default function MarketResearchPage() {
                   onClick={() => setCurrentPage(page)}
                   className={`rounded-full px-4 py-2 text-sm font-medium transition ${
                     page === currentPage
-                      ? "bg-sky-400 text-slate-950"
-                      : "border border-white/12 text-slate-100 hover:border-sky-300/35 hover:text-sky-100"
+                      ? "border border-[#fb6a35]/35 bg-[#fb6a35] text-white"
+                      : "border border-[#fb6a35]/12 bg-white text-[#9a3412] hover:border-[#fb6a35]/24 hover:bg-[#fff5ef]"
                   }`}
                 >
                   {page}
@@ -928,28 +928,28 @@ export default function MarketResearchPage() {
       )}
 
       {deleteTarget ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-8 backdrop-blur-sm">
-          <div className="w-full max-w-xl rounded-[2rem] border border-white/10 bg-slate-950/95 p-6 shadow-2xl shadow-slate-950/40 sm:p-7">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(17,24,39,0.34)] px-4 py-8 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-[2rem] border border-[#fb6a35]/10 bg-[#fffaf8] p-6 shadow-2xl shadow-[#fb6a35]/10 sm:p-7">
             <p className="text-xs uppercase tracking-[0.28em] text-rose-200/70">
               Hapus Market Research
             </p>
-            <h2 className="mt-3 text-2xl font-semibold text-white">
+            <h2 className="mt-3 text-2xl font-semibold text-[#111827]">
               Yakin ingin menghapus batch ini?
             </h2>
             <p className="mt-3 text-sm leading-7 muted-text">
               Data market research yang dihapus tidak bisa dikembalikan. Raw payload
               terkait batch ini juga akan ikut dibersihkan.
             </p>
-            <div className="mt-5 rounded-[1.5rem] border border-white/10 bg-white/5 p-4 text-sm text-slate-100">
+            <div className="mt-5 rounded-[1.5rem] border border-[#fb6a35]/8 bg-[#fff8f5] p-4 text-sm text-[#374151]">
               <p>
-                <span className="text-slate-400">Batch ID:</span> {deleteTarget.id}
+                <span className="text-[#9ca3af]">Batch ID:</span> {deleteTarget.id}
               </p>
               <p className="mt-2">
-                <span className="text-slate-400">Tipe halaman:</span>{" "}
+                <span className="text-[#9ca3af]">Tipe halaman:</span>{" "}
                 {formatPageType(deleteTarget.pageType)}
               </p>
               <p className="mt-2">
-                <span className="text-slate-400">Captured:</span>{" "}
+                <span className="text-[#9ca3af]">Captured:</span>{" "}
                 {formatDateTime(deleteTarget.capturedAt)}
               </p>
             </div>
@@ -958,7 +958,7 @@ export default function MarketResearchPage() {
                 type="button"
                 onClick={() => setDeleteTarget(null)}
                 disabled={isDeleting}
-                className="rounded-full border border-white/12 px-4 py-2.5 text-sm font-medium text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-full border border-[#fb6a35]/12 bg-white px-4 py-2.5 text-sm font-medium text-[#9a3412] transition hover:border-[#fb6a35]/24 hover:bg-[#fff5ef] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Batal
               </button>

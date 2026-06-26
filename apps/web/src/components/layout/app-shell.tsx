@@ -101,11 +101,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (!isReady || (!session && isReady)) {
     return (
       <main className="mx-auto flex min-h-screen w-full max-w-5xl items-center justify-center px-6 py-10">
-        <div className="glass-card w-full max-w-xl rounded-[2rem] border border-white/14 p-8 text-center">
-          <p className="text-[11px] uppercase tracking-[0.24em] text-sky-100/70">
+        <div className="glass-card w-full max-w-xl rounded-[2rem] border border-[#fb6a35]/8 p-8 text-center">
+          <p className="text-[11px] uppercase tracking-[0.24em] text-[#9a3412]/75">
             Memuat Workspace
           </p>
-          <h1 className="mt-3 text-2xl font-semibold text-white">
+          <h1 className="mt-3 text-2xl font-semibold text-[#111827]">
             Menyiapkan ruang kerja Anda.
           </h1>
           <p className="mt-2.5 text-sm leading-6 muted-text">
@@ -144,15 +144,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   const internalItems = visibleItems.filter((item) => item.internalRoles?.length);
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(186,230,253,0.16),_transparent_24%),radial-gradient(circle_at_top_right,_rgba(191,219,254,0.12),_transparent_18%),linear-gradient(180deg,_rgba(25,49,78,0.98)_0%,_rgba(40,72,108,1)_100%)]">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(251,106,53,0.10),_transparent_24%),radial-gradient(circle_at_top_right,_rgba(251,191,36,0.08),_transparent_18%),linear-gradient(180deg,_rgba(255,247,243,0.92)_0%,_rgba(255,250,248,0.96)_52%,_rgba(255,244,238,1)_100%)]">
       <div className="mx-auto grid min-h-screen w-full max-w-[1560px] gap-5 px-4 py-4 lg:grid-cols-[270px_minmax(0,1fr)] lg:px-5 lg:py-5">
-        <aside className="glass-card rounded-[1.8rem] border border-white/14 p-4 lg:sticky lg:top-5 lg:flex lg:h-[calc(100vh-2.5rem)] lg:flex-col lg:overflow-hidden">
-          <div className="shrink-0 rounded-[1.35rem] border border-white/14 bg-white/8 p-4">
+        <aside className="glass-card rounded-[1.8rem] border border-[#fb6a35]/8 p-4 lg:sticky lg:top-5 lg:flex lg:h-[calc(100vh-2.5rem)] lg:flex-col lg:overflow-hidden">
+          <div className="shrink-0 rounded-[1.35rem] border border-[#fb6a35]/8 bg-[#fff8f5] p-4">
             <div className="flex items-center gap-3">
               <span className="status-dot" />
               <div>
-                <p className="text-base font-semibold text-white">LevelUP adsPRO</p>
-                <p className="mt-1 text-sm text-sky-100/75">
+                <p className="text-base font-semibold text-[#111827]">LevelUP adsPRO</p>
+                <p className="mt-1 text-sm text-[#9a3412]/75">
                   Grow Higher, Achieve More
                 </p>
               </div>
@@ -173,8 +173,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                     href={item.href}
                     className={`block rounded-2xl px-4 py-2.5 text-sm font-medium transition ${
                       isActive
-                        ? "border border-sky-200/35 bg-sky-200/15 text-white"
-                        : "border border-transparent bg-transparent text-slate-100/90 hover:border-white/12 hover:bg-white/8"
+                        ? "border border-[#fb6a35]/16 bg-[#fb6a35]/10 text-[#9a3412]"
+                        : "border border-transparent bg-transparent text-[#4b5563] hover:border-[#fb6a35]/8 hover:bg-[#fff8f5]"
                     }`}
                   >
                     {item.label}
@@ -184,8 +184,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             </nav>
 
             {internalItems.length ? (
-              <div className="mt-6 border-t border-white/12 pt-4">
-                <p className="px-3 text-[11px] uppercase tracking-[0.2em] text-sky-100/70">
+              <div className="mt-6 border-t border-[#fb6a35]/8 pt-4">
+                <p className="px-3 text-[11px] uppercase tracking-[0.2em] text-[#9a3412]/70">
                   Internal
                 </p>
                 <nav className="mt-3 space-y-1.5">
@@ -199,8 +199,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                         href={item.href}
                         className={`block rounded-2xl px-4 py-2.5 text-sm font-medium transition ${
                           isActive
-                            ? "border border-sky-200/35 bg-sky-200/15 text-white"
-                            : "border border-transparent bg-transparent text-slate-100/90 hover:border-white/12 hover:bg-white/8"
+                            ? "border border-[#fb6a35]/16 bg-[#fb6a35]/10 text-[#9a3412]"
+                            : "border border-transparent bg-transparent text-[#4b5563] hover:border-[#fb6a35]/8 hover:bg-[#fff8f5]"
                         }`}
                       >
                         {item.label}
@@ -212,11 +212,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             ) : null}
           </div>
 
-          <div className="mt-5 shrink-0 rounded-[1.35rem] border border-white/14 bg-white/7 p-4">
-            <p className="text-[11px] uppercase tracking-[0.2em] text-sky-100/70">
+          <div className="mt-5 shrink-0 rounded-[1.35rem] border border-[#fb6a35]/8 bg-[#fff8f5] p-4">
+            <p className="text-[11px] uppercase tracking-[0.2em] text-[#9a3412]/70">
               User
             </p>
-            <p className="mt-2 text-sm font-medium text-white">
+            <p className="mt-2 text-sm font-medium text-[#111827]">
               {activeSession.user.name}
             </p>
             <p className="mt-1 text-sm muted-text">{activeSession.user.email}</p>
@@ -226,7 +226,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 clearSession();
                 router.replace("/login");
               }}
-              className="mt-4 w-full rounded-full border border-white/16 bg-white/6 px-4 py-2.5 text-sm font-medium text-slate-50 transition hover:border-sky-200/55 hover:bg-white/10 hover:text-white"
+              className="mt-4 w-full rounded-full border border-[#fb6a35]/12 bg-white px-4 py-2.5 text-sm font-medium text-[#9a3412] transition hover:border-[#fb6a35]/24 hover:bg-[#fff5ef]"
             >
               Keluar
             </button>
@@ -234,13 +234,13 @@ export function AppShell({ children }: { children: ReactNode }) {
         </aside>
 
         <div className="flex min-h-screen flex-col gap-6">
-          <section className="glass-card rounded-[1.8rem] border border-white/14 px-5 py-4 sm:px-6">
+          <section className="glass-card rounded-[1.8rem] border border-[#fb6a35]/8 px-5 py-4 sm:px-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <p className="text-[11px] uppercase tracking-[0.24em] text-sky-100/70">
+                <p className="text-[11px] uppercase tracking-[0.24em] text-[#9a3412]/70">
                   Workspace Aktif
                 </p>
-                <h2 className="mt-2 text-xl font-semibold tracking-tight text-white sm:text-2xl">
+                <h2 className="mt-2 text-xl font-semibold tracking-tight text-[#111827] sm:text-2xl">
                   {activeOrganization.name}
                 </h2>
                 <p className="mt-2 text-sm muted-text">
@@ -259,7 +259,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                       void switchOrganization(event.target.value);
                     }}
                     disabled={isSwitchingOrganization}
-                    className="min-w-[180px] rounded-full border border-white/12 bg-slate-950/45 px-4 py-2.5 text-sm text-white outline-none transition focus:border-sky-300/35 disabled:cursor-not-allowed disabled:opacity-70"
+                    className="min-w-[180px] rounded-full border border-[#fb6a35]/12 bg-white px-4 py-2.5 text-sm text-[#111827] outline-none transition focus:border-[#fb6a35]/24 disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     {organizations.map((organization) => (
                       <option key={organization.id} value={organization.id}>
@@ -274,13 +274,13 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <button
                   type="button"
                   onClick={() => void refreshProfile()}
-                  className="rounded-full border border-white/16 bg-white/6 px-4 py-2.5 text-sm font-medium text-slate-50 transition hover:border-sky-200/55 hover:bg-white/10 hover:text-white"
+                  className="rounded-full border border-[#fb6a35]/12 bg-white px-4 py-2.5 text-sm font-medium text-[#9a3412] transition hover:border-[#fb6a35]/24 hover:bg-[#fff5ef]"
                 >
                   {isRefreshingProfile ? "Memuat ulang..." : "Muat Ulang Data"}
                 </button>
                 <Link
                   href="/"
-                  className="rounded-full bg-sky-300 px-4 py-2.5 text-sm font-medium text-slate-950 transition hover:bg-sky-200"
+                  className="rounded-full border border-[#fb6a35]/35 bg-[#fb6a35] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#f85a21]"
                 >
                   Buka Beranda
                 </Link>

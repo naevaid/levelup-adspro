@@ -24,7 +24,7 @@ export function ModulePlaceholder({
         actions={
           <Link
             href="/app/dashboard"
-            className="rounded-full border border-white/12 px-4 py-2.5 text-sm font-medium text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100"
+            className="rounded-full border border-[#fb6a35]/12 bg-white px-4 py-2.5 text-sm font-medium text-[#9a3412] transition hover:border-[#fb6a35]/24 hover:bg-[#fff5ef]"
           >
             Kembali ke Dashboard
           </Link>

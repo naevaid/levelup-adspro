@@ -165,15 +165,15 @@ export default function ShopsPage() {
             type="button"
             onClick={() => void refresh()}
             disabled={!authorization || isLoading}
-            className="rounded-full border border-white/12 px-4 py-2.5 text-sm font-medium text-slate-100 transition hover:border-sky-300/35 hover:text-sky-100 disabled:cursor-not-allowed disabled:opacity-70"
+            className="rounded-full border border-[#fb6a35]/12 bg-white px-4 py-2.5 text-sm font-medium text-[#9a3412] transition hover:border-[#fb6a35]/24 hover:bg-[#fff5ef] disabled:cursor-not-allowed disabled:opacity-70"
           >
             {isLoading ? "Memuat..." : "Refresh"}
           </button>
         }
       />
 
-      <section className="glass-card rounded-[1.75rem] border border-white/10 p-6 sm:p-7">
-        <h2 className="text-lg font-semibold text-white">Tambah Shop</h2>
+      <section className="glass-card rounded-[1.75rem] border border-[#fb6a35]/8 p-6 sm:p-7">
+        <h2 className="text-lg font-semibold text-[#111827]">Tambah Shop</h2>
         <p className="mt-2 text-sm leading-7 muted-text">
           Shop ditautkan ke marketplace master. External identifier ini nanti akan
           dipakai untuk connection/ingestion di sprint berikutnya.
@@ -181,12 +181,12 @@ export default function ShopsPage() {
 
         <form onSubmit={handleSubmit} className="mt-6 grid gap-4 lg:grid-cols-3">
           <label className="block">
-            <span className="text-sm text-slate-200">Marketplace</span>
+            <span className="text-sm text-[#374151]">Marketplace</span>
             <select
               required
               value={marketplaceId}
               onChange={(event) => setMarketplaceId(event.target.value)}
-              className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
+              className="mt-2 w-full rounded-2xl border border-[#fb6a35]/12 bg-white px-4 py-3 text-sm text-[#111827] outline-none transition focus:border-[#fb6a35]/24"
             >
               {marketplaces.length === 0 ? (
                 <option value="">Belum ada marketplace</option>
@@ -200,30 +200,30 @@ export default function ShopsPage() {
           </label>
 
           <label className="block">
-            <span className="text-sm text-slate-200">External Identifier</span>
+            <span className="text-sm text-[#374151]">External Identifier</span>
             <input
               type="text"
               required
               value={externalId}
               onChange={(event) => setExternalId(event.target.value)}
-              className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
+              className="mt-2 w-full rounded-2xl border border-[#fb6a35]/12 bg-white px-4 py-3 text-sm text-[#111827] outline-none transition focus:border-[#fb6a35]/24"
               placeholder="Contoh: username / shop_id"
             />
           </label>
 
           <label className="block">
-            <span className="text-sm text-slate-200">Nama (opsional)</span>
+            <span className="text-sm text-[#374151]">Nama (opsional)</span>
             <input
               type="text"
               value={shopName}
               onChange={(event) => setShopName(event.target.value)}
-              className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40"
+              className="mt-2 w-full rounded-2xl border border-[#fb6a35]/12 bg-white px-4 py-3 text-sm text-[#111827] outline-none transition focus:border-[#fb6a35]/24"
               placeholder="Misal: Shop Utama"
             />
           </label>
 
           {submitError ? (
-            <p className="rounded-2xl border border-rose-300/15 bg-rose-400/10 px-4 py-3 text-sm text-rose-100 lg:col-span-3">
+            <p className="rounded-2xl border border-rose-300/18 bg-rose-50 px-4 py-3 text-sm text-rose-700 lg:col-span-3">
               {submitError}
             </p>
           ) : null}
@@ -232,7 +232,7 @@ export default function ShopsPage() {
             <button
               type="submit"
               disabled={!authorization || isSubmitting}
-              className="rounded-full bg-sky-400 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-sky-300 disabled:cursor-not-allowed disabled:opacity-70"
+              className="rounded-full border border-[#fb6a35]/35 bg-[#fb6a35] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#f85a21] disabled:cursor-not-allowed disabled:opacity-70"
             >
               {isSubmitting ? "Menyimpan..." : "Simpan Shop"}
             </button>
@@ -241,7 +241,7 @@ export default function ShopsPage() {
       </section>
 
       {error ? (
-        <p className="rounded-[1.75rem] border border-rose-300/15 bg-rose-400/10 px-6 py-4 text-sm text-rose-100">
+        <p className="rounded-[1.75rem] border border-rose-300/18 bg-rose-50 px-6 py-4 text-sm text-rose-700">
           {error}
         </p>
       ) : null}
@@ -257,28 +257,28 @@ export default function ShopsPage() {
           {shops.map((shop) => (
             <div
               key={shop.id}
-              className="glass-card rounded-[1.75rem] border border-white/10 p-6 sm:p-7"
+              className="glass-card rounded-[1.75rem] border border-[#fb6a35]/8 p-6 sm:p-7"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.28em] text-sky-200/65">
+                  <p className="text-xs uppercase tracking-[0.28em] text-[#9a3412]/70">
                     {shop.marketplace.name}
                   </p>
-                  <h3 className="mt-2 text-xl font-semibold text-white">
+                  <h3 className="mt-2 text-xl font-semibold text-[#111827]">
                     {shop.name || shop.externalId}
                   </h3>
                   <p className="mt-2 text-sm muted-text">
                     External ID: {shop.externalId}
                   </p>
                 </div>
-                <span className="rounded-full border border-white/12 px-4 py-2 text-xs font-semibold tracking-wide text-slate-100">
+                <span className="rounded-full border border-[#fb6a35]/12 bg-[#fff8f5] px-4 py-2 text-xs font-semibold tracking-wide text-[#9a3412]">
                   {shop.status}
                 </span>
               </div>
 
-              <div className="mt-6 grid gap-4 rounded-3xl border border-white/10 bg-slate-950/35 p-4 sm:grid-cols-2">
+              <div className="mt-6 grid gap-4 rounded-3xl border border-[#fb6a35]/8 bg-[#fff8f5] p-4 sm:grid-cols-2">
                 <label className="block">
-                  <span className="text-xs font-semibold tracking-wide text-slate-200">
+                  <span className="text-xs font-semibold tracking-wide text-[#9a3412]/75">
                     Default Jenis Toko (ROAS)
                   </span>
                   <select
@@ -292,7 +292,7 @@ export default function ShopsPage() {
                       })
                     }
                     disabled={!authorization || updatingShopId === shop.id}
-                    className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-sm text-white outline-none transition focus:border-sky-300/40 disabled:cursor-not-allowed disabled:opacity-70"
+                    className="mt-2 w-full rounded-2xl border border-[#fb6a35]/12 bg-white px-4 py-3 text-sm text-[#111827] outline-none transition focus:border-[#fb6a35]/24 disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     <option value="non_star">Non-Star</option>
                     <option value="star">Star/Star+</option>
@@ -300,9 +300,9 @@ export default function ShopsPage() {
                   </select>
                 </label>
 
-                <div className="flex items-end justify-between gap-4 rounded-2xl border border-white/10 bg-slate-950/25 px-4 py-3">
+                <div className="flex items-end justify-between gap-4 rounded-2xl border border-[#fb6a35]/8 bg-white px-4 py-3">
                   <div>
-                    <p className="text-xs font-semibold tracking-wide text-slate-200">
+                    <p className="text-xs font-semibold tracking-wide text-[#9a3412]/75">
                       Promo Xtra (ROAS)
                     </p>
                     <p className="mt-1 text-xs muted-text">
@@ -320,12 +320,12 @@ export default function ShopsPage() {
                     className={`h-9 w-16 rounded-full border transition disabled:cursor-not-allowed disabled:opacity-70 ${
                       shop.roasDefaults?.promoXtraEnabled
                         ? "border-emerald-300/30 bg-emerald-400/20"
-                        : "border-white/12 bg-slate-900/45"
+                        : "border-[#fb6a35]/12 bg-[#fff5ef]"
                     }`}
                     aria-label="Toggle Promo Xtra"
                   >
                     <span
-                      className={`block h-7 w-7 translate-x-1 rounded-full bg-white/85 shadow transition ${
+                      className={`block h-7 w-7 translate-x-1 rounded-full bg-white shadow transition ${
                         shop.roasDefaults?.promoXtraEnabled ? "translate-x-8" : ""
                       }`}
                     />
