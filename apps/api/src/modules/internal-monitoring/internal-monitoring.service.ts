@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
-import { IngestionBatchStatus, MembershipRole } from '@prisma/client';
+import { IngestionBatchStatus, InternalUserRole } from '@prisma/client';
 import { AppService } from '../../app.service';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -8,12 +8,6 @@ const RECENT_WINDOW_HOURS = 24;
 const INGESTION_FAILURE_SPIKE_COUNT_THRESHOLD = 5;
 const INGESTION_FAILURE_SPIKE_RATIO_THRESHOLD = 0.2;
 const WORKER_STOPPED_RISK_MINUTES = 20;
-const MONITORING_ALLOWED_ROLES = new Set<MembershipRole>([
-  MembershipRole.OWNER,
-  MembershipRole.MANAGER,
-  MembershipRole.AGENCY_ADMIN,
-]);
-
 type MonitoringAlert = {
   code: 'api_failure' | 'ingestion_failure_spike' | 'worker_stopped_risk';
   severity: 'critical' | 'warning';
@@ -38,10 +32,10 @@ export class InternalMonitoringService {
     private readonly appService: AppService,
   ) {}
 
-  assertAccess(role: MembershipRole) {
-    if (!MONITORING_ALLOWED_ROLES.has(role)) {
+  assertAccess(internalRole: InternalUserRole | null) {
+    if (internalRole !== InternalUserRole.PLATFORM_ADMIN) {
       throw new ForbiddenException(
-        'Akses monitoring internal hanya untuk owner atau manager organization.',
+        'Akses monitoring internal hanya untuk internal platform admin.',
       );
     }
   }

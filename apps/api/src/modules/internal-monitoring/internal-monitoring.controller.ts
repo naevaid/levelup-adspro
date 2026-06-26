@@ -1,5 +1,4 @@
 import { Controller, Get, Req, UseGuards } from '@nestjs/common';
-import { MembershipRole } from '@prisma/client';
 import type { AuthenticatedRequest } from '../auth/authenticated-request';
 import { SessionAuthGuard } from '../auth/session-auth.guard';
 import { InternalMonitoringService } from './internal-monitoring.service';
@@ -13,9 +12,7 @@ export class InternalMonitoringController {
   @UseGuards(SessionAuthGuard)
   @Get('summary')
   getSummary(@Req() request: AuthenticatedRequest) {
-    this.internalMonitoringService.assertAccess(
-      request.auth.membership.role as MembershipRole,
-    );
+    this.internalMonitoringService.assertAccess(request.auth.user.internalRole);
 
     return this.internalMonitoringService.getOrganizationMonitoringSummary(
       request.auth.organization.id,

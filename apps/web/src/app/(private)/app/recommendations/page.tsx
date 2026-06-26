@@ -4,8 +4,8 @@ export default function RecommendationsPage() {
   return (
     <ModulePlaceholder
       eyebrow="Recommendations"
-      title="Daftar prioritas aksi tenant"
-      description="Recommendations adalah menu diferensiasi utama produk, jadi placeholder ini sudah dipasang di sidebar sejak wave 1."
+      title="Coming soon"
+      description="Halaman Recommendations disiapkan sebagai slot pengembangan berikutnya. Untuk saat ini insight dan arahan utama sudah cukup ditampilkan di area dashboard yang ada."
       primaryCtaLabel="Kembali ke dashboard"
     />
   );

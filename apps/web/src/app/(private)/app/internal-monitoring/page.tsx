@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { EmptyStatePanel } from "@/components/shared/empty-state-panel";
 import { useAuth } from "@/features/auth/auth-provider";
-import type { MembershipRole } from "@/features/auth/types";
 import { apiFetch } from "@/lib/api";
 
 type MonitoringAlert = {
@@ -122,8 +121,6 @@ type MonitoringSummary = {
   };
 };
 
-const ALLOWED_ROLES: MembershipRole[] = ["OWNER", "MANAGER", "AGENCY_ADMIN"];
-
 function formatDateTime(value: string) {
   return new Date(value).toLocaleString("id-ID");
 }
@@ -170,8 +167,7 @@ export default function InternalMonitoringPage() {
     return `${session.tokenType} ${session.accessToken}`;
   }, [session]);
 
-  const role = session?.membership.role ?? null;
-  const hasAccess = role ? ALLOWED_ROLES.includes(role) : false;
+  const hasAccess = session?.user.internalRole === "PLATFORM_ADMIN";
 
   const refresh = useCallback(async () => {
     if (!authorization || !hasAccess) {
@@ -212,11 +208,11 @@ export default function InternalMonitoringPage() {
     return () => window.clearTimeout(timeoutId);
   }, [authorization, hasAccess, isReady, refresh]);
 
-  if (isReady && role && !hasAccess) {
+  if (isReady && session && !hasAccess) {
     return (
       <EmptyStatePanel
         title="Akses monitoring internal dibatasi"
-        description="Halaman ini hanya dibuka untuk role internal yang menangani operational readiness, seperti owner, manager, atau agency admin."
+        description="Halaman ini hanya dibuka untuk user internal dengan role platform admin agar monitoring operasional tetap berada di workspace internal."
         secondaryAction={{ label: "Kembali ke dashboard", href: "/app/dashboard" }}
       />
     );
